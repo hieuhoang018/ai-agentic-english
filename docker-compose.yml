@@ -1,0 +1,152 @@
+name: ai-agentic-english
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./infra/postgres-init:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  kafka:
+    image: apache/kafka:3.8.0
+    restart: unless-stopped
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      CLUSTER_ID: ai-agentic-english-kafka
+
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  gateway:
+    build:
+      context: .
+      dockerfile: apps/gateway/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "4000:4000"
+    environment:
+      PORT: 4000
+      STUB_AUTH: "true"
+      USER_SERVICE_URL: http://user-service:4001
+      AI_TUTOR_SERVICE_URL: http://ai-tutor-service:4002
+      LEARNING_MATERIALS_SERVICE_URL: http://learning-materials-service:4003
+      MEMORY_PROGRESS_SERVICE_URL: http://memory-progress-service:4004
+      NOTIFICATION_SERVICE_URL: http://notification-service:4005
+    depends_on:
+      - user-service
+
+  user-service:
+    build:
+      context: .
+      dockerfile: services/user-service/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "4001:4001"
+    environment:
+      PORT: 4001
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/user_service
+      STUB_AUTH: "true"
+      STUB_CLERK_WEBHOOK: "true"
+      EVENT_BUS_STUB: "true"
+      KAFKA_BROKERS: kafka:9092
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  ai-tutor-service:
+    build:
+      context: .
+      dockerfile: services/ai-tutor-service/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "4002:4002"
+    environment:
+      PORT: 4002
+      EVENT_BUS_STUB: "true"
+      KAFKA_BROKERS: kafka:9092
+
+  learning-materials-service:
+    build:
+      context: .
+      dockerfile: services/learning-materials-service/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "4003:4003"
+    environment:
+      PORT: 4003
+      EVENT_BUS_STUB: "true"
+      KAFKA_BROKERS: kafka:9092
+
+  memory-progress-service:
+    build:
+      context: .
+      dockerfile: services/memory-progress-service/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "4004:4004"
+    environment:
+      PORT: 4004
+      EVENT_BUS_STUB: "true"
+      KAFKA_BROKERS: kafka:9092
+
+  notification-service:
+    build:
+      context: .
+      dockerfile: services/notification-service/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "4005:4005"
+    environment:
+      PORT: 4005
+      EVENT_BUS_STUB: "true"
+      KAFKA_BROKERS: kafka:9092
+
+volumes:
+  pgdata:
+  minio-data:

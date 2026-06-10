@@ -1,0 +1,9 @@
+{
+  "name": "ai-agentic-english",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "services/*",
+    "packages/*"
+  ]
+}
