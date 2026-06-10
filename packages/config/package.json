@@ -1,0 +1,12 @@
+{
+  "name": "@ai-agentic-english/config",
+  "private": true,
+  "version": "0.0.1",
+  "license": "UNLICENSED",
+  "files": [
+    "tsconfig.base.json",
+    "eslint.config.js",
+    "prettier.config.js",
+    "vitest.config.ts"
+  ]
+}

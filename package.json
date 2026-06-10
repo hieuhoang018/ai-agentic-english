@@ -5,5 +5,23 @@
     "apps/*",
     "services/*",
     "packages/*"
-  ]
+  ],
+  "scripts": {
+    "dev": "npm run --workspaces --if-present dev",
+    "build": "npm run --workspaces --if-present build",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "npm run --workspaces --if-present test"
+  },
+  "devDependencies": {
+    "@types/node": "22.19.20",
+    "eslint": "9.39.4",
+    "eslint-config-prettier": "10.1.8",
+    "prettier": "3.4.2",
+    "tsup": "8.3.5",
+    "typescript": "5.7.3",
+    "typescript-eslint": "8.18.0",
+    "vitest": "3.2.6"
+  }
 }
