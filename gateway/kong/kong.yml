@@ -1,0 +1,59 @@
+_format_version: '3.0'
+_transform: true
+
+# Phase 0: routing only, no auth yet. Clerk JWT/OIDC validation on `/api/*`
+# (excluding `/health` and `/webhooks/*`) is added in Phase 1.
+#
+# Each backend service exposes `GET /health`, routed here as
+# `/api/health/<service>` for the Phase 0 verification step.
+
+services:
+  - name: user-service
+    url: http://user-service:4001/health
+    routes:
+      - name: user-service-health
+        paths:
+          - /api/health/user-service
+        strip_path: true
+        methods:
+          - GET
+
+  - name: learning-materials-service
+    url: http://learning-materials-service:4002/health
+    routes:
+      - name: learning-materials-service-health
+        paths:
+          - /api/health/learning-materials-service
+        strip_path: true
+        methods:
+          - GET
+
+  - name: memory-progress-service
+    url: http://memory-progress-service:4003/health
+    routes:
+      - name: memory-progress-service-health
+        paths:
+          - /api/health/memory-progress-service
+        strip_path: true
+        methods:
+          - GET
+
+  - name: ai-tutor-service
+    url: http://ai-tutor-service:4004/health
+    routes:
+      - name: ai-tutor-service-health
+        paths:
+          - /api/health/ai-tutor-service
+        strip_path: true
+        methods:
+          - GET
+
+  - name: notification-service
+    url: http://notification-service:4005/health
+    routes:
+      - name: notification-service-health
+        paths:
+          - /api/health/notification-service
+        strip_path: true
+        methods:
+          - GET
