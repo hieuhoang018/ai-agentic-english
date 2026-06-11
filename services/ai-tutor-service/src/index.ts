@@ -1,6 +1,7 @@
 import { createApp } from './app';
 
-const port = process.env.PORT ? Number(process.env.PORT) : 4004;
+const parsedPort = Number.parseInt(process.env.PORT ?? '', 10);
+const port = Number.isFinite(parsedPort) ? parsedPort : 4004;
 const app = createApp();
 
 app.listen(port, () => {
