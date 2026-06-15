@@ -1,15 +1,20 @@
+import { errorHandler } from '@ai-agentic-english/shared';
+import { PrismaClient } from '../prisma/generated/client';
 import cors from 'cors';
 import express, { Express } from 'express';
-import { PrismaClient } from '@prisma/client';
+import { AppPrismaClient } from './lib/prisma';
+import { createUsersRouter } from './routes/users';
+import { createWebhooksRouter } from './routes/webhooks';
 
-export interface HealthCheckClient {
-  $queryRaw: PrismaClient['$queryRaw'];
-}
-
-export function createApp(prisma: HealthCheckClient = new PrismaClient()): Express {
+export function createApp(prisma: AppPrismaClient = new PrismaClient()): Express {
   const app = express();
 
   app.use(cors());
+
+  // Mounted before express.json() so the raw body is available for Svix
+  // signature verification.
+  app.use('/webhooks', createWebhooksRouter(prisma));
+
   app.use(express.json());
 
   app.get('/health', async (_req, res) => {
@@ -20,6 +25,10 @@ export function createApp(prisma: HealthCheckClient = new PrismaClient()): Expre
       res.status(503).json({ status: 'error', service: 'user-service' });
     }
   });
+
+  app.use('/users', createUsersRouter(prisma));
+
+  app.use(errorHandler);
 
   return app;
 }
