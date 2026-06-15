@@ -1,6 +1,6 @@
 import cors from 'cors';
 import express, { Express } from 'express';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient } from '../prisma/generated/client';
 
 export interface HealthCheckClient {
   $queryRaw: PrismaClient['$queryRaw'];
