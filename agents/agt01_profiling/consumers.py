@@ -53,18 +53,21 @@ async def handle_session_end(topic: str, event: dict) -> None:
 
 async def handle_error_event(topic: str, event: dict) -> None:
     """
-    event fields used: clerkUserId, skillDomain, errorType, severity.
+    event shape: {"sessionId": ..., "clerkUserId": ..., "error": {...}}.
     Emitted by AGT-04 as the Kafka half of its dual-write (the STM half is
     AGT-06's session:{id}:errors list, read directly by service.get_profile).
+    The nested "error" dict uses snake_case keys: error_type, skill_domain,
+    severity (see agents/shared/models/learner.py ErrorEvent).
     """
     clerk_user_id = event.get("clerkUserId")
     if not clerk_user_id:
         logger.warning("handle_error_event: missing clerkUserId in %s", event)
         return
 
-    skill_domain = event.get("skillDomain", "SPEAKING")
-    error_type = event.get("errorType", "unknown")
-    severity = float(event.get("severity", 1))
+    error = event.get("error") or {}
+    skill_domain = error.get("skill_domain", "SPEAKING")
+    error_type = error.get("error_type", "unknown")
+    severity = float(error.get("severity", 1))
 
     profile = await _get_base_profile(clerk_user_id)
     grammar_map = dict(profile.get("grammar_error_map") or {})
