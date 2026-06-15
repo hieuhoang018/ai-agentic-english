@@ -1,0 +1,46 @@
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI
+
+from agents.shared.events.producer import get_producer, close_producer
+from agents.agt03_tutor import service
+from agents.agt03_tutor.models import (
+    StartSessionRequest, StartSessionResponse,
+    TurnRequest, TurnResponse,
+    EndSessionRequest, EndSessionResponse,
+)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await get_producer()
+    yield
+    await close_producer()
+
+
+app = FastAPI(title="AGT-03: AI Tutor / Conversation Agent", version="0.1.0", lifespan=lifespan)
+
+
+@app.get("/health")
+async def health():
+    return {"status": "ok", "agent": "AGT-03", "name": "AI Tutor"}
+
+
+@app.post("/sessions/start", response_model=StartSessionResponse)
+async def start_session(body: StartSessionRequest):
+    return await service.start_session(body.clerk_user_id, body.skill_focus, body.session_id)
+
+
+@app.post("/sessions/turn", response_model=TurnResponse)
+async def turn(body: TurnRequest):
+    return await service.process_turn(body.session_id, body.user_text, body.audio_base64)
+
+
+@app.post("/sessions/end", response_model=EndSessionResponse)
+async def end_session(body: EndSessionRequest):
+    return await service.end_session(body.session_id, body.clerk_user_id, body.skill_focus)
+
+
+@app.get("/sessions/{session_id}/state")
+async def session_state(session_id: str):
+    return await service.get_session_state(session_id)
