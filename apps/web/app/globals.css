@@ -1,0 +1,12 @@
+@import "tailwindcss";
+
+/* Minimal global base so Tailwind utility classes control appearance */
+*, *::before, *::after { box-sizing: border-box; }
+html, body, #__next { height: 100%; }
+body { margin: 0; }
+
+/* Keep theme variables available for components that may read them */
+:root {
+  --background: #f7fafc;
+  --foreground: #181c1e;
+}
