@@ -63,7 +63,7 @@ services:
               claims_to_verify:
                 - exp
 
-  - name: learning-materials-service
+  - name: learning-materials-service-health
     url: http://learning-materials-service:4002/health
     routes:
       - name: learning-materials-service-health
@@ -72,6 +72,71 @@ services:
         strip_path: true
         methods:
           - GET
+
+  - name: lm-modules
+    url: http://learning-materials-service:4002/modules
+    routes:
+      - name: lm-modules-route
+        paths:
+          - /api/modules
+        strip_path: true
+        plugins:
+          - name: jwt
+            config:
+              claims_to_verify:
+                - exp
+
+  - name: lm-lessons
+    url: http://learning-materials-service:4002/lessons
+    routes:
+      - name: lm-lessons-route
+        paths:
+          - /api/lessons
+        strip_path: true
+        plugins:
+          - name: jwt
+            config:
+              claims_to_verify:
+                - exp
+
+  - name: lm-exercises
+    url: http://learning-materials-service:4002/exercises
+    routes:
+      - name: lm-exercises-route
+        paths:
+          - /api/exercises
+        strip_path: true
+        plugins:
+          - name: jwt
+            config:
+              claims_to_verify:
+                - exp
+
+  - name: lm-assessment
+    url: http://learning-materials-service:4002/assessment
+    routes:
+      - name: lm-assessment-route
+        paths:
+          - /api/assessment
+        strip_path: true
+        plugins:
+          - name: jwt
+            config:
+              claims_to_verify:
+                - exp
+
+  - name: lm-learning-paths
+    url: http://learning-materials-service:4002/learning-paths
+    routes:
+      - name: lm-learning-paths-route
+        paths:
+          - /api/learning-paths
+        strip_path: true
+        plugins:
+          - name: jwt
+            config:
+              claims_to_verify:
+                - exp
 
   - name: memory-progress-service
     url: http://memory-progress-service:4003/health

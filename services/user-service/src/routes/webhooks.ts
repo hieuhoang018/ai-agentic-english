@@ -1,7 +1,6 @@
-import { AppError, EventBus, UnauthorizedError, getEnv } from '@ai-agentic-english/shared';
+import { AppError, EventBus, UnauthorizedError, asyncHandler, getEnv } from '@ai-agentic-english/shared';
 import express, { Router } from 'express';
 import { Webhook } from 'svix';
-import { asyncHandler } from '../lib/asyncHandler';
 import { ClerkUserEventData, getFullName, getPrimaryEmail } from '../lib/clerkWebhookEvent';
 import { publishUserCreated, publishUserDeleted, publishUserUpdated } from '../events/publishers';
 import { AppPrismaClient } from '../lib/prisma';

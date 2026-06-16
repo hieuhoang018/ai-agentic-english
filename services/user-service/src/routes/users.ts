@@ -1,6 +1,5 @@
-import { NotFoundError, requireAuth } from '@ai-agentic-english/shared';
+import { NotFoundError, asyncHandler, requireAuth } from '@ai-agentic-english/shared';
 import { Router } from 'express';
-import { asyncHandler } from '../lib/asyncHandler';
 import { AppPrismaClient } from '../lib/prisma';
 import { toUserDto, toUserSettingsDto } from '../lib/userMapper';
 import { validateSettingsUpdate } from '../lib/validateSettingsUpdate';

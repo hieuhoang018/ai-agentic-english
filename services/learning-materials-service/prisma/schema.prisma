@@ -7,3 +7,69 @@ datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
+
+model Module {
+  id          String   @id @default(uuid())
+  title       String
+  description String
+  cefrLevel   String
+  skillFocus  String
+  order       Int
+  lessons     Lesson[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("modules")
+}
+
+model Lesson {
+  id        String     @id @default(uuid())
+  moduleId  String
+  module    Module     @relation(fields: [moduleId], references: [id])
+  title     String
+  content   Json
+  order     Int
+  exercises Exercise[]
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  @@map("lessons")
+}
+
+model Exercise {
+  id         String   @id @default(uuid())
+  lessonId   String
+  lesson     Lesson   @relation(fields: [lessonId], references: [id])
+  type       String
+  prompt     Json
+  answerKey  Json
+  difficulty String
+  skill      String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@map("exercises")
+}
+
+model LearningPath {
+  id             String   @id @default(uuid())
+  userId         String
+  version        Int      @default(1)
+  status         String   @default("active")
+  generatedAt    DateTime @default(now())
+  pathDefinition Json
+
+  @@map("learning_paths")
+}
+
+model AssessmentQuestion {
+  id              String   @id @default(uuid())
+  skill           String
+  cefrLevelTarget String
+  prompt          Json
+  correctAnswer   Json
+  order           Int
+  createdAt       DateTime @default(now())
+
+  @@map("assessment_questions")
+}
