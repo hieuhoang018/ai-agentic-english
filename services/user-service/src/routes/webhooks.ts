@@ -2,19 +2,13 @@ import { AppError, EventBus, UnauthorizedError, getEnv } from '@ai-agentic-engli
 import express, { Router } from 'express';
 import { Webhook } from 'svix';
 import { asyncHandler } from '../lib/asyncHandler';
-import { getFullName, getPrimaryEmail } from '../lib/clerkWebhookEvent';
-import { publishUserCreated, publishUserDeleted } from '../events/publishers';
+import { ClerkUserEventData, getFullName, getPrimaryEmail } from '../lib/clerkWebhookEvent';
+import { publishUserCreated, publishUserDeleted, publishUserUpdated } from '../events/publishers';
 import { AppPrismaClient } from '../lib/prisma';
 
 interface ClerkWebhookEvent {
   type: string;
-  data: {
-    id: string;
-    email_addresses?: { id: string; email_address: string }[];
-    primary_email_address_id?: string | null;
-    first_name?: string | null;
-    last_name?: string | null;
-  };
+  data: ClerkUserEventData;
 }
 
 export function createWebhooksRouter(prisma: AppPrismaClient, eventBus: EventBus): Router {
@@ -64,7 +58,12 @@ export function createWebhooksRouter(prisma: AppPrismaClient, eventBus: EventBus
             },
             update: { email, name },
           });
-          await publishUserCreated(eventBus, { userId: user.id, clerkUserId: user.clerkUserId, email: user.email });
+          const eventPayload = { userId: user.id, clerkUserId: user.clerkUserId, email: user.email };
+          if (event.type === 'user.created') {
+            await publishUserCreated(eventBus, eventPayload);
+          } else {
+            await publishUserUpdated(eventBus, eventPayload);
+          }
           break;
         }
         case 'user.deleted': {

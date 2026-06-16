@@ -3,6 +3,8 @@ import { describe, expect, it } from 'vitest';
 import { createApp } from '../app';
 import { createMockPrisma } from './testPrisma';
 
+process.env.CLERK_WEBHOOK_SECRET = 'whsec_test_secret';
+
 describe('GET /health', () => {
   it('returns ok when the database is reachable', async () => {
     const app = createApp(createMockPrisma());

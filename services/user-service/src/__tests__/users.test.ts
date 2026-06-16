@@ -4,6 +4,8 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { createApp } from '../app';
 import { createMockPrisma, MockPrismaClient } from './testPrisma';
 
+process.env.CLERK_WEBHOOK_SECRET = 'whsec_test_secret';
+
 const now = new Date('2024-01-01T00:00:00.000Z');
 
 const userRow = {
@@ -89,7 +91,7 @@ describe('user routes', () => {
       const app = createApp(prisma);
       const token = await signTestToken({ sub: 'user_123' });
       prisma.user.findUnique.mockResolvedValue(userRow);
-      prisma.userSettings.update.mockResolvedValue({ ...settingsRow, timezone: 'Europe/Paris' });
+      prisma.userSettings.upsert.mockResolvedValue({ ...settingsRow, timezone: 'Europe/Paris' });
 
       const res = await request(app)
         .patch('/users/me/settings')
@@ -98,9 +100,10 @@ describe('user routes', () => {
 
       expect(res.status).toBe(200);
       expect(res.body.timezone).toBe('Europe/Paris');
-      expect(prisma.userSettings.update).toHaveBeenCalledWith({
+      expect(prisma.userSettings.upsert).toHaveBeenCalledWith({
         where: { userId: 'user-uuid-1' },
-        data: { timezone: 'Europe/Paris' },
+        create: { userId: 'user-uuid-1', timezone: 'Europe/Paris' },
+        update: { timezone: 'Europe/Paris' },
       });
     });
 

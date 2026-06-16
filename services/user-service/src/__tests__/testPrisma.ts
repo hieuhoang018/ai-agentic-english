@@ -8,7 +8,7 @@ export type MockPrismaClient = AppPrismaClient & {
     upsert: ReturnType<typeof vi.fn>;
     deleteMany: ReturnType<typeof vi.fn>;
   };
-  userSettings: { update: ReturnType<typeof vi.fn> };
+  userSettings: { upsert: ReturnType<typeof vi.fn> };
 };
 
 export function createMockPrisma(): MockPrismaClient {
@@ -20,7 +20,7 @@ export function createMockPrisma(): MockPrismaClient {
       deleteMany: vi.fn(),
     },
     userSettings: {
-      update: vi.fn(),
+      upsert: vi.fn(),
     },
   } as unknown as MockPrismaClient;
 }

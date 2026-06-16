@@ -11,10 +11,10 @@ export interface ClerkUserEventData {
   last_name?: string | null;
 }
 
-export function getPrimaryEmail(data: ClerkUserEventData): string {
+export function getPrimaryEmail(data: ClerkUserEventData): string | null {
   const emails = data.email_addresses ?? [];
   const primary = emails.find((e) => e.id === data.primary_email_address_id) ?? emails[0];
-  return primary?.email_address ?? '';
+  return primary?.email_address ?? null;
 }
 
 export function getFullName(data: ClerkUserEventData): string | null {
