@@ -3,11 +3,11 @@
 // into kong.yml's `rsa_public_key` field.
 //
 // Usage:
-//   node gateway/kong/jwks-to-pem.mjs <clerk-issuer-or-jwks-url> [kid]
+//   node gateway/kong/scripts/jwks-to-pem.mjs <clerk-issuer-or-jwks-url> [kid]
 //
 // Examples:
-//   node gateway/kong/jwks-to-pem.mjs https://your-app.clerk.accounts.dev
-//   node gateway/kong/jwks-to-pem.mjs https://your-app.clerk.accounts.dev/.well-known/jwks.json
+//   node gateway/kong/scripts/jwks-to-pem.mjs https://your-app.clerk.accounts.dev
+//   node gateway/kong/scripts/jwks-to-pem.mjs https://your-app.clerk.accounts.dev/.well-known/jwks.json
 
 import { createPublicKey } from 'node:crypto';
 

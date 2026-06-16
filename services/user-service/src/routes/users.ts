@@ -39,9 +39,10 @@ export function createUsersRouter(prisma: AppPrismaClient): Router {
       }
 
       const update = validateSettingsUpdate(req.body);
-      const settings = await prisma.userSettings.update({
+      const settings = await prisma.userSettings.upsert({
         where: { userId: user.id },
-        data: update,
+        create: { userId: user.id, ...update },
+        update,
       });
 
       res.json(toUserSettingsDto(settings));

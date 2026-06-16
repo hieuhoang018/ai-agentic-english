@@ -1,8 +1,9 @@
-import { AppError, UnauthorizedError } from '@ai-agentic-english/shared';
+import { AppError, EventBus, UnauthorizedError, getEnv } from '@ai-agentic-english/shared';
 import express, { Router } from 'express';
 import { Webhook } from 'svix';
 import { asyncHandler } from '../lib/asyncHandler';
 import { getFullName, getPrimaryEmail } from '../lib/clerkWebhookEvent';
+import { publishUserCreated, publishUserDeleted } from '../events/publishers';
 import { AppPrismaClient } from '../lib/prisma';
 
 interface ClerkWebhookEvent {
@@ -16,22 +17,29 @@ interface ClerkWebhookEvent {
   };
 }
 
-export function createWebhooksRouter(prisma: AppPrismaClient): Router {
+export function createWebhooksRouter(prisma: AppPrismaClient, eventBus: EventBus): Router {
+  const secret = getEnv('CLERK_WEBHOOK_SECRET');
+  const wh = new Webhook(secret);
   const router = Router();
 
   router.post(
     '/clerk',
     express.raw({ type: 'application/json' }),
     asyncHandler(async (req, res) => {
-      const secret = process.env.CLERK_WEBHOOK_SECRET;
-      if (!secret) {
-        throw new AppError('CLERK_WEBHOOK_SECRET is not configured', 500, 'CONFIG_ERROR');
-      }
-
-      const wh = new Webhook(secret);
       let event: ClerkWebhookEvent;
       try {
-        event = wh.verify(req.body, req.headers as Record<string, string>) as ClerkWebhookEvent;
+        const svixHeaders: Record<string, string> = {
+          'svix-id': Array.isArray(req.headers['svix-id'])
+            ? req.headers['svix-id'][0]
+            : (req.headers['svix-id'] ?? ''),
+          'svix-timestamp': Array.isArray(req.headers['svix-timestamp'])
+            ? req.headers['svix-timestamp'][0]
+            : (req.headers['svix-timestamp'] ?? ''),
+          'svix-signature': Array.isArray(req.headers['svix-signature'])
+            ? req.headers['svix-signature'][0]
+            : (req.headers['svix-signature'] ?? ''),
+        };
+        event = wh.verify(req.body, svixHeaders) as ClerkWebhookEvent;
       } catch {
         throw new UnauthorizedError('Invalid webhook signature');
       }
@@ -41,9 +49,12 @@ export function createWebhooksRouter(prisma: AppPrismaClient): Router {
         case 'user.updated': {
           const clerkUserId = event.data.id;
           const email = getPrimaryEmail(event.data);
+          if (!email) {
+            throw new AppError('Clerk user missing primary email', 400, 'VALIDATION_ERROR');
+          }
           const name = getFullName(event.data);
 
-          await prisma.user.upsert({
+          const user = await prisma.user.upsert({
             where: { clerkUserId },
             create: {
               clerkUserId,
@@ -53,10 +64,12 @@ export function createWebhooksRouter(prisma: AppPrismaClient): Router {
             },
             update: { email, name },
           });
+          await publishUserCreated(eventBus, { userId: user.id, clerkUserId: user.clerkUserId, email: user.email });
           break;
         }
         case 'user.deleted': {
           await prisma.user.deleteMany({ where: { clerkUserId: event.data.id } });
+          await publishUserDeleted(eventBus, { clerkUserId: event.data.id });
           break;
         }
         default:

@@ -27,8 +27,19 @@ export function validateSettingsUpdate(body: unknown): Prisma.UserSettingsUpdate
 
   if ('reminderTime' in input) {
     const value = input.reminderTime;
-    if (value !== null && (typeof value !== 'string' || !/^\d{2}:\d{2}$/.test(value))) {
-      throw new ValidationError('reminderTime must be a "HH:MM" string or null');
+    if (value !== null) {
+      if (typeof value !== 'string') {
+        throw new ValidationError('reminderTime must be a "HH:MM" string or null');
+      }
+      const match = /^(\d{2}):(\d{2})$/.exec(value);
+      if (!match) {
+        throw new ValidationError('reminderTime must be a "HH:MM" string or null');
+      }
+      const hours = Number(match[1]);
+      const minutes = Number(match[2]);
+      if (hours > 23 || minutes > 59) {
+        throw new ValidationError('reminderTime must be a valid 24h time (00:00-23:59) or null');
+      }
     }
     update.reminderTime = value as string | null;
   }
