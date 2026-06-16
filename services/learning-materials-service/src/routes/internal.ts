@@ -1,5 +1,6 @@
 import { NotFoundError, PathDefinition, ValidationError, asyncHandler } from '@ai-agentic-english/shared';
 import { Router } from 'express';
+import { Prisma } from '../../prisma/generated/client';
 import { AppPrismaClient } from '../lib/prisma';
 import { toExerciseInternalDto, toLearningPathDto } from '../lib/mappers';
 
@@ -45,7 +46,7 @@ export function createInternalRouter(prisma: AppPrismaClient): Router {
             })
           : Promise.resolve(null),
         prisma.learningPath.create({
-          data: { userId, version: nextVersion, status: 'active', pathDefinition },
+          data: { userId, version: nextVersion, status: 'active', pathDefinition: pathDefinition as unknown as Prisma.InputJsonValue },
         }),
       ]);
 

@@ -72,7 +72,7 @@ export function toLearningPathDto(p: LearningPath): LearningPathDto {
     version: p.version,
     status: p.status as 'active' | 'superseded',
     generatedAt: p.generatedAt.toISOString(),
-    pathDefinition: p.pathDefinition as PathDefinition,
+    pathDefinition: p.pathDefinition as unknown as PathDefinition,
   };
 }
 

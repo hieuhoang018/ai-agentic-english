@@ -1,13 +1,21 @@
 import { ValidationError } from '@ai-agentic-english/shared';
 import { Prisma } from '../../prisma/generated/client';
 
-export function validateSettingsUpdate(body: unknown): Prisma.UserSettingsUpdateInput {
+export interface SettingsUpdateData {
+  dailyTimeBudgetMinutes?: number;
+  preferredLanguage?: string;
+  reminderTime?: string | null;
+  timezone?: string;
+  notificationChannelHints?: Prisma.InputJsonValue;
+}
+
+export function validateSettingsUpdate(body: unknown): SettingsUpdateData {
   if (typeof body !== 'object' || body === null) {
     throw new ValidationError('Request body must be an object');
   }
 
   const input = body as Record<string, unknown>;
-  const update: Prisma.UserSettingsUpdateInput = {};
+  const update: SettingsUpdateData = {};
 
   if ('dailyTimeBudgetMinutes' in input) {
     const value = input.dailyTimeBudgetMinutes;
