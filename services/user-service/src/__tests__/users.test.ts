@@ -1,10 +1,10 @@
-import { signTestToken } from '@ai-agentic-english/shared';
+import { TEST_WEBHOOK_SECRET, signTestToken } from '@ai-agentic-english/shared';
 import request from 'supertest';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createApp } from '../app';
 import { createMockPrisma, MockPrismaClient } from './testPrisma';
 
-process.env.CLERK_WEBHOOK_SECRET = 'whsec_test_secret';
+process.env.CLERK_WEBHOOK_SECRET = TEST_WEBHOOK_SECRET;
 
 const now = new Date('2024-01-01T00:00:00.000Z');
 

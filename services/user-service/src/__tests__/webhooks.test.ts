@@ -49,6 +49,14 @@ describe('POST /webhooks/clerk', () => {
 
   it('upserts a user on user.created and user.updated', async () => {
     const app = createApp(prisma);
+    prisma.user.upsert.mockResolvedValue({
+      id: 'user-uuid-1',
+      clerkUserId: 'user_123',
+      email: 'test@example.com',
+      name: 'Jane Doe',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
     const payload = {
       type: 'user.created',
       data: {
