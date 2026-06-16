@@ -1,14 +1,14 @@
+import { TEST_WEBHOOK_SECRET } from '@ai-agentic-english/shared';
 import request from 'supertest';
 import { describe, expect, it } from 'vitest';
-import { createApp, HealthCheckClient } from '../app';
+import { createApp } from '../app';
+import { createMockPrisma } from './testPrisma';
 
-const fakePrisma: HealthCheckClient = {
-  $queryRaw: (async () => [{ '?column?': 1 }]) as HealthCheckClient['$queryRaw'],
-};
+process.env.CLERK_WEBHOOK_SECRET = TEST_WEBHOOK_SECRET;
 
 describe('GET /health', () => {
   it('returns ok when the database is reachable', async () => {
-    const app = createApp(fakePrisma);
+    const app = createApp(createMockPrisma());
 
     const res = await request(app).get('/health');
 

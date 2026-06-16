@@ -1,8 +1,30 @@
 generator client {
   provider = "prisma-client-js"
+  output   = "./generated/client"
 }
 
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+}
+
+model User {
+  id          String   @id @default(uuid())
+  clerkUserId String   @unique
+  email       String
+  name        String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  settings UserSettings?
+}
+
+model UserSettings {
+  userId                   String   @id
+  user                     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  dailyTimeBudgetMinutes   Int      @default(20)
+  preferredLanguage        String   @default("en")
+  reminderTime             String?
+  timezone                 String   @default("UTC")
+  notificationChannelHints Json     @default("{}")
 }

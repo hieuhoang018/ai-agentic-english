@@ -2,8 +2,10 @@ node_modules/
 dist/
 build/
 .next/
+**/prisma/generated/
 .env
 .env.*
 !.env.example
 *.log
 .DS_Store
+.claude
