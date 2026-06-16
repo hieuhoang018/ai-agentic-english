@@ -1,11 +1,35 @@
 _format_version: '3.0'
 _transform: true
 
-# Phase 0: routing only, no auth yet. Clerk JWT/OIDC validation on `/api/*`
-# (excluding `/health` and `/webhooks/*`) is added in Phase 1.
+# Phase 0: routing only, no auth yet.
+#
+# Phase 1: `/api/<service>/*` routes are validated with the Kong `jwt`
+# plugin, using a static RS256 public key matching the test JWKS in
+# `@ai-agentic-english/shared` (packages/shared/src/testing/index.ts). The
+# consumer's `key` matches the JWT `iss` claim (TEST_ISSUER). To swap in a
+# real Clerk app, regenerate `rsa_public_key` from the Clerk JWKS and update
+# `key`/`rsa_public_key` below - no other config changes are needed.
+#
+# `/health` and `/webhooks/*` routes are left unauthenticated.
 #
 # Each backend service exposes `GET /health`, routed here as
 # `/api/health/<service>` for the Phase 0 verification step.
+
+consumers:
+  - username: clerk-test
+    jwt_secrets:
+      - key: https://test-clerk.example.com
+        algorithm: RS256
+        rsa_public_key: |
+          -----BEGIN PUBLIC KEY-----
+          MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAuuN04KpT0b6I4BCr87mT
+          nYd+ku8a8Y7LEHCMrrwMJcaPFio6i2C73G1equcp+Zb88agYmgX+iStGT694YjOb
+          OVmCQy+n4DUB2rHeu+fbso8T+OXojZjVwfqw3PMthNX7BIQcAkVoK8eEBRzUPXYz
+          0mUPkqVxpDxpzLoW6jvj+iES7ZhaUfsviekFaa3NY2i6R+qjzpLraRmJAGc3o+qA
+          xcDLIELHlH9mJA1xxcRLU0tSel3fSsbuDX/FNC5+ifx94WC6tuaTAzRa5gsonrN2
+          5mGZM4fWjt4l+FNuyA1qUoyp5XqOQQSBueIGJmvGI0vJLofCzD4E8iwVaZS4ZMS8
+          wQIDAQAB
+          -----END PUBLIC KEY-----
 
 services:
   - name: user-service
@@ -17,6 +41,27 @@ services:
         strip_path: true
         methods:
           - GET
+
+  - name: user-service-webhooks
+    url: http://user-service:4001/webhooks
+    routes:
+      - name: user-service-webhooks
+        paths:
+          - /api/webhooks/user-service
+        strip_path: true
+
+  - name: user-service-api
+    url: http://user-service:4001/users
+    routes:
+      - name: user-service-api
+        paths:
+          - /api/users
+        strip_path: true
+        plugins:
+          - name: jwt
+            config:
+              claims_to_verify:
+                - exp
 
   - name: learning-materials-service
     url: http://learning-materials-service:4002/health
