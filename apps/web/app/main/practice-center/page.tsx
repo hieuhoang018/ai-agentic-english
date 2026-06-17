@@ -3,14 +3,14 @@ import React from 'react'
 export default function PracticeCenterPage() {
   return (
     <>
-      <div className="mb-xl">
+      <div className="mb-stack-lg">
         <h1 className="font-headline-lg text-headline-lg text-on-background mb-sm">Trung tâm thực hành</h1>
         <p className="font-body-lg text-body-lg text-on-surface-variant max-w-3xl">Chọn một kỹ năng để bắt đầu luyện tập. Hệ thống AI sẽ điều chỉnh độ khó dựa trên trình độ hiện tại của bạn.</p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-lg mb-xl">
         <div className="bg-surface-container-lowest rounded-xl p-lg border border-outline-variant flat-shadow hover:shadow-lg transition-shadow duration-300 relative overflow-hidden group">
-          <div className="absolute top-0 left-0 w-full h-1 bg-tertiary-container group-hover:bg-tertiary transition-colors"></div>
+          <div className="absolute top-0 left-0 w-full h-1 bg-tertiary-fixed-dim group-hover:bg-tertiary! transition-colors"></div>
           <div className="flex items-start gap-md mb-md">
             <div className="w-12 h-12 rounded-lg bg-tertiary-container/30 flex items-center justify-center text-tertiary">
               <span className="material-symbols-outlined text-3xl">menu_book</span>
@@ -27,7 +27,7 @@ export default function PracticeCenterPage() {
         </div>
 
         <div className="bg-surface-container-lowest rounded-xl p-lg border border-outline-variant flat-shadow hover:shadow-lg transition-shadow duration-300 relative overflow-hidden group">
-          <div className="absolute top-0 left-0 w-full h-1 bg-secondary-container group-hover:bg-secondary transition-colors"></div>
+          <div className="absolute top-0 left-0 w-full h-1 bg-secondary-container/60 group-hover:bg-secondary! transition-colors"></div>
           <div className="flex items-start gap-md mb-md">
             <div className="w-12 h-12 rounded-lg bg-secondary-container/30 flex items-center justify-center text-secondary">
               <span className="material-symbols-outlined text-3xl">headphones</span>
@@ -44,7 +44,7 @@ export default function PracticeCenterPage() {
         </div>
 
         <div className="bg-surface-container-lowest rounded-xl p-lg border border-outline-variant flat-shadow hover:shadow-lg transition-shadow duration-300 relative overflow-hidden group">
-          <div className="absolute top-0 left-0 w-full h-1 bg-primary-fixed group-hover:bg-primary transition-colors"></div>
+          <div className="absolute top-0 left-0 w-full h-1 bg-primary-fixed group-hover:bg-primary! transition-colors"></div>
           <div className="flex items-start gap-md mb-md">
             <div className="w-12 h-12 rounded-lg bg-primary-fixed/50 flex items-center justify-center text-primary">
               <span className="material-symbols-outlined text-3xl">edit</span>
@@ -61,7 +61,7 @@ export default function PracticeCenterPage() {
         </div>
 
         <div className="bg-surface-container-lowest rounded-xl p-lg border border-outline-variant flat-shadow hover:shadow-lg transition-shadow duration-300 relative overflow-hidden group">
-          <div className="absolute top-0 left-0 w-full h-1 bg-error-container group-hover:bg-error transition-colors"></div>
+          <div className="absolute top-0 left-0 w-full h-1 bg-error-container group-hover:bg-error! transition-colors"></div>
           <div className="flex items-start gap-md mb-md">
             <div className="w-12 h-12 rounded-lg bg-error-container/50 flex items-center justify-center text-error">
               <span className="material-symbols-outlined text-3xl">mic</span>

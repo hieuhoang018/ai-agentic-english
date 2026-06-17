@@ -4,12 +4,11 @@ export default function HomePage(): JSX.Element {
 	return (
 		<>
 			<div>
-				<div>
-					<h2 className="text-3xl font-bold text-on-surface dark:text-on-primary">Chào buổi sáng, Nguyễn! 👋</h2>
-					<p className="text-base text-on-surface-variant dark:text-surface-dim mt-2">Sẵn sàng để tiếp tục hành trình chinh phục tiếng Anh của bạn chưa?</p>
-				</div>
+				<h2 className="text-3xl font-bold text-on-surface dark:text-on-primary">Chào buổi sáng, Nguyễn! 👋</h2>
+				<p className="text-base text-on-surface-variant dark:text-surface-dim mt-2">Sẵn sàng để tiếp tục hành trình chinh phục tiếng Anh của bạn chưa?</p>
+			</div>
 
-				<div className="flex flex-col gap-stack-lg w-full">
+			<div className="flex flex-col gap-stack-lg w-full">
 					<section className="w-full">
 						<div className="bg-surface-container-lowest dark:bg-surface-container-high rounded-lg p-card-padding shadow-[0_4px_20px_-4px_rgba(15,98,254,0.08)] border border-outline-variant/20 dark:border-outline/20 flex flex-col justify-between hover:shadow-[0_8px_30px_-4px_rgba(15,98,254,0.12)] transition-shadow duration-300 w-full">
 							<div className="flex justify-between items-start mb-6">
@@ -28,7 +27,7 @@ export default function HomePage(): JSX.Element {
 									<span className="text-primary font-bold">68%</span>
 								</div>
 								<div className="w-full h-3 bg-surface-container dark:bg-surface-variant rounded-full overflow-hidden">
-									<div className="h-full bg-linear-to-r from-primary to-secondary-container w-[68%] rounded-full relative"></div>
+									<div className="h-full bg-gradient-to-r from-primary to-secondary-container w-[68%] rounded-full relative"></div>
 								</div>
 							</div>
 						</div>
@@ -46,7 +45,7 @@ export default function HomePage(): JSX.Element {
 								<p className="text-sm text-on-surface-variant dark:text-surface-dim mb-4">Bạn có 15 từ cần ôn lại hôm nay theo phương pháp lặp lại ngắt quãng.</p>
 								<button className="w-full py-2 bg-surface-container-high dark:bg-surface-variant hover:bg-surface-variant dark:hover:bg-surface-container text-on-surface dark:text-on-primary rounded-lg text-sm font-medium transition-colors border border-outline-variant/50 dark:border-outline/50">Ôn tập ngay</button>
 							</div>
-							<div className="bg-linear-to-br from-tertiary-fixed to-primary-fixed dark:from-tertiary dark:to-primary rounded-lg p-card-padding shadow-[0_4px_20px_-4px_rgba(106,0,242,0.15)] flex flex-col justify-between relative overflow-hidden group cursor-pointer flex-1">
+							<div className="bg-gradient-to-br from-tertiary-fixed to-primary-fixed dark:from-tertiary dark:to-primary rounded-lg p-card-padding shadow-[0_4px_20px_-4px_rgba(106,0,242,0.15)] flex flex-col justify-between relative overflow-hidden group cursor-pointer flex-1">
 								<div className="absolute -right-4 -top-4 w-24 h-24 bg-white/20 rounded-full blur-2xl"></div>
 								<div className="relative z-10">
 									<div className="bg-white/50 dark:bg-black/20 w-10 h-10 rounded-full flex items-center justify-center mb-4 backdrop-blur-sm">
@@ -104,7 +103,6 @@ export default function HomePage(): JSX.Element {
 							</div>
 						</div>
 					</section>
-				</div>
 			</div>
 		</>
 	)
