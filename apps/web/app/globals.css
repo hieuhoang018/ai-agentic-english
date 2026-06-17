@@ -5,8 +5,154 @@
 html, body, #__next { height: 100%; }
 body { margin: 0; }
 
-/* Keep theme variables available for components that may read them */
-:root {
-  --background: #f7fafc;
-  --foreground: #181c1e;
+@theme {
+  /* Colors (migrated from theme.extend.colors) */
+  --color-on-error-container: #93000a;
+  --color-surface-variant: #e2e2e5;
+  --color-on-secondary-fixed: #002112;
+  --color-inverse-surface: #2f3133;
+  --color-surface-tint: #0052dd;
+  --color-primary-fixed-dim: #b4c5ff;
+  --color-on-tertiary-container: #f9f1ff;
+  --color-primary: #004ccd;
+  --color-on-primary-fixed-variant: #003da9;
+  --color-inverse-primary: #b4c5ff;
+  --color-surface-container-highest: #e2e2e5;
+  --color-surface-container-high: #e8e8eb;
+  --color-surface: #f9f9fc;
+  --color-on-background: #1a1c1e;
+  --color-surface-container-low: #f3f3f6;
+  --color-inverse-on-surface: #f0f0f3;
+  --color-surface-container-lowest: #ffffff;
+  --color-tertiary-container: #8243ff;
+  --color-surface-dim: #d9dadd;
+  --color-on-primary-container: #f3f3ff;
+  --color-on-surface: #1a1c1e;
+  --color-background: #f9f9fc;
+  --color-secondary-container: #9af2bf;
+  --color-outline: #737687;
+  --color-on-primary-fixed: #00174c;
+  --color-tertiary-fixed-dim: #d1bcff;
+  --color-on-surface-variant: #424656;
+  --color-primary-fixed: #dbe1ff;
+  --color-on-tertiary-fixed-variant: #5700c9;
+  --color-on-secondary-fixed-variant: #005232;
+  --color-surface-bright: #f9f9fc;
+  --color-on-secondary: #ffffff;
+  --color-error-container: #ffdad6;
+  --color-on-tertiary-fixed: #23005b;
+  --color-tertiary-fixed: #e9ddff;
+  --color-on-tertiary: #ffffff;
+  --color-on-secondary-container: #0c7148;
+  --color-on-primary: #ffffff;
+  --color-error: #ba1a1a;
+  --color-outline-variant: #c3c6d8;
+  --color-tertiary: #6a01f2;
+  --color-secondary: #016c44;
+  --color-surface-container: #edeef1;
+  --color-primary-container: #0f62fe;
+  --color-on-error: #ffffff;
+  --color-secondary-fixed-dim: #81d8a7;
+  --color-secondary-fixed: #9df5c2;
+
+  /* Spacing */
+  --space-xl: 48px;
+  --space-lg: 24px;
+  --space-container-max: 1200px;
+  --space-md: 16px;
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-xxl: 80px;
+  --space-unit: 4px;
+  --space-gutter: 24px;
+
+  /* Radii */
+  --radius-default: 0.25rem;
+  --radius-lg: 0.5rem;
+  --radius-xl: 0.75rem;
+  --radius-full: 9999px;
+
+  /* Fonts */
+  --font-sans: "Plus Jakarta Sans", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+
+  /* Font sizes (small set mapped from theme.extend.fontSize) */
+  --fs-label-md: 14px;
+  --fs-body-lg: 18px;
+  --fs-headline-lg-mobile: 28px;
+  --fs-caption: 12px;
+  --fs-display-lg: 48px;
+  --fs-headline-md: 24px;
+  --fs-body-md: 16px;
+  --fs-headline-lg: 32px;
 }
+
+/* Color helper utilities (map tokens to readable utility class names used in the app) */
+.bg-background { background-color: var(--color-background); }
+.bg-surface { background-color: var(--color-surface); }
+.bg-surface-container-lowest { background-color: var(--color-surface-container-lowest); }
+.bg-inverse-surface { background-color: var(--color-inverse-surface); }
+.bg-primary-container { background-color: var(--color-primary-container); }
+.bg-secondary-container { background-color: var(--color-secondary-container); }
+.bg-tertiary-container { background-color: var(--color-tertiary-container); }
+.bg-error-container { background-color: var(--color-error-container); }
+
+.text-on-background { color: var(--color-on-background); }
+.text-on-surface { color: var(--color-on-surface); }
+.text-on-surface-variant { color: var(--color-on-surface-variant); }
+.text-primary { color: var(--color-primary); }
+.text-secondary { color: var(--color-secondary); }
+.text-tertiary { color: var(--color-tertiary); }
+.text-error { color: var(--color-error); }
+
+/* Spacing helpers used across the app */
+.p-lg { padding: var(--space-lg); }
+.p-md { padding: var(--space-md); }
+.p-container-margin { padding: var(--space-gutter); }
+.p-card-padding { padding: 20px; }
+.px-3 { padding-left: 0.75rem; padding-right: 0.75rem; }
+.py-stack-md { padding-top: var(--space-md); padding-bottom: var(--space-md); }
+.mb-xl { margin-bottom: var(--space-xl); }
+.mb-md { margin-bottom: var(--space-md); }
+.mb-sm { margin-bottom: var(--space-sm); }
+.mb-xs { margin-bottom: var(--space-xs); }
+.mt-md { margin-top: var(--space-md); }
+.gap-lg { gap: var(--space-lg); }
+.gap-md { gap: var(--space-md); }
+.gap-sm { gap: var(--space-sm); }
+.gap-gutter { gap: var(--space-gutter); }
+.gap-stack-lg { gap: var(--space-xl); }
+.gap-stack-md { gap: var(--space-md); }
+.w-48 { width: 12rem; }
+
+/* Stack helpers (space-y equivalents) */
+.space-y-stack-lg > * + * { margin-top: var(--space-xl); }
+.space-y-stack-md > * + * { margin-top: var(--space-md); }
+
+/* Font helpers */
+.font-headline-lg { font-family: var(--font-sans); font-weight: 700; font-size: var(--fs-headline-lg); line-height: 1.3; }
+.text-headline-lg { font-size: var(--fs-headline-lg); line-height: 1.3; }
+.font-headline-md { font-family: var(--font-sans); font-weight: 600; font-size: var(--fs-headline-md); line-height: 1.4; }
+.text-headline-md { font-size: var(--fs-headline-md); line-height: 1.4; }
+.font-body-lg { font-family: var(--font-sans); font-size: var(--fs-body-lg); line-height: 1.6; }
+.text-body-lg { font-size: var(--fs-body-lg); line-height: 1.6; }
+.font-body-md { font-family: var(--font-sans); font-size: var(--fs-body-md); line-height: 1.6; }
+.text-body-md { font-size: var(--fs-body-md); line-height: 1.6; }
+.font-label-md { font-family: var(--font-sans); font-weight: 600; font-size: var(--fs-label-md); }
+.text-label-md { font-size: var(--fs-label-md); }
+.font-caption { font-family: var(--font-sans); font-size: var(--fs-caption); }
+.text-caption { font-size: var(--fs-caption); }
+
+/* Small helpers */
+.flat-shadow { box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+.rounded-xl { border-radius: var(--radius-xl); }
+.rounded-lg { border-radius: var(--radius-lg); }
+.rounded-full { border-radius: var(--radius-full); }
+
+/* Dark-mode helpers: Tailwind uses the `dark` class on root; keep CSS variables available */
+:root.dark {
+  /* When `dark` is present on the root, components can use `dark:` utilities from Tailwind.
+     We keep tokens available so custom CSS continues to work. */
+  --color-background: var(--color-inverse-surface);
+  --color-on-background: var(--color-inverse-on-surface);
+}
+

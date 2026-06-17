@@ -7,7 +7,7 @@ import { UserButton } from '@clerk/nextjs'
 
 export default function SideMenu() {
   return (
-    <nav className="bg-surface-container-low dark:bg-surface-container-highest h-screen w-64 fixed left-0 top-0 hidden md:flex flex-col border-r border-outline-variant dark:border-outline z-50 flex justify-between">
+    <nav className="bg-surface-container-low dark:bg-surface-container-highest h-screen w-64 fixed left-0 top-0 md:flex flex-col border-r border-outline-variant dark:border-outline z-50 flex justify-between">
       <div>
         <div className="px-4 py-6">
           <h1 className="text-2xl font-bold text-primary">English Academy</h1>
