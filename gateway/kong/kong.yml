@@ -18,7 +18,7 @@ _transform: true
 consumers:
   - username: clerk-test
     jwt_secrets:
-      - key: https://test-clerk.example.com
+      - key: https://elegant-anchovy-29.clerk.accounts.dev
         algorithm: RS256
         rsa_public_key: |
           -----BEGIN PUBLIC KEY-----
