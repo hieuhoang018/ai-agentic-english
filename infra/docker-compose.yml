@@ -221,6 +221,8 @@ services:
       DATABASE_URL: postgresql://postgres:postgres@postgres-memory-progress:5432/memory_progress_service
       REDIS_URL: redis://redis:6379
       KAFKA_BROKERS: kafka:9092
+      LEARNING_MATERIALS_SERVICE_URL: http://learning-materials-service:4002
+      INTERNAL_SECRET: dev-internal-secret
     depends_on:
       postgres-memory-progress:
         condition: service_healthy
