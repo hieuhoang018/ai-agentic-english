@@ -11,7 +11,6 @@ export default function AuthNav() {
       <SignUpButton>
         <button className="btn">Sign up</button>
       </SignUpButton>
-      <UserButton />
     </nav>
   );
 }

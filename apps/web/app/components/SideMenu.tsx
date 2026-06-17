@@ -1,4 +1,8 @@
+"use client"
+
 import React from 'react'
+import Link from 'next/link'
+import { usePathname } from 'next/navigation'
 import { UserButton } from '@clerk/nextjs'
 
 export default function SideMenu() {
@@ -18,15 +22,30 @@ export default function SideMenu() {
         </div>
         <div className="mx-4 border-b border-outline-variant/30 my-2"></div>
         <div className="overflow-y-auto py-stack-md px-3 space-y-2">
-          <a className="flex items-center px-4 py-3 rounded-lg text-primary font-bold border-l-4 border-primary bg-primary-container/10 transition-colors duration-200" href="#">
-            <span className="material-symbols-outlined filled mr-3">home</span>
-            <span className="text-sm">Trang chủ</span>
-          </a>
-          <a className="flex items-center px-4 py-3 rounded-lg text-on-surface-variant dark:text-surface-dim hover:text-primary hover:bg-surface-container-high dark:hover:bg-surface-variant transition-colors duration-200" href="#">
-            <span className="material-symbols-outlined mr-3">school</span>
-            <span className="text-sm">Trung tâm thực hành</span>
-          </a>
-          <a className="flex items-center px-4 py-3 rounded-lg text-on-surface-variant dark:text-surface-dim hover:text-primary hover:bg-surface-container-high dark:hover:bg-surface-variant transition-colors duration-200" href="#">
+          {/** Dynamic active link styling based on pathname */}
+          {(() => {
+            const pathname = usePathname()
+            const isHome = pathname === '/main/homepage' || pathname === '/'
+            const isPractice = pathname?.startsWith('/main/practice-center')
+            const base = 'flex items-center px-4 py-3 rounded-lg transition-colors duration-200'
+            const active = 'text-primary font-bold border-l-4 border-primary bg-primary-container/10'
+            const inactive = 'text-on-surface-variant dark:text-surface-dim hover:text-primary hover:bg-surface-container-high dark:hover:bg-surface-variant'
+
+            return (
+              <>
+                <Link href="/main/homepage" className={`${base} ${isHome ? active : inactive}`} aria-current={isHome ? 'page' : undefined}>
+                  <span className="material-symbols-outlined filled mr-3">home</span>
+                  <span className="text-sm">Trang chủ</span>
+                </Link>
+
+                <Link href="/main/practice-center" className={`${base} ${isPractice ? active : inactive}`} aria-current={isPractice ? 'page' : undefined}>
+                  <span className="material-symbols-outlined mr-3">school</span>
+                  <span className="text-sm">Trung tâm thực hành</span>
+                </Link>
+              </>
+            )
+          })()}
+          <a className="flex items-center px-4 py-3 rounded-lg text-on-surface-variant dark:text-surface-dim hover:text-primary hover:bg-surface-container-high dark:hover:bg-surface-variant transition-colors duration-200" href="/main/review-center">
             <span className="material-symbols-outlined mr-3">hub</span>
             <span className="text-sm">Trung tâm ôn luyện</span>
           </a>
