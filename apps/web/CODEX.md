@@ -201,3 +201,204 @@ interface ConversationSummary {
 - Material Symbols remain the icon system for now.
 - No new charting, audio, speech-recognition, or AI client dependencies are required for this UI milestone.
 - Review Center and onboarding pages are planned later; Practice Center can show links/CTAs to them without implementing those pages in this milestone.
+
+
+# Remaining UI Implementation Plan
+
+## Summary
+Implement the remaining UI in three blocks: Review Center, Onboarding, and supporting pages. Use typed mock data first, matching the current Practice Center approach, because backend feature endpoints are still mostly health-check skeletons. Keep Review Center and progress pages inside the existing dashboard shell, and keep onboarding outside the sidebar shell.
+
+Also include a foundation pass to fix current mojibake text in shared UI and make breadcrumbs aware of Review Center, onboarding redirects, and progress pages.
+
+## File Architecture
+
+```txt
+apps/web/app/
+  page.tsx                         # Landing page
+  auth/
+    layout.tsx
+    sign-in/[[...sign-in]]/page.tsx
+    sign-up/[[...sign-up]]/page.tsx
+
+  onboarding/
+    layout.tsx
+    username/page.tsx
+    goals/page.tsx
+    level/page.tsx
+    assessment/page.tsx
+    self-assessment/page.tsx
+    preferences/page.tsx
+    plan/page.tsx
+    _components/
+      OnboardingShell.tsx
+      OnboardingProgress.tsx
+      ChoiceCard.tsx
+      SkillSelector.tsx
+      LevelScale.tsx
+      AssessmentQuestion.tsx
+      TimeCommitmentSlider.tsx
+      GeneratedPlanPreview.tsx
+    _data/onboarding-content.ts
+    _types/onboarding.ts
+    _utils/onboarding-routes.ts
+
+  main/
+    progress/page.tsx
+
+    review-center/
+      page.tsx
+      flashcards/page.tsx
+      flashcards/[topicId]/page.tsx
+      flashcards/[topicId]/study/page.tsx
+      grammar/page.tsx
+      grammar/[categoryId]/page.tsx
+      grammar/[categoryId]/[lessonId]/page.tsx
+      _components/
+        ReviewHero.tsx
+        ReviewFeatureCard.tsx
+        FlashcardTopicGrid.tsx
+        FlashcardTopicCard.tsx
+        FlashcardGrid.tsx
+        FlashcardStudy.tsx
+        FlashcardOptionsMenu.tsx
+        GrammarSection.tsx
+        GrammarTopicCard.tsx
+        GrammarLessonView.tsx
+        ProgressSummaryCard.tsx
+      _data/review-content.ts
+      _types/review.ts
+      _utils/review-routes.ts
+```
+
+## Step-By-Step Implementation
+
+1. Shared foundation
+- Fix Vietnamese mojibake in `DashboardTopBar`, `SideMenu`, and current mock data files.
+- Extend `DashboardTopBar` breadcrumbs for `/main/review-center`, `/main/progress`, flashcards, grammar, and grammar lesson detail routes.
+- Keep Material Symbols as the icon system and reuse current `ProgressBar` behavior, ideally moving it to a shared component later if duplication grows.
+
+2. Review Center hub
+- Implement `/main/review-center` matching `Trung tâm ôn luyện.png`.
+- Show two main cards: Flashcard review and Grammar review.
+- Route Flashcard card to `/main/review-center/flashcards`.
+- Route Grammar card to `/main/review-center/grammar`.
+
+3. Flashcard flow
+- Implement topic grid matching `Flashcard.png`.
+- Implement topic detail matching `Topic.png` with filters: all, unlearned, learned; sort label; add-card and start-study actions.
+- Implement study page matching `Thẻ.png` with card count, front/back flip state, previous/next buttons, pronunciation button, fullscreen/menu icons, and options menu matching `Option Menu Component Container.png`.
+- Use typed mock data with topic progress, card status, IPA, part of speech, definition, examples, and learned state.
+
+4. Grammar review flow
+- Implement grammar overview matching `Ngữ pháp.png`, grouped into sections such as “Các thì cơ bản”, “Cấu trúc câu phức”, and “Từ loại”.
+- Implement category page matching `Dạng ngữ pháp.png` with difficulty filter, lesson cards, progress, and CTA states.
+- Implement grammar lesson page matching `Bài học ngữ pháp.png` with theory cards, examples, multiple-choice practice, and answer-check button.
+- Use typed mock data for grammar categories, lessons, theory blocks, signal words, examples, and practice questions.
+
+5. Onboarding flow
+- Implement separate `/onboarding/layout.tsx` without sidebar.
+- Add username setup as the first post-signup step.
+- Implement goal selection, level method selection, assessment test, self-assessment scale, personalization preferences, and generated plan preview.
+- Match supplied onboarding designs:
+  - goals page: selectable goal cards
+  - level page: test vs self-assessment
+  - assessment page: 4-skill short quiz UI
+  - self-assessment page: 0-10 level scale
+  - preferences page: daily time slider and skill priorities
+  - plan page: generated roadmap explanation and final goal CTA
+- Store state client-side for v1; later replace with onboarding API calls.
+
+6. Progress and supporting pages
+- Implement `/main/progress` matching `Tiến độ học tập chi tiết.png`.
+- Add progress link from homepage progress card.
+- Replace root `/` placeholder with a real landing page that routes to Clerk sign-in/sign-up.
+- Keep Clerk auth pages as-is structurally, but style their layout container to match the product shell.
+- Add simple `/main/help`, `/main/about`, and `/main/settings` pages only if navigation links should become real destinations in this UI pass.
+
+## Types And Data Contracts
+
+Add `review.ts`:
+```ts
+type ReviewArea = 'flashcards' | 'grammar'
+type FlashcardStatus = 'learned' | 'unlearned'
+type GrammarDifficulty = 'beginner' | 'intermediate' | 'advanced'
+type GrammarProgressState = 'notStarted' | 'inProgress' | 'completed'
+
+interface FlashcardTopic {
+  id: string
+  title: string
+  description: string
+  icon: string
+  totalCards: number
+  learnedCards: number
+}
+
+interface Flashcard {
+  id: string
+  topicId: string
+  term: string
+  ipa: string
+  partOfSpeech: string
+  definition: string
+  example: string
+  status: FlashcardStatus
+}
+
+interface GrammarLesson {
+  id: string
+  categoryId: string
+  title: string
+  description: string
+  difficulty: GrammarDifficulty
+  completedExercises: number
+  totalExercises: number
+  state: GrammarProgressState
+}
+```
+
+Add `onboarding.ts`:
+```ts
+type LearningGoalId = 'conversation' | 'ielts' | 'business' | 'travel' | 'personal'
+type AssessmentMethod = 'test' | 'selfAssessment'
+type SkillId = 'listening' | 'speaking' | 'reading' | 'writing'
+
+interface OnboardingProfile {
+  username: string
+  goalId: LearningGoalId
+  assessmentMethod: AssessmentMethod
+  levelScore: number
+  dailyMinutes: number
+  prioritySkills: SkillId[]
+}
+```
+
+## Test Plan
+
+- Run `npm run lint --workspace @ai-agentic-english/web`.
+- Run `npm run build --workspace @ai-agentic-english/web`.
+- Verify routes return 200:
+  - `/`
+  - `/onboarding/goals`
+  - `/onboarding/assessment`
+  - `/onboarding/preferences`
+  - `/onboarding/plan`
+  - `/main/review-center`
+  - `/main/review-center/flashcards`
+  - `/main/review-center/flashcards/technology`
+  - `/main/review-center/flashcards/technology/study`
+  - `/main/review-center/grammar`
+  - `/main/review-center/grammar/basic-tenses`
+  - `/main/review-center/grammar/basic-tenses/present-simple`
+  - `/main/progress`
+- Check responsive layouts for desktop and mobile widths.
+- Confirm sidebar highlights Review Center for all nested Review Center routes.
+- Confirm breadcrumbs/back path behavior works for nested Review Center and progress routes.
+- Confirm onboarding CTAs move to the next intended step.
+
+## Assumptions
+
+- This is still UI-first with mock data and typed loaders.
+- No new frontend dependency is required.
+- Review Center and progress pages use the dashboard shell with sidebar.
+- Onboarding uses its own centered shell and does not show sidebar.
+- API integration, persistence, audio playback, real AI grading, and notification scheduling are later milestones.

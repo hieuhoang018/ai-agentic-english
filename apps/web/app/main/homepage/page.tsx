@@ -11,7 +11,7 @@ export default function HomePage(): JSX.Element {
 
       <div className="flex flex-col gap-stack-lg w-full">
         <section className="w-full">
-          <div className="bg-surface-container-lowest dark:bg-surface-container-high rounded-lg p-card-padding shadow-[0_4px_20px_-4px_rgba(15,98,254,0.08)] border border-outline-variant/20 dark:border-outline/20 flex flex-col justify-between hover:shadow-[0_8px_30px_-4px_rgba(15,98,254,0.12)] transition-shadow duration-300 w-full">
+          <Link href="/main/progress" className="bg-surface-container-lowest dark:bg-surface-container-high rounded-lg p-card-padding shadow-[0_4px_20px_-4px_rgba(15,98,254,0.08)] border border-outline-variant/20 dark:border-outline/20 flex flex-col justify-between hover:shadow-[0_8px_30px_-4px_rgba(15,98,254,0.12)] transition-shadow duration-300 w-full">
             <div className="flex justify-between items-start mb-6 gap-4">
               <div>
                 <h3 className="text-2xl font-semibold text-on-surface dark:text-on-primary">Tiến độ chung</h3>
@@ -31,12 +31,12 @@ export default function HomePage(): JSX.Element {
                 <div className="h-full bg-linear-to-r from-primary to-secondary-container w-[68%] rounded-full" />
               </div>
             </div>
-          </div>
+          </Link>
         </section>
 
         <section className="grid grid-cols-1 lg:grid-cols-2 gap-gutter w-full">
           <div className="flex flex-col gap-gutter h-full">
-            <div className="bg-surface-container-lowest dark:bg-surface-container-high rounded-lg p-card-padding shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] border border-outline-variant/20 dark:border-outline/20 hover:-translate-y-1 transition-transform cursor-pointer">
+            <Link href="/main/review-center/flashcards" className="bg-surface-container-lowest dark:bg-surface-container-high rounded-lg p-card-padding shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] border border-outline-variant/20 dark:border-outline/20 hover:-translate-y-1 transition-transform cursor-pointer">
               <div className="flex items-center gap-3 mb-3">
                 <div className="w-8 h-8 rounded-full bg-secondary-container/30 flex items-center justify-center text-on-secondary-container dark:text-secondary-fixed">
                   <span className="material-symbols-outlined text-sm">psychology</span>
@@ -44,8 +44,8 @@ export default function HomePage(): JSX.Element {
                 <h4 className="text-base font-bold text-on-surface dark:text-on-primary">Ôn tập từ vựng nhanh</h4>
               </div>
               <p className="text-sm text-on-surface-variant dark:text-surface-dim mb-4">Bạn có 15 từ cần ôn lại hôm nay theo phương pháp lặp lại ngắt quãng.</p>
-              <button className="w-full py-2 bg-surface-container-high dark:bg-surface-variant hover:bg-surface-variant dark:hover:bg-surface-container text-on-surface dark:text-on-primary rounded-lg text-sm font-medium transition-colors border border-outline-variant/50 dark:border-outline/50">Ôn tập ngay</button>
-            </div>
+              <div className="w-full py-2 bg-surface-container-high dark:bg-surface-variant hover:bg-surface-variant dark:hover:bg-surface-container text-on-surface dark:text-on-primary rounded-lg text-sm font-medium transition-colors border border-outline-variant/50 dark:border-outline/50 text-center">Ôn tập ngay</div>
+            </Link>
             <Link href="/main/practice-center/speaking" className="bg-linear-to-br from-tertiary-fixed to-primary-fixed dark:from-tertiary dark:to-primary rounded-lg p-card-padding shadow-[0_4px_20px_-4px_rgba(106,0,242,0.15)] flex flex-col justify-between relative overflow-hidden group cursor-pointer flex-1">
               <div className="absolute -right-4 -top-4 w-24 h-24 bg-white/20 rounded-full blur-2xl" />
               <div className="relative z-10">
@@ -81,7 +81,7 @@ export default function HomePage(): JSX.Element {
               ))}
               {[
                 ['5 phút luyện nói với AI', 'Luyện tập phát âm và phản xạ.', '/main/practice-center/speaking'],
-                ['Làm 1 bài tập ngữ pháp', 'Thì hiện tại hoàn thành.', '/main/practice-center/reading/modules/module-1'],
+                ['Làm 1 bài tập ngữ pháp', 'Thì hiện tại hoàn thành.', '/main/review-center/grammar/basic-tenses/present-simple'],
               ].map(([title, detail, href]) => (
                 <Link key={title} href={href} className="flex items-start gap-3 p-3 rounded-lg bg-surface-container dark:bg-surface-variant border-l-2 border-primary cursor-pointer hover:bg-surface-container-high dark:hover:bg-surface-container transition-colors group">
                   <span className="material-symbols-outlined text-outline mt-0.5">radio_button_unchecked</span>

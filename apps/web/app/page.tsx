@@ -1,70 +1,40 @@
-import Image from "next/image";
-import AuthNav from "./components/AuthNav";
+import Link from 'next/link'
 
-export default function Home() {
+export default function LandingPage() {
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <header className="w-full py-4 px-6 border-b">
-        <AuthNav />
+    <main className="min-h-screen bg-background text-on-background">
+      <header className="mx-auto flex max-w-6xl items-center justify-between px-6 py-5">
+        <div>
+          <h1 className="text-2xl font-bold text-primary">English Academy</h1>
+          <p className="text-sm text-on-surface-variant">Wise Mentor AI</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <Link href="/auth/sign-in" className="rounded-lg border border-outline-variant bg-white px-4 py-2 font-semibold text-on-surface">Đăng nhập</Link>
+          <Link href="/auth/sign-up" className="rounded-lg bg-primary px-4 py-2 font-semibold text-white">Tạo tài khoản</Link>
+        </div>
       </header>
-      
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+
+      <section className="mx-auto grid min-h-[calc(100vh-88px)] max-w-6xl items-center gap-10 px-6 py-12 lg:grid-cols-[1fr_420px]">
+        <div>
+          <h2 className="max-w-3xl text-5xl font-bold leading-tight text-on-surface">Học tiếng Anh theo lộ trình cá nhân hóa cùng AI</h2>
+          <p className="mt-5 max-w-2xl text-lg leading-8 text-on-surface-variant">Wise Mentor phân tích mục tiêu, trình độ và thời gian học mỗi ngày để tạo bài tập, flashcard và lộ trình phù hợp với bạn.</p>
+          <div className="mt-8 flex flex-wrap gap-4">
+            <Link href="/auth/sign-up" className="flex h-12 items-center gap-2 rounded-lg bg-primary px-6 font-bold text-white">Bắt đầu miễn phí<span className="material-symbols-outlined">arrow_forward</span></Link>
+            <Link href="/main/homepage" className="flex h-12 items-center rounded-lg border border-outline-variant bg-white px-6 font-bold text-primary">Xem demo</Link>
+          </div>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+        <div className="rounded-xl border border-outline-variant bg-white p-6 shadow-[0_18px_60px_-36px_rgba(15,23,42,0.8)]">
+          <div className="rounded-lg bg-primary p-5 text-white">
+            <p className="text-sm opacity-80">Daily task</p>
+            <h3 className="mt-2 text-2xl font-bold">5 phút luyện nói với AI</h3>
+          </div>
+          <div className="mt-5 space-y-3">
+            {['Từ vựng mới tự động vào Flashcard', 'Ngữ pháp đáng chú ý vào Review Center', 'Tiến độ lộ trình cập nhật sau mỗi buổi học'].map((item) => (
+              <p key={item} className="flex gap-3 rounded-lg bg-surface p-3"><span className="material-symbols-outlined text-secondary">check_circle</span>{item}</p>
+            ))}
+          </div>
         </div>
-      </main>
-    </div>
-  );
+      </section>
+    </main>
+  )
 }
