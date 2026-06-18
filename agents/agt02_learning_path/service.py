@@ -75,13 +75,8 @@ async def _fetch_catalog_summary() -> dict:
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
             resp = await client.get(f"{LM_SERVICE_BASE_URL}/internal/catalog-summary")
-            if resp.status_code == 404:
-                fallback = await client.get(f"{LM_SERVICE_BASE_URL}/modules")
-                if fallback.is_success:
-                    catalog = fallback.json()
-            else:
-                resp.raise_for_status()
-                catalog = resp.json()
+            resp.raise_for_status()
+            catalog = resp.json()
     except Exception as exc:
         logger.warning("generate_plan: catalog summary fetch failed: %s", exc)
 
@@ -169,15 +164,6 @@ async def generate_plan(clerk_user_id: str, request: dict) -> dict:
             )
 
     plan = _row_to_plan(row)
-
-    try:
-        async with httpx.AsyncClient(timeout=5.0) as client:
-            await client.post(
-                f"{LM_SERVICE_BASE_URL}/internal/learning-paths",
-                json={"clerk_user_id": clerk_user_id, "plan_id": plan["plan_id"], "activities": activities},
-            )
-    except Exception as exc:
-        logger.warning("generate_plan: LM service sync failed for %s: %s", clerk_user_id, exc)
 
     await emit(
         "agent.plan.events",
