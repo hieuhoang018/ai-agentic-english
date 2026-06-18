@@ -78,3 +78,24 @@ async def test_get_all_session_keys_returns_all_categories():
     assert data["difficulty"] is None
     assert data["lang"] is None
     assert data["writing"] is None
+
+
+async def test_append_error_sets_ttl(patch_redis):
+    key = "session:sess1:errors"
+    await stm.append_error("sess1", {"type": "grammar", "detail": "test"})
+    ttl = await patch_redis.ttl(key)
+    assert ttl > 0, f"TTL not set on {key}: got {ttl}"
+
+
+async def test_append_context_turn_sets_ttl(patch_redis):
+    key = "session:sess1:context"
+    await stm.append_context_turn("sess1", {"role": "user", "content": "hello"})
+    ttl = await patch_redis.ttl(key)
+    assert ttl > 0, f"TTL not set on {key}: got {ttl}"
+
+
+async def test_append_vocab_sets_ttl(patch_redis):
+    key = "session:sess1:vocab"
+    await stm.append_vocab("sess1", {"word": "finance", "count": 3})
+    ttl = await patch_redis.ttl(key)
+    assert ttl > 0, f"TTL not set on {key}: got {ttl}"
