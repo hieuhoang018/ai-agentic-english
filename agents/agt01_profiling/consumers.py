@@ -3,7 +3,7 @@ AGT-01 Kafka consumers.
 
 Two background consumer loops, started from main.py's lifespan:
 
-  agent.session.end -> handle_session_end
+  session.end -> handle_session_end
     Updates behavioral_profile.avg_session_length via EWMA (agt01_profiling.behavioral)
     and clears cold_start_flag once a session has completed.
 
@@ -22,6 +22,7 @@ from __future__ import annotations
 import asyncio
 import logging
 
+from agents.shared.db.redis_client import get_redis
 from agents.shared.events.consumer import consume
 from agents.agt01_profiling.service import update_profile, _get_base_profile
 from agents.agt01_profiling.behavioral import update_behavioral_profile
@@ -31,14 +32,24 @@ logger = logging.getLogger(__name__)
 
 async def handle_session_end(topic: str, event: dict) -> None:
     """
-    event fields used: clerkUserId, durationMinutes (minutes, float).
+    event fields used: clerkUserId, durationMinutes (minutes, float), sessionId.
     Emitted by AGT-03's end_session.
     """
     clerk_user_id = event.get("clerkUserId")
     duration = event.get("durationMinutes")
+    session_id = event.get("sessionId")
+
     if not clerk_user_id or duration is None:
         logger.warning("handle_session_end: missing clerkUserId/durationMinutes in %s", event)
         return
+
+    # Idempotency: skip if this session was already processed (24-hour dedup window).
+    dedup_key = f"agt01:processed:session_end:{session_id}" if session_id else None
+    if dedup_key:
+        r = await get_redis()
+        if await r.get(dedup_key):
+            logger.info("handle_session_end: already processed session %s, skipping", session_id)
+            return
 
     profile = await _get_base_profile(clerk_user_id)
     updated_behavioral = update_behavioral_profile(
@@ -48,6 +59,10 @@ async def handle_session_end(topic: str, event: dict) -> None:
         "behavioral_profile": updated_behavioral,
         "cold_start_flag": False,
     })
+
+    if dedup_key:
+        await r.setex(dedup_key, 86400, "1")
+
     logger.info("handle_session_end: updated behavioral profile for %s", clerk_user_id)
 
 
@@ -89,7 +104,7 @@ async def start_consumers() -> list[asyncio.Task]:
     """
     return [
         asyncio.create_task(
-            consume(["agent.session.end"], "agt01-session-end", handle_session_end)
+            consume(["session.end"], "agt01-session-end", handle_session_end)
         ),
         asyncio.create_task(
             consume(["agent.errors"], "agt01-error-events", handle_error_event)

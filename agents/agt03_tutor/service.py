@@ -3,9 +3,11 @@ AGT-03 AI Tutor — text-only conversation orchestration for this sprint.
 
 Session lifecycle:
   start_session: fetch the merged learner profile from AGT-01 (best-effort —
-    falls back to cold-start on failure), initialise STM session state on
-    AGT-06, produce an opening message (canned per skill_focus in mock mode),
-    append it to STM context, and emit agent.session.start.
+    falls back to profile_loaded=False on failure), fetch the active plan from
+    AGT-02 (best-effort — plan_loaded=False on failure or 404), initialise STM
+    session state on AGT-06 (critical path — raises on failure), produce an
+    opening message (canned per skill_focus in mock mode), append it to STM
+    context, and emit agent.session.start.
 
   process_turn: optionally transcribe audio via asr.transcribe (already
     implemented, unchanged), append the user turn to STM context, call the
@@ -40,6 +42,7 @@ logger = logging.getLogger(__name__)
 
 AGT06_BASE_URL = os.environ.get("AGT06_BASE_URL", "http://agt06-memory:8106")
 AGT01_BASE_URL = os.environ.get("AGT01_BASE_URL", "http://agt01-profiling:8101")
+AGT02_BASE_URL = os.environ.get("AGT02_BASE_URL", "http://agt02-learning-path:8102")
 
 _OPENING_MESSAGES: dict[str, str] = {
     "LISTENING": "Hi! Today we'll practice listening. I'll describe a short workplace scenario - let me know if you'd like me to repeat anything.",
@@ -48,17 +51,19 @@ _OPENING_MESSAGES: dict[str, str] = {
     "WRITING": "Hi! Let's practice writing. I'll give you a short prompt and we can refine your draft together.",
 }
 
-# In-process session start-time tracker. Acceptable for a single-instance
-# sprint deployment; a future phase will move this into AGT-06 STM state.
+# In-process session trackers. Acceptable for a single-instance sprint
+# deployment; a future phase will move these into AGT-06 STM state.
 _SESSION_START_TIMES: dict[str, float] = {}
+_SESSION_TURN_COUNTS: dict[str, int] = {}
 
 
 async def _stm_set_state(session_id: str, skill_focus: str) -> None:
     async with httpx.AsyncClient(timeout=5.0) as client:
-        await client.post(
+        resp = await client.post(
             f"{AGT06_BASE_URL}/sessions/{session_id}/state",
             json={"skill_focus": skill_focus, "phase": "warm_up"},
         )
+        resp.raise_for_status()  # critical path — non-2xx must propagate
 
 
 async def _stm_append_context(session_id: str, role: str, content: str) -> None:
@@ -76,7 +81,7 @@ async def _stm_get_context(session_id: str) -> list[dict]:
         return resp.json()
 
 
-async def _fetch_profile(clerk_user_id: str, session_id: str) -> dict:
+async def _fetch_profile(clerk_user_id: str, session_id: str) -> tuple[dict, bool]:
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
             resp = await client.get(
@@ -84,22 +89,34 @@ async def _fetch_profile(clerk_user_id: str, session_id: str) -> dict:
                 params={"session_id": session_id},
             )
             resp.raise_for_status()
-            return resp.json()
+            return resp.json(), True
     except Exception as exc:
         logger.warning("start_session: AGT-01 profile fetch failed for %s: %s", clerk_user_id, exc)
-        return {"cold_start_flag": True}
+        return {"cold_start_flag": True}, False
+
+
+async def _fetch_plan(clerk_user_id: str) -> bool:
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get(f"{AGT02_BASE_URL}/plans/{clerk_user_id}/active")
+            if resp.status_code == 404:
+                return False
+            resp.raise_for_status()
+            return True
+    except Exception as exc:
+        logger.warning("start_session: AGT-02 plan fetch failed for %s: %s", clerk_user_id, exc)
+        return False
 
 
 async def start_session(clerk_user_id: str, skill_focus: str, session_id: str | None = None) -> dict:
     session_id = session_id or str(uuid.uuid4())
     skill_focus = skill_focus.upper()
 
-    profile = await _fetch_profile(clerk_user_id, session_id)
+    _profile, profile_loaded = await _fetch_profile(clerk_user_id, session_id)
+    plan_loaded = await _fetch_plan(clerk_user_id)
 
-    try:
-        await _stm_set_state(session_id, skill_focus)
-    except Exception as exc:
-        logger.warning("start_session: AGT-06 set_state failed for %s: %s", session_id, exc)
+    # Critical path: raises if AGT-06 STM is unavailable.
+    await _stm_set_state(session_id, skill_focus)
 
     opening = _OPENING_MESSAGES.get(skill_focus, _OPENING_MESSAGES["SPEAKING"])
     if settings.INFERENCE_MODE != "mock":
@@ -115,9 +132,10 @@ async def start_session(clerk_user_id: str, skill_focus: str, session_id: str | 
         logger.warning("start_session: AGT-06 append_context failed for %s: %s", session_id, exc)
 
     _SESSION_START_TIMES[session_id] = time.monotonic()
+    _SESSION_TURN_COUNTS[session_id] = 0
 
     await emit(
-        "agent.session.start",
+        "session.start",
         {"sessionId": session_id, "clerkUserId": clerk_user_id, "skillFocus": skill_focus},
         agent_id="AGT03",
     )
@@ -127,12 +145,16 @@ async def start_session(clerk_user_id: str, skill_focus: str, session_id: str | 
         "clerk_user_id": clerk_user_id,
         "skill_focus": skill_focus,
         "opening_message": opening,
-        "cold_start_flag": profile.get("cold_start_flag", True),
+        "profile_loaded": profile_loaded,
+        "plan_loaded": plan_loaded,
     }
 
 
-async def process_turn(session_id: str, user_text: str | None, audio_base64: str | None) -> dict:
-    transcript_text = user_text
+async def process_turn(session_id: str, user_message: str | None, audio_base64: str | None) -> dict:
+    if user_message is None and audio_base64 is None:
+        raise ValueError("process_turn requires either user_message or audio_base64")
+
+    transcript_text = user_message
 
     if audio_base64 is not None:
         audio_bytes = base64.b64decode(audio_base64)
@@ -153,30 +175,39 @@ async def process_turn(session_id: str, user_text: str | None, audio_base64: str
         logger.warning("process_turn: AGT-06 get_context failed for %s: %s", session_id, exc)
         context = []
 
+    mock_feedback: str | None = None
     if settings.INFERENCE_MODE == "mock":
-        assistant_text = f"[MOCK LLM AGT03] Got it - you said: {transcript_text[:60]}"
+        assistant_message = f"[MOCK LLM AGT03] Got it - you said: {transcript_text[:60]}"
+        mock_feedback = "[MOCK] Good attempt! Keep practising."
     else:
         messages = [{"role": "system", "content": "You are an English tutor for a Vietnamese working professional. Keep replies short and ask a follow-up question."}]
         for turn in context:
             role = "assistant" if turn.get("role") == "assistant" else "user"
             messages.append({"role": role, "content": turn.get("content", "")})
-        assistant_text = await call_llm(messages, AgentID.AGT03)
+        assistant_message = await call_llm(messages, AgentID.AGT03)
 
     try:
-        await _stm_append_context(session_id, "assistant", assistant_text)
+        await _stm_append_context(session_id, "assistant", assistant_message)
     except Exception as exc:
         logger.warning("process_turn: AGT-06 append_context (assistant) failed for %s: %s", session_id, exc)
 
+    _SESSION_TURN_COUNTS[session_id] = _SESSION_TURN_COUNTS.get(session_id, 0) + 1
+
     return {
         "session_id": session_id,
-        "assistant_text": assistant_text,
+        "assistant_message": assistant_message,
         "transcript_text": transcript_text,
+        "mock_feedback": mock_feedback,
+        "language": "en",
     }
 
 
 async def end_session(session_id: str, clerk_user_id: str, skill_focus: str) -> dict:
     start_time = _SESSION_START_TIMES.pop(session_id, None)
+    if start_time is None:
+        logger.warning("end_session: session %s not in start times — already ended or process restarted", session_id)
     duration_minutes = round((time.monotonic() - start_time) / 60.0, 4) if start_time else 0.0
+    turns_completed = _SESSION_TURN_COUNTS.pop(session_id, 0)
 
     consolidated = False
     try:
@@ -190,21 +221,25 @@ async def end_session(session_id: str, clerk_user_id: str, skill_focus: str) -> 
     except Exception as exc:
         logger.warning("end_session: AGT-06 consolidate failed for %s: %s", session_id, exc)
 
-    await emit(
-        "agent.session.end",
-        {
-            "sessionId": session_id,
-            "clerkUserId": clerk_user_id,
-            "skillFocus": skill_focus.upper(),
-            "durationMinutes": duration_minutes,
-        },
-        agent_id="AGT03",
-    )
+    # Only emit if this invocation actually owned the session (start_time was present).
+    # Prevents a double-call from publishing a second event with durationMinutes=0.
+    if start_time is not None:
+        await emit(
+            "session.end",
+            {
+                "sessionId": session_id,
+                "clerkUserId": clerk_user_id,
+                "skillFocus": skill_focus.upper(),
+                "durationMinutes": duration_minutes,
+            },
+            agent_id="AGT03",
+        )
 
     return {
         "session_id": session_id,
         "consolidated": consolidated,
         "duration_minutes": duration_minutes,
+        "turns_completed": turns_completed,
     }
 
 
