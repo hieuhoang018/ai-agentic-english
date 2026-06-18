@@ -119,6 +119,8 @@ async def test_process_turn_mock_mode_echoes_user_message(monkeypatch):
         return_value=httpx.Response(200, json=[{"role": "user", "content": "Hello, I work in finance."}])
     )
 
+    service._SESSION_START_TIMES["abc"] = service.time.monotonic()
+
     result = await service.process_turn("abc", "Hello, I work in finance.", None)
 
     assert result["session_id"] == "abc"
@@ -135,6 +137,8 @@ async def test_process_turn_with_audio_uses_asr(monkeypatch):
     respx.post(f"{service.AGT06_BASE_URL}/sessions/abc/context").mock(return_value=httpx.Response(204))
     respx.get(f"{service.AGT06_BASE_URL}/sessions/abc/context").mock(return_value=httpx.Response(200, json=[]))
 
+    service._SESSION_START_TIMES["abc"] = service.time.monotonic()
+
     audio_b64 = base64.b64encode(b"fake-audio-bytes").decode()
 
     result = await service.process_turn("abc", None, audio_b64)
@@ -144,6 +148,7 @@ async def test_process_turn_with_audio_uses_asr(monkeypatch):
 
 @respx.mock
 async def test_process_turn_increments_turn_count(monkeypatch):
+    service._SESSION_START_TIMES["abc"] = service.time.monotonic()
     service._SESSION_TURN_COUNTS["abc"] = 0
 
     respx.post(f"{service.AGT06_BASE_URL}/sessions/abc/context").mock(return_value=httpx.Response(204))
@@ -242,6 +247,15 @@ async def test_process_turn_raises_when_no_message_and_no_audio():
     """Both user_message=None and audio_base64=None must raise ValueError."""
     with pytest.raises(ValueError, match="requires either user_message or audio_base64"):
         await service.process_turn("abc", None, None)
+
+
+async def test_process_turn_raises_for_unknown_session():
+    """process_turn must raise ValueError for a session_id not in _SESSION_START_TIMES."""
+    # Ensure no session with this ID exists
+    service._SESSION_START_TIMES.pop("dead-session", None)
+
+    with pytest.raises(ValueError, match="not active"):
+        await service.process_turn("dead-session", "hello", None)
 
 
 @respx.mock

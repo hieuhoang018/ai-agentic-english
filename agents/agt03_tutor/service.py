@@ -187,6 +187,12 @@ async def process_turn(session_id: str, user_message: str | None, audio_base64: 
     if user_message is None and audio_base64 is None:
         raise ValueError("process_turn requires either user_message or audio_base64")
 
+    if session_id not in _SESSION_START_TIMES:
+        raise ValueError(
+            f"process_turn: session '{session_id}' is not active — "
+            "call start_session first or session has already ended"
+        )
+
     transcript_text = user_message
 
     if audio_base64 is not None:
