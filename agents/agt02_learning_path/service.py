@@ -28,7 +28,7 @@ import uuid
 
 import httpx
 
-from agents.shared.db.postgres import fetchrow, execute
+from agents.shared.db.postgres import get_pool, fetchrow
 from agents.shared.db.redis_client import get_redis
 from agents.shared.events.producer import emit
 from agents.shared.llm.router import call_llm, AgentID
@@ -71,14 +71,19 @@ async def _fetch_catalog_summary() -> dict:
     if cached:
         return json.loads(cached)
 
+    catalog = {}
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
             resp = await client.get(f"{LM_SERVICE_BASE_URL}/internal/catalog-summary")
-            resp.raise_for_status()
-            catalog = resp.json()
+            if resp.status_code == 404:
+                fallback = await client.get(f"{LM_SERVICE_BASE_URL}/modules")
+                if fallback.is_success:
+                    catalog = fallback.json()
+            else:
+                resp.raise_for_status()
+                catalog = resp.json()
     except Exception as exc:
         logger.warning("generate_plan: catalog summary fetch failed: %s", exc)
-        catalog = {}
 
     await r.setex(CATALOG_CACHE_KEY, CATALOG_CACHE_TTL, json.dumps(catalog))
     return catalog
@@ -132,34 +137,48 @@ async def generate_plan(clerk_user_id: str, request: dict) -> dict:
         for activity in raw_activities
     ]
 
-    existing = await fetchrow(
-        """
-        SELECT plan_id, version FROM agent_learning_plans
-        WHERE clerk_user_id = $1 AND is_active = TRUE
-        ORDER BY created_at DESC LIMIT 1
-        """,
-        clerk_user_id,
-    )
-    next_version = (existing["version"] + 1) if existing else 1
-    if existing:
-        await execute(
-            "UPDATE agent_learning_plans SET is_active = FALSE WHERE plan_id = $1",
-            existing["plan_id"],
-        )
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            existing = await conn.fetchrow(
+                """
+                SELECT plan_id, version FROM agent_learning_plans
+                WHERE clerk_user_id = $1 AND is_active = TRUE
+                ORDER BY created_at DESC LIMIT 1
+                FOR UPDATE
+                """,
+                clerk_user_id,
+            )
+            next_version = (existing["version"] + 1) if existing else 1
+            if existing:
+                await conn.execute(
+                    "UPDATE agent_learning_plans SET is_active = FALSE WHERE plan_id = $1",
+                    existing["plan_id"],
+                )
 
-    lm_plan_id = str(uuid.uuid4())
-    row = await fetchrow(
-        """
-        INSERT INTO agent_learning_plans
-            (clerk_user_id, lm_plan_id, version, skill_allocation, activity_queue, rationale, is_active)
-        VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6, TRUE)
-        RETURNING *
-        """,
-        clerk_user_id, lm_plan_id, next_version,
-        json.dumps(allocation), json.dumps(activities), rationale,
-    )
+            lm_plan_id = str(uuid.uuid4())
+            row = await conn.fetchrow(
+                """
+                INSERT INTO agent_learning_plans
+                    (clerk_user_id, lm_plan_id, version, skill_allocation, activity_queue, rationale, is_active)
+                VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6, TRUE)
+                RETURNING *
+                """,
+                clerk_user_id, lm_plan_id, next_version,
+                json.dumps(allocation), json.dumps(activities), rationale,
+            )
 
     plan = _row_to_plan(row)
+
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            await client.post(
+                f"{LM_SERVICE_BASE_URL}/internal/learning-paths",
+                json={"clerk_user_id": clerk_user_id, "plan_id": plan["plan_id"], "activities": activities},
+            )
+    except Exception as exc:
+        logger.warning("generate_plan: LM service sync failed for %s: %s", clerk_user_id, exc)
+
     await emit(
         "agent.plan.events",
         {"planId": plan["plan_id"], "clerkUserId": clerk_user_id, "version": plan["version"]},
