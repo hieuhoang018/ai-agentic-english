@@ -143,7 +143,16 @@ async def update_profile(clerk_user_id: str, updates: dict) -> dict:
         if field in ("irt_theta", "grammar_error_map", "behavioral_profile",
                      "vocabulary_beta", "goal_profile"):
             if isinstance(value, dict) and isinstance(current.get(field), dict):
-                current[field].update(value)
+                # Deep merge: for each top-level key, if both sides are dicts, merge them.
+                # This preserves sibling error types within the same skill domain.
+                base_dict = current[field]
+                for k, v in value.items():
+                    if isinstance(v, dict) and isinstance(base_dict.get(k), dict):
+                        merged_sub = dict(base_dict[k])
+                        merged_sub.update(v)
+                        base_dict[k] = merged_sub
+                    else:
+                        base_dict[k] = v
             else:
                 current[field] = value
         else:
