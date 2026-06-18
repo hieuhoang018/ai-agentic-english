@@ -55,6 +55,8 @@ _OPENING_MESSAGES: dict[str, str] = {
 # deployment; a future phase will move these into AGT-06 STM state.
 _SESSION_START_TIMES: dict[str, float] = {}
 _SESSION_TURN_COUNTS: dict[str, int] = {}
+# Keyed by session_id. Value: {"profile": dict, "skill_focus": str}
+_SESSION_PROFILES: dict[str, dict] = {}
 
 
 async def _stm_set_state(session_id: str, skill_focus: str) -> None:
@@ -108,12 +110,43 @@ async def _fetch_plan(clerk_user_id: str) -> bool:
         return False
 
 
+def _build_system_prompt(skill_focus: str, profile: dict) -> str:
+    """Build a personalised system prompt from the learner profile."""
+    # skill_focus first char maps to theta key: SPEAKING->S, LISTENING->L, etc.
+    theta_key = skill_focus[0]
+    theta = profile.get("irt_theta") or {}
+    skill_level = float(theta.get(theta_key) or 0.0)
+    cefr_map = [(1.5, "C2"), (1.0, "C1"), (0.5, "B2"), (0.0, "B1"), (-0.5, "A2")]
+    cefr = next((label for threshold, label in cefr_map if skill_level >= threshold), "A1")
+
+    error_map = profile.get("grammar_error_map") or {}
+    skill_errors = error_map.get(skill_focus, {})
+    top_errors = sorted(skill_errors.items(), key=lambda x: x[1], reverse=True)[:3]
+    error_str = (
+        ", ".join(f"{k} ({v:.0f})" for k, v in top_errors)
+        if top_errors else "none identified yet"
+    )
+
+    cold_start = profile.get("cold_start_flag", True)
+    experience = "new learner" if cold_start else "returning learner"
+
+    return (
+        f"You are an English tutor for a Vietnamese working professional. "
+        f"This is a {experience}. Skill focus today: {skill_focus}. "
+        f"Current {skill_focus} level: {cefr}. "
+        f"Top grammar issues in {skill_focus}: {error_str}. "
+        f"Keep replies concise (2-4 sentences) and ask one follow-up question."
+    )
+
+
 async def start_session(clerk_user_id: str, skill_focus: str, session_id: str | None = None) -> dict:
     session_id = session_id or str(uuid.uuid4())
     skill_focus = skill_focus.upper()
 
     _profile, profile_loaded = await _fetch_profile(clerk_user_id, session_id)
     plan_loaded = await _fetch_plan(clerk_user_id)
+
+    _SESSION_PROFILES[session_id] = {"profile": _profile, "skill_focus": skill_focus}
 
     # Critical path: raises if AGT-06 STM is unavailable.
     await _stm_set_state(session_id, skill_focus)
@@ -180,7 +213,10 @@ async def process_turn(session_id: str, user_message: str | None, audio_base64: 
         assistant_message = f"[MOCK LLM AGT03] Got it - you said: {transcript_text[:60]}"
         mock_feedback = "[MOCK] Good attempt! Keep practising."
     else:
-        messages = [{"role": "system", "content": "You are an English tutor for a Vietnamese working professional. Keep replies short and ask a follow-up question."}]
+        session_data = _SESSION_PROFILES.get(session_id, {})
+        profile = session_data.get("profile", {})
+        skill_focus = session_data.get("skill_focus", "SPEAKING")
+        messages = [{"role": "system", "content": _build_system_prompt(skill_focus, profile)}]
         for turn in context:
             role = "assistant" if turn.get("role") == "assistant" else "user"
             messages.append({"role": role, "content": turn.get("content", "")})
@@ -208,6 +244,7 @@ async def end_session(session_id: str, clerk_user_id: str, skill_focus: str) -> 
         logger.warning("end_session: session %s not in start times — already ended or process restarted", session_id)
     duration_minutes = round((time.monotonic() - start_time) / 60.0, 4) if start_time else 0.0
     turns_completed = _SESSION_TURN_COUNTS.pop(session_id, 0)
+    _SESSION_PROFILES.pop(session_id, None)
 
     consolidated = False
     try:

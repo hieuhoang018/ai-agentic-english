@@ -11,9 +11,11 @@ from agents.agt03_tutor import service
 def reset_session_state():
     service._SESSION_START_TIMES.clear()
     service._SESSION_TURN_COUNTS.clear()
+    service._SESSION_PROFILES.clear()
     yield
     service._SESSION_START_TIMES.clear()
     service._SESSION_TURN_COUNTS.clear()
+    service._SESSION_PROFILES.clear()
 
 
 @respx.mock
@@ -262,3 +264,41 @@ async def test_stm_set_state_http_error_propagates_to_start_session(monkeypatch)
 
     with pytest.raises(httpx.HTTPStatusError):
         await service.start_session("user5", "SPEAKING", "sess5")
+
+
+@respx.mock
+async def test_process_turn_system_prompt_includes_profile_data(monkeypatch):
+    """The LLM call in live mode must include profile context in the system prompt."""
+    respx.post(f"{service.AGT06_BASE_URL}/sessions/abc/context").mock(return_value=httpx.Response(204))
+    respx.get(f"{service.AGT06_BASE_URL}/sessions/abc/context").mock(
+        return_value=httpx.Response(200, json=[])
+    )
+
+    # Simulate a session that was started with a real profile
+    service._SESSION_START_TIMES["abc"] = service.time.monotonic()
+    service._SESSION_PROFILES["abc"] = {
+        "profile": {
+            "irt_theta": {"L": 0.2, "S": 0.8, "R": 0.5, "W": 0.3},
+            "grammar_error_map": {"SPEAKING": {"verb_tense": 3.0}},
+            "cold_start_flag": False,
+        },
+        "skill_focus": "SPEAKING",
+    }
+
+    captured_messages = []
+
+    async def fake_call_llm(messages, agent_id):
+        captured_messages.extend(messages)
+        return "Good job!"
+
+    monkeypatch.setattr(service, "call_llm", fake_call_llm)
+
+    from agents.shared.config import settings as cfg
+    monkeypatch.setattr(cfg, "INFERENCE_MODE", "live")
+
+    await service.process_turn("abc", "Hello, I work in finance.", None)
+
+    system_content = next(m["content"] for m in captured_messages if m["role"] == "system")
+    assert "verb_tense" in system_content or "SPEAKING" in system_content, (
+        "System prompt must mention dominant error types from the profile"
+    )
