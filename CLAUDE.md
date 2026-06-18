@@ -60,7 +60,7 @@ actual deliverable specs and exit criteria.
 
 ## Current Status
 
-**Branch:** `server/phase3` · **Last updated:** 2026-06-17
+**Branch:** `server/phase4` · **Last updated:** 2026-06-17
 
 | Phase | Scope | Status |
 |---|---|---|
@@ -68,56 +68,59 @@ actual deliverable specs and exit criteria.
 | 1 | User Service + Clerk auth + Kong JWT | ✅ Done |
 | 2 | Learning Materials Service (catalog, assessment, learning paths) | ✅ Done |
 | 3 | Memory & Progress Service + inference interface contract | ✅ Done |
-| 4 | AI Tutor: onboarding, grading, highlights | ⬜ Not started |
+| 4 | AI Tutor: onboarding, grading, highlights | ✅ Done |
 | 5 | Notification Service + Kafka event wiring | ⬜ Not started |
 | 6 | Real-time speaking (WebSocket, cascaded STT/LLM/TTS) | ⬜ Not started |
 | 7 | Offline sync endpoints | ⬜ Not started |
 
-### Phase 3 deliverables (per implementation plan §Phase 3) — all done
+Phases 0-3 summary: tooling/infra scaffolded, User Service (Clerk auth + Kong JWT), Learning
+Materials Service (catalog/assessment/learning-paths), Memory & Progress Service (learner model,
+progress, FSRS review schedule, `attempt.recorded` consumer logic, review-center highlights) +
+the inference interface contract (`LlmClient`/`SttClient`/`TtsClient` + mocks) in
+`packages/shared`. See git history / prior implementation-plan.md phases for detail.
 
-1. Inference interface contract + mocks in `packages/shared/src/inference/`
-   (`LlmClient`/`SttClient`/`TtsClient`, `Mock*` impls, `INFERENCE_MODE=mock|live` switch via
-   `createLlmClient()`/`createSttClient()`/`createTtsClient()`; `live` throws until a real
-   adapter lands).
-2. `memory-progress-service` Prisma schema: `LearnerModel`, `Progress`, `ReviewSchedule`,
-   `Mistake`, `Attempt`, `VocabItem` — migrated.
-3. `ts-fsrs` integrated via `src/fsrs/scheduler.ts` (`createInitialReviewSchedule`,
-   `applyReview`); unit-tested against reference scheduling values
-   (`enable_short_term: false` — no minute-level relearning steps, since `ReviewSchedule`
-   doesn't persist `learning_steps`).
-4. Learner-model endpoints: `POST /internal/learner-models` (upsert, idempotent),
-   `GET`/`PATCH /learner-models/:userId`.
-5. `POST /internal/progress/:userId/initialize` (upsert; resets `completedExerciseIds` on
-   every call, since re-init only happens when a superseded path replaces the old one).
-6. `GET /exercises/next` — due `ReviewSchedule` rows first (earliest due), else
-   `Progress.currentExerciseId`; calls Learning Materials' `/internal/exercises/:id` and
-   strips `answerKey` before responding (first inter-service HTTP call in the repo — see
-   `src/lib/learningMaterialsClient.ts`, `LEARNING_MATERIALS_SERVICE_URL`/`INTERNAL_SECRET`).
-7. `attempt.recorded` consumer logic (`src/kafka/consumers/attemptRecorded.ts`) — deterministic
-   `Attempt`/`Mistake`/`ReviewSchedule`(FSRS) updates from an event payload. **Not wired to a
-   real Kafka topic** — no Kafka client exists anywhere in the repo yet; this is pure,
-   directly-callable, fully unit-tested logic that Phase 4's actual consumer wiring (and AI
-   Tutor's producer) will call. **Known gap**: does not advance
-   `Progress.currentModuleId/LessonId/ExerciseId` to "what's next in the path" — that needs
-   Learning Materials' path graph and was out of scope here; Phase 4 needs to close this.
-8. `GET /review-center/highlights` — top mistakes by frequency (`Mistake.groupBy`) + due vocab
-   (`ReviewSchedule` joined to `VocabItem`); content generation stubbed via
-   `src/lib/highlightContentGenerator.ts` (`createStubHighlightContentGenerator`) until AI
-   Tutor's real `POST /internal/highlights/generate-content` exists in Phase 4.
-9. Offline DTO shapes only (`packages/shared/src/dto/offline.ts`): `OfflinePackageDto`,
-   `OfflineSyncRequestDto`, `OfflineSyncResultDto` — no routes/`OfflineReviewLog` table yet
-   (Phase 7).
+### Phase 4 deliverables (per implementation plan §Phase 4) — all done
 
-Shared `ErrorCategory` enum (`vocab`/`grammar`/`pronunciation`/`fluency`/`coherence`) landed in
-`packages/shared/src/dto/memory-progress.ts`, used by both Memory & Progress and the inference
-contract. Event envelope (`BaseEvent`) and `AttemptRecordedEvent` landed in
-`packages/shared/src/events/`.
+Per README §8.2.1, onboarding's public entry point is **Memory & Progress Service**, not AI
+Tutor — the client posts there, it upserts the `LearnerModel`, then calls AI Tutor's internal
+`generate-path` endpoint, which reads the catalog, calls the LLM, writes the path to Learning
+Materials, and initializes progress back in Memory & Progress.
 
-64 tests passing (25 `packages/shared`, 39 `memory-progress-service`), lint clean. Manually
-verified end-to-end against the real Docker containers + Postgres (not just unit tests):
-learner-model CRUD, progress-initialize, exercises/next's both selection branches (path vs. due
-review, confirmed by backdating a `due` row), and review-center highlights — see chat history
-for the exact `curl`/script sequence if reproducing.
+1. `ai-tutor-service` Prisma: `Conversation`/`Message` added (per plan), unused until Phase 6.
+2. Deterministic grading module (`ai-tutor-service/src/grading/`): one pure function per
+   exercise type (`mcq`, `fill-blank`, `sentence-correction`, `listening-comprehension`), all
+   normalizing and comparing against the seeded `answerKey: { answer: string }` shape;
+   `gradeDeterministic()` dispatch returns `null` for an unrecognized type — that's the fallback
+   path to `LlmClient.gradeOpenResponse` (every currently-seeded type is objective, so the LLM
+   path is only reachable for a future open-ended type).
+3. `POST /grading/submit` (`ai-tutor-service`, public via Kong `/api/grading`, `requireAuth`):
+   grades synchronously, responds immediately, then publishes `attempt.recorded` via the
+   injected `EventBus` (still `InMemoryEventBus` — no real Kafka client exists anywhere in the
+   repo yet, consistent with every other event so far).
+4. `POST /internal/onboarding/generate-path` (`ai-tutor-service`): catalog summary →
+   `LlmClient.generateLearningPath` → `learningMaterialsClient.createLearningPath` → derives the
+   first `{moduleId, lessonId, exerciseId}` from the returned path → `memoryProgressClient.
+   initializeProgress` → returns the `LearningPathDto`.
+5. `POST /internal/highlights/generate-content` (`ai-tutor-service`): Redis-cached
+   (`highlight-content:<userId>:<sha256(input)>`, TTL 24h) wrapper around
+   `LlmClient.generateHighlightContent` — `src/lib/redisCache.ts` (`createRedisCacheClient` /
+   `createInMemoryCacheClient` for tests, same DI pattern as `InMemoryEventBus`).
+6. `POST /onboarding` (`memory-progress-service`, public via Kong `/api/onboarding`,
+   `requireAuth`): upserts `LearnerModel` (shared helper `src/lib/learnerModel.ts`, also used by
+   `/internal/learner-models`), calls AI Tutor via the new `src/lib/aiTutorClient.ts`, returns
+   the generated `LearningPathDto` directly.
+7. `memory-progress-service`'s `/review-center/highlights` now calls AI Tutor's real endpoint
+   (`createAiTutorHighlightContentGenerator`) instead of the Phase 3 stub (stub kept for tests).
+8. Closed a Phase 3 gap: `attemptRecorded` consumer now advances
+   `Progress.currentModuleId/LessonId/ExerciseId` to the next item in the path on a correct
+   attempt, via a new pure `src/lib/pathProgression.ts` (`getNextPosition`) and a new Learning
+   Materials internal endpoint `GET /internal/learning-paths/:id`.
+
+All three flows (onboarding, grading, highlight generation incl. cache-hit) were manually
+verified end-to-end against real Docker Postgres/Redis + live inter-service HTTP calls, not just
+unit tests — see chat history for the exact `curl`/script sequence if reproducing. 139 tests
+passing across all 6 backend workspaces, lint clean (the one lint failure is a pre-existing
+`apps/web` Next.js warning, unrelated to this work).
 
 **Docker containers do not hot-reload** — `Dockerfile`s `COPY . .` at build time, no bind mounts.
 After changing service code, `docker compose build <service> && docker compose up -d <service>`
@@ -127,17 +130,22 @@ dev` on the host picks up changes immediately and is the faster inner loop.
 ### Notes on what's already in place (useful when extending)
 
 - `packages/shared/src/events/eventBus.ts`: `EventBus` interface + `InMemoryEventBus` (records
-  published events in memory) — real Kafka producer wiring per-service still pending; services so
-  far only stub-publish via this in-memory bus.
-- `packages/shared/src/errors/`, `auth/extractUserId.ts`, `dto/user.ts`,
-  `dto/learning-materials.ts`, `dto/memory-progress.ts`, `dto/offline.ts`,
-  `events/base.ts`, `events/attemptRecorded.ts`, `http/asyncHandler.ts`, `http/internal.ts`,
-  `inference/`, `testing/` already exist and are reused across services — check here before
-  adding new cross-cutting code.
+  published events in memory) — real Kafka producer/consumer wiring still pending for every
+  service; everything so far only stub-publishes via this in-memory bus (`user.upserted`,
+  `attempt.recorded`). Phase 5 is the natural place to introduce a real `kafkajs` client, since
+  it touches every service producing/consuming events at once.
+- `ai-tutor-service/src/lib/redisCache.ts` is the first real Redis usage in the repo
+  (`createRedisCacheClient` using the `redis` npm package, `createInMemoryCacheClient` for
+  tests) — reuse this pattern rather than adding another Redis client lib.
+- `packages/shared/src/errors/`, `auth/extractUserId.ts`, `dto/*`, `events/*`,
+  `http/asyncHandler.ts`, `http/internal.ts`, `inference/`, `testing/` already exist and are
+  reused across services — check here before adding new cross-cutting code.
 - `user-service` and `learning-materials-service` are the reference implementations for
   patterns (Prisma client isolation per service, `/internal/*` route convention, seed scripts,
-  mappers, Kong wiring) — `memory-progress-service` now follows the same patterns too.
-- Kong config lives in `gateway/kong/kong.yml`; only has a `/api/health/memory-progress-service`
-  route so far — none of Phase 3's new endpoints are routed through Kong yet (tested directly
-  against the service's own port; Kong wiring wasn't called for in the Phase 3 plan).
-  `gateway/kong/scripts/jwks-to-pem.mjs` converts Clerk JWKS for Kong's JWT plugin.
+  mappers, Kong wiring); `memory-progress-service` and `ai-tutor-service` now follow the same
+  patterns, including the multi-arg `createApp(prisma, ...clients)` DI shape for test injection.
+- Kong config lives in `gateway/kong/kong.yml`; routes now exist for `/api/grading` (→ AI Tutor)
+  and `/api/onboarding` (→ Memory & Progress), in addition to the Phase 1-2 routes and per-service
+  `/api/health/*`. AI Tutor's `/internal/*` and Memory & Progress's `/internal/*` are still
+  docker-network-only, never through Kong. `gateway/kong/scripts/jwks-to-pem.mjs` converts Clerk
+  JWKS for Kong's JWT plugin.

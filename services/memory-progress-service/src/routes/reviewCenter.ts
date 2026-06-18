@@ -27,6 +27,7 @@ export function createReviewCenterRouter(prisma: AppPrismaClient, contentGenerat
       const mistakes = await Promise.all(
         mistakeGroups.map(async (group) => {
           const content = await contentGenerator.generateMistakeExplanation({
+            userId,
             errorCategory: group.errorCategory as ErrorCategory,
             errorLabel: group.errorLabel,
           });
@@ -59,7 +60,7 @@ export function createReviewCenterRouter(prisma: AppPrismaClient, contentGenerat
             const item = vocabById.get(schedule.itemId);
             if (!item) return null;
 
-            const content = await contentGenerator.generateVocabExample({ term: item.term, meaning: item.meaning });
+            const content = await contentGenerator.generateVocabExample({ userId, term: item.term, meaning: item.meaning });
             return {
               vocabItemId: item.id,
               term: item.term,

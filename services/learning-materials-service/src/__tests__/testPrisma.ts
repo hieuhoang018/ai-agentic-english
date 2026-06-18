@@ -9,6 +9,7 @@ export type MockPrismaClient = {
   learningPath: {
     findFirst: ReturnType<typeof vi.fn>;
     findMany: ReturnType<typeof vi.fn>;
+    findUnique: ReturnType<typeof vi.fn>;
     create: ReturnType<typeof vi.fn>;
     update: ReturnType<typeof vi.fn>;
   };
@@ -26,6 +27,7 @@ export function createMockPrisma(): MockPrismaClient {
     learningPath: {
       findFirst: vi.fn(),
       findMany: vi.fn(),
+      findUnique: vi.fn(),
       create: vi.fn(),
       update: vi.fn(),
     },

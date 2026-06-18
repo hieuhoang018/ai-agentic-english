@@ -1,10 +1,27 @@
 import { AttemptRecordedEvent } from '@ai-agentic-english/shared';
-import { describe, expect, it, beforeEach } from 'vitest';
+import { describe, expect, it, beforeEach, vi } from 'vitest';
 import { State } from '../../../fsrs/scheduler';
+import { LearningMaterialsClient } from '../../../lib/learningMaterialsClient';
 import { MockPrismaClient, createMockPrisma } from '../../../__tests__/testPrisma';
 import { consumeAttemptRecorded } from '../attemptRecorded';
 
 const now = new Date('2024-01-10T00:00:00.000Z');
+
+// Single-exercise path by default — getNextPosition resolves to null, so existing
+// completedExerciseIds-only assertions stay valid unless a test overrides this mock.
+function createLearningMaterials(pathDefinition: unknown = { modules: [{ moduleId: 'mod-1', lessons: [{ lessonId: 'les-1', exerciseIds: ['ex-1'] }] }] }): LearningMaterialsClient {
+  return {
+    getExercise: vi.fn(),
+    getLearningPath: vi.fn().mockResolvedValue({
+      id: 'path-1',
+      userId: 'user_123',
+      version: 1,
+      status: 'active',
+      generatedAt: now.toISOString(),
+      pathDefinition,
+    }),
+  } as unknown as LearningMaterialsClient;
+}
 
 function baseEvent(overrides: Partial<AttemptRecordedEvent> = {}): AttemptRecordedEvent {
   return {
@@ -25,15 +42,17 @@ function baseEvent(overrides: Partial<AttemptRecordedEvent> = {}): AttemptRecord
 
 describe('consumeAttemptRecorded', () => {
   let prisma: MockPrismaClient;
+  let learningMaterials: LearningMaterialsClient;
 
   beforeEach(() => {
     prisma = createMockPrisma();
     prisma.reviewSchedule.findUnique.mockResolvedValue(null);
     prisma.progress.findUnique.mockResolvedValue(null);
+    learningMaterials = createLearningMaterials();
   });
 
   it('records the attempt', async () => {
-    await consumeAttemptRecorded(prisma, baseEvent(), now);
+    await consumeAttemptRecorded(prisma, baseEvent(), learningMaterials, now);
 
     expect(prisma.attempt.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
@@ -56,6 +75,7 @@ describe('consumeAttemptRecorded', () => {
           { category: 'vocab', label: 'wrong-word-choice' },
         ],
       }),
+      learningMaterials,
       now,
     );
 
@@ -68,12 +88,12 @@ describe('consumeAttemptRecorded', () => {
   });
 
   it('does not write mistakes when there are none', async () => {
-    await consumeAttemptRecorded(prisma, baseEvent(), now);
+    await consumeAttemptRecorded(prisma, baseEvent(), learningMaterials, now);
     expect(prisma.mistake.createMany).not.toHaveBeenCalled();
   });
 
   it('creates a fresh ReviewSchedule on first attempt (correct → Good grade)', async () => {
-    await consumeAttemptRecorded(prisma, baseEvent({ isCorrect: true }), now);
+    await consumeAttemptRecorded(prisma, baseEvent({ isCorrect: true }), learningMaterials, now);
 
     expect(prisma.reviewSchedule.upsert).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -98,7 +118,7 @@ describe('consumeAttemptRecorded', () => {
       state: State.Review,
     });
 
-    await consumeAttemptRecorded(prisma, baseEvent({ isCorrect: false }), now);
+    await consumeAttemptRecorded(prisma, baseEvent({ isCorrect: false }), learningMaterials, now);
 
     const call = prisma.reviewSchedule.upsert.mock.calls[0][0];
     expect(call.update.lapses).toBe(1);
@@ -112,7 +132,7 @@ describe('consumeAttemptRecorded', () => {
       completedExerciseIds: ['ex-0'],
     });
 
-    await consumeAttemptRecorded(prisma, baseEvent({ isCorrect: true }), now);
+    await consumeAttemptRecorded(prisma, baseEvent({ isCorrect: true }), learningMaterials, now);
 
     expect(prisma.progress.update).toHaveBeenCalledWith({
       where: { userId: 'user_123' },
@@ -127,7 +147,45 @@ describe('consumeAttemptRecorded', () => {
       completedExerciseIds: ['ex-1'],
     });
 
-    await consumeAttemptRecorded(prisma, baseEvent({ isCorrect: true }), now);
+    await consumeAttemptRecorded(prisma, baseEvent({ isCorrect: true }), learningMaterials, now);
+
+    expect(prisma.progress.update).toHaveBeenCalledWith({
+      where: { userId: 'user_123' },
+      data: { completedExerciseIds: ['ex-1'] },
+    });
+  });
+
+  it('advances current position to the next exercise in the path when one exists', async () => {
+    prisma.progress.findUnique.mockResolvedValue({
+      userId: 'user_123',
+      pathId: 'path-1',
+      completedExerciseIds: [],
+    });
+    const multiExercisePath = {
+      modules: [{ moduleId: 'mod-1', lessons: [{ lessonId: 'les-1', exerciseIds: ['ex-1', 'ex-2'] }] }],
+    };
+
+    await consumeAttemptRecorded(prisma, baseEvent({ isCorrect: true }), createLearningMaterials(multiExercisePath), now);
+
+    expect(prisma.progress.update).toHaveBeenCalledWith({
+      where: { userId: 'user_123' },
+      data: {
+        completedExerciseIds: ['ex-1'],
+        currentModuleId: 'mod-1',
+        currentLessonId: 'les-1',
+        currentExerciseId: 'ex-2',
+      },
+    });
+  });
+
+  it('leaves current position untouched when the completed exercise was the last in the path', async () => {
+    prisma.progress.findUnique.mockResolvedValue({
+      userId: 'user_123',
+      pathId: 'path-1',
+      completedExerciseIds: [],
+    });
+
+    await consumeAttemptRecorded(prisma, baseEvent({ isCorrect: true }), learningMaterials, now);
 
     expect(prisma.progress.update).toHaveBeenCalledWith({
       where: { userId: 'user_123' },
@@ -142,7 +200,7 @@ describe('consumeAttemptRecorded', () => {
       completedExerciseIds: [],
     });
 
-    await consumeAttemptRecorded(prisma, baseEvent({ isCorrect: false }), now);
+    await consumeAttemptRecorded(prisma, baseEvent({ isCorrect: false }), learningMaterials, now);
 
     expect(prisma.progress.update).not.toHaveBeenCalled();
   });

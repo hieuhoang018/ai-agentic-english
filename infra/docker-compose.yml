@@ -222,6 +222,7 @@ services:
       REDIS_URL: redis://redis:6379
       KAFKA_BROKERS: kafka:9092
       LEARNING_MATERIALS_SERVICE_URL: http://learning-materials-service:4002
+      AI_TUTOR_SERVICE_URL: http://ai-tutor-service:4004
       INTERNAL_SECRET: dev-internal-secret
     depends_on:
       postgres-memory-progress:
@@ -240,6 +241,9 @@ services:
       REDIS_URL: redis://redis:6379
       KAFKA_BROKERS: kafka:9092
       INFERENCE_MODE: mock
+      LEARNING_MATERIALS_SERVICE_URL: http://learning-materials-service:4002
+      MEMORY_PROGRESS_SERVICE_URL: http://memory-progress-service:4003
+      INTERNAL_SECRET: dev-internal-secret
     depends_on:
       postgres-ai-tutor:
         condition: service_healthy

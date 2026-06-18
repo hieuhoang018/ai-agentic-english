@@ -1,12 +1,26 @@
+import { EventBus, InMemoryEventBus, LlmClient, createInternalMiddleware, createLlmClient, errorHandler, getEnv } from '@ai-agentic-english/shared';
 import cors from 'cors';
 import express, { Express } from 'express';
 import { PrismaClient } from '../prisma/generated/client';
+import { LearningMaterialsClient, createLearningMaterialsClient } from './lib/learningMaterialsClient';
+import { MemoryProgressClient, createMemoryProgressClient } from './lib/memoryProgressClient';
+import { CacheClient, createRedisCacheClient } from './lib/redisCache';
+import { createGradingRouter } from './routes/grading';
+import { createHighlightsRouter } from './routes/highlights';
+import { createOnboardingRouter } from './routes/onboarding';
 
 export interface HealthCheckClient {
   $queryRaw: PrismaClient['$queryRaw'];
 }
 
-export function createApp(prisma: HealthCheckClient = new PrismaClient()): Express {
+export function createApp(
+  prisma: HealthCheckClient = new PrismaClient(),
+  llmClient: LlmClient = createLlmClient(),
+  eventBus: EventBus = new InMemoryEventBus(),
+  cacheClient: CacheClient = createRedisCacheClient(),
+  learningMaterials: LearningMaterialsClient = createLearningMaterialsClient(),
+  memoryProgress: MemoryProgressClient = createMemoryProgressClient(),
+): Express {
   const app = express();
 
   app.use(cors());
@@ -20,6 +34,18 @@ export function createApp(prisma: HealthCheckClient = new PrismaClient()): Expre
       res.status(503).json({ status: 'error', service: 'ai-tutor-service' });
     }
   });
+
+  app.use('/grading', createGradingRouter(llmClient, learningMaterials, eventBus));
+
+  const internalSecret = getEnv('INTERNAL_SECRET', 'dev-internal-secret');
+  app.use(
+    '/internal',
+    createInternalMiddleware(internalSecret),
+    createOnboardingRouter(llmClient, learningMaterials, memoryProgress),
+    createHighlightsRouter(llmClient, cacheClient),
+  );
+
+  app.use(errorHandler);
 
   return app;
 }
