@@ -1,9 +1,11 @@
+import asyncio
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Body
 from agents.shared.db.postgres import get_pool, close_pool
 from agents.shared.db.redis_client import get_redis, close_redis
 from agents.shared.events.producer import get_producer, close_producer
 from agents.agt06_memory import stm, ltm, consolidation
+from agents.agt06_memory.consumers import start_consumers
 from agents.agt06_memory.models import (
     AppendErrorRequest, SetStateRequest, AppendContextRequest,
     AppendVocabRequest, ConsolidateRequest, ReviewCenterQuery,
@@ -15,7 +17,11 @@ async def lifespan(app: FastAPI):
     await get_pool()
     await get_redis()
     await get_producer()
+    consumer_tasks = await start_consumers()
     yield
+    for task in consumer_tasks:
+        task.cancel()
+    await asyncio.gather(*consumer_tasks, return_exceptions=True)
     await close_pool()
     await close_redis()
     await close_producer()
@@ -74,6 +80,50 @@ async def get_context(session_id: str):
 @app.post("/sessions/{session_id}/vocab", status_code=204)
 async def append_vocab(session_id: str, body: AppendVocabRequest):
     await stm.append_vocab(session_id, body.model_dump())
+
+
+@app.get("/sessions/{session_id}/vocab")
+async def get_vocab(session_id: str):
+    return await stm.get_vocab(session_id)
+
+
+@app.post("/sessions/{session_id}/difficulty", status_code=204)
+async def set_difficulty(session_id: str, body: dict = Body(...)):
+    await stm.set_difficulty(session_id, body)
+
+
+@app.get("/sessions/{session_id}/difficulty")
+async def get_difficulty(session_id: str):
+    state = await stm.get_difficulty(session_id)
+    if state is None:
+        raise HTTPException(404, "Difficulty state not found")
+    return state
+
+
+@app.post("/sessions/{session_id}/lang", status_code=204)
+async def set_lang(session_id: str, body: dict = Body(...)):
+    await stm.set_lang(session_id, body)
+
+
+@app.get("/sessions/{session_id}/lang")
+async def get_lang(session_id: str):
+    state = await stm.get_lang(session_id)
+    if state is None:
+        raise HTTPException(404, "Lang state not found")
+    return state
+
+
+@app.post("/sessions/{session_id}/writing", status_code=204)
+async def set_writing(session_id: str, body: dict = Body(...)):
+    await stm.set_writing(session_id, body)
+
+
+@app.get("/sessions/{session_id}/writing")
+async def get_writing(session_id: str):
+    state = await stm.get_writing(session_id)
+    if state is None:
+        raise HTTPException(404, "Writing state not found")
+    return state
 
 
 # ── Consolidation ─────────────────────────────────────────────────────────────
