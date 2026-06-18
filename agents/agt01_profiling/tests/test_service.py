@@ -3,7 +3,9 @@ from __future__ import annotations
 import json
 import uuid
 
+import httpx
 import pytest
+import respx
 import fakeredis.aioredis
 
 from agents.agt01_profiling import service
@@ -112,3 +114,39 @@ async def test_cold_start_profile_for_unknown_user(patch_redis):
 
     assert profile["cold_start_flag"] is True
     assert profile["irt_theta"] == {"L": 0.0, "S": 0.0, "R": 0.0, "W": 0.0}
+
+
+@respx.mock
+async def test_get_profile_with_session_id_calls_agt06_not_redis(monkeypatch):
+    """get_profile with session_id must fetch errors from AGT-06, not Redis."""
+    fake = fakeredis.aioredis.FakeRedis()
+    # Pre-populate Redis cache with a base profile
+    profile = {
+        "clerk_user_id": "user1",
+        "irt_theta": {"L": 0.0, "S": 0.0, "R": 0.0, "W": 0.0},
+        "grammar_error_map": {"SPEAKING": {"verb_tense": 1.0}},
+        "vocabulary_beta": {},
+        "behavioral_profile": {},
+        "goal_profile": {},
+        "cold_start_flag": False,
+    }
+    await fake.setex(b"agt01:profile:user1", 300, json.dumps(profile).encode())
+
+    async def fake_get_redis():
+        return fake
+
+    monkeypatch.setattr(service, "get_redis", fake_get_redis)
+
+    # Mock AGT-06 errors endpoint — returns one error event
+    agt06_url = service.AGT06_BASE_URL
+    respx.get(f"{agt06_url}/sessions/sess1/errors").mock(
+        return_value=httpx.Response(200, json=[
+            {"skill_domain": "SPEAKING", "error_type": "verb_tense", "severity": 2}
+        ])
+    )
+
+    merged = await service.get_profile("user1", session_id="sess1")
+
+    # The merge must apply the delta: 1.0 + 2.0 = 3.0
+    assert merged["grammar_error_map"]["SPEAKING"]["verb_tense"] == 3.0
+    assert merged["_merged_session_id"] == "sess1"
