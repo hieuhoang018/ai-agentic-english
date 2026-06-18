@@ -43,11 +43,13 @@ async def handle_session_end(topic: str, event: dict) -> None:
         logger.warning("handle_session_end: missing clerkUserId/durationMinutes in %s", event)
         return
 
-    # Idempotency: skip if this session was already processed (24-hour dedup window).
-    dedup_key = f"agt01:processed:session_end:{session_id}" if session_id else None
-    if dedup_key:
+    # Idempotency: atomic SET NX EX — if the key already exists, skip.
+    # Using SET NX prevents the TOCTOU race of a separate GET + SET.
+    if session_id:
         r = await get_redis()
-        if await r.get(dedup_key):
+        dedup_key = f"agt01:processed:session_end:{session_id}"
+        was_set = await r.set(dedup_key, b"1", nx=True, ex=86400)
+        if not was_set:
             logger.info("handle_session_end: already processed session %s, skipping", session_id)
             return
 
@@ -59,9 +61,6 @@ async def handle_session_end(topic: str, event: dict) -> None:
         "behavioral_profile": updated_behavioral,
         "cold_start_flag": False,
     })
-
-    if dedup_key:
-        await r.setex(dedup_key, 86400, "1")
 
     logger.info("handle_session_end: updated behavioral profile for %s", clerk_user_id)
 

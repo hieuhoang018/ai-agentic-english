@@ -159,6 +159,28 @@ async def test_handle_session_end_without_session_id_always_processes(monkeypatc
     assert mock_update.await_count == 2
 
 
+async def test_handle_session_end_dedup_key_is_written_atomically(monkeypatch, fake_redis):
+    """Verify the dedup key is written atomically and a second call is skipped."""
+    mock_update = AsyncMock(return_value={})
+    mock_get_base = AsyncMock(return_value={"clerk_user_id": "user1", "behavioral_profile": {}})
+    monkeypatch.setattr(consumers, "update_profile", mock_update)
+    monkeypatch.setattr(consumers, "_get_base_profile", mock_get_base)
+
+    event = {"clerkUserId": "user1", "durationMinutes": 15, "sessionId": "sess-atomic"}
+
+    # First call — should process and set dedup key
+    await consumers.handle_session_end("session.end", event)
+    assert mock_update.await_count == 1
+
+    # Dedup key must now exist in fake Redis
+    key_exists = await fake_redis.exists(b"agt01:processed:session_end:sess-atomic")
+    assert key_exists, "Dedup key must be written after processing"
+
+    # Second call — dedup key present, must skip
+    await consumers.handle_session_end("session.end", event)
+    assert mock_update.await_count == 1, "update_profile must not be called a second time"
+
+
 async def test_start_consumers_returns_cancellable_tasks(monkeypatch):
     async def fake_consume(topics, group_id, handler):
         await asyncio.sleep(3600)
