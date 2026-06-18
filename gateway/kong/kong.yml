@@ -148,6 +148,19 @@ services:
         methods:
           - GET
 
+  - name: mp-onboarding
+    url: http://memory-progress-service:4003/onboarding
+    routes:
+      - name: mp-onboarding-route
+        paths:
+          - /api/onboarding
+        strip_path: true
+        plugins:
+          - name: jwt
+            config:
+              claims_to_verify:
+                - exp
+
   - name: ai-tutor-service
     url: http://ai-tutor-service:4004/health
     routes:
@@ -157,6 +170,19 @@ services:
         strip_path: true
         methods:
           - GET
+
+  - name: at-grading
+    url: http://ai-tutor-service:4004/grading
+    routes:
+      - name: at-grading-route
+        paths:
+          - /api/grading
+        strip_path: true
+        plugins:
+          - name: jwt
+            config:
+              claims_to_verify:
+                - exp
 
   - name: notification-service
     url: http://notification-service:4005/health

@@ -16,6 +16,15 @@ export function createInternalRouter(prisma: AppPrismaClient): Router {
     }),
   );
 
+  router.get(
+    '/learning-paths/:id',
+    asyncHandler(async (req, res) => {
+      const path = await prisma.learningPath.findUnique({ where: { id: req.params.id } });
+      if (!path) throw new NotFoundError('Learning path not found');
+      res.json(toLearningPathDto(path));
+    }),
+  );
+
   router.post(
     '/learning-paths',
     asyncHandler(async (req, res) => {

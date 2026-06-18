@@ -15,7 +15,8 @@
     "@ai-agentic-english/shared": "*",
     "@prisma/client": "6.19.3",
     "cors": "2.8.5",
-    "express": "4.22.2"
+    "express": "4.22.2",
+    "redis": "^6.0.0"
   },
   "devDependencies": {
     "@ai-agentic-english/config": "*",

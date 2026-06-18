@@ -26,7 +26,7 @@ describe('GET /exercises/next', () => {
 
   beforeEach(async () => {
     prisma = createMockPrisma();
-    learningMaterials = { getExercise: vi.fn().mockResolvedValue(exerciseInternal) };
+    learningMaterials = { getExercise: vi.fn().mockResolvedValue(exerciseInternal), getLearningPath: vi.fn() };
     token = await signTestToken({ sub: 'user_123' });
   });
 

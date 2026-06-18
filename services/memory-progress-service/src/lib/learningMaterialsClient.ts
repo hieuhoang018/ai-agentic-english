@@ -1,7 +1,8 @@
-import { ExerciseInternalDto, NotFoundError, getEnv } from '@ai-agentic-english/shared';
+import { ExerciseInternalDto, LearningPathDto, NotFoundError, getEnv } from '@ai-agentic-english/shared';
 
 export interface LearningMaterialsClient {
   getExercise(exerciseId: string): Promise<ExerciseInternalDto>;
+  getLearningPath(pathId: string): Promise<LearningPathDto>;
 }
 
 export function createLearningMaterialsClient(): LearningMaterialsClient {
@@ -22,6 +23,21 @@ export function createLearningMaterialsClient(): LearningMaterialsClient {
       }
 
       return (await res.json()) as ExerciseInternalDto;
+    },
+
+    async getLearningPath(pathId: string): Promise<LearningPathDto> {
+      const res = await fetch(`${baseUrl}/internal/learning-paths/${pathId}`, {
+        headers: { 'x-internal-secret': internalSecret },
+      });
+
+      if (res.status === 404) {
+        throw new NotFoundError('Learning path not found');
+      }
+      if (!res.ok) {
+        throw new Error(`Learning Materials request failed: ${res.status}`);
+      }
+
+      return (await res.json()) as LearningPathDto;
     },
   };
 }

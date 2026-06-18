@@ -1,6 +1,8 @@
 import { AttemptRecordedEvent } from '@ai-agentic-english/shared';
 import { Prisma } from '../../../prisma/generated/client';
 import { Grade, Rating, State, applyReview, createInitialReviewSchedule } from '../../fsrs/scheduler';
+import { LearningMaterialsClient } from '../../lib/learningMaterialsClient';
+import { getNextPosition } from '../../lib/pathProgression';
 import { AppPrismaClient } from '../../lib/prisma';
 
 const EXERCISE_ITEM_TYPE = 'exercise';
@@ -18,6 +20,7 @@ function gradeFromAttempt(event: AttemptRecordedEvent): Grade {
 export async function consumeAttemptRecorded(
   prisma: AppPrismaClient,
   event: AttemptRecordedEvent,
+  learningMaterials: LearningMaterialsClient,
   now: Date = new Date(),
 ): Promise<void> {
   const { userId, exerciseId, attemptId, submittedAnswer, isCorrect, score, feedback, errorLabels, gradedBy } = event;
@@ -77,9 +80,18 @@ export async function consumeAttemptRecorded(
     if (progress) {
       const completed = new Set(progress.completedExerciseIds as string[]);
       completed.add(exerciseId);
+
+      const path = await learningMaterials.getLearningPath(progress.pathId);
+      const next = getNextPosition(path.pathDefinition, exerciseId);
+
       await prisma.progress.update({
         where: { userId },
-        data: { completedExerciseIds: Array.from(completed) as Prisma.InputJsonValue },
+        data: {
+          completedExerciseIds: Array.from(completed) as Prisma.InputJsonValue,
+          ...(next
+            ? { currentModuleId: next.moduleId, currentLessonId: next.lessonId, currentExerciseId: next.exerciseId }
+            : {}),
+        },
       });
     }
   }

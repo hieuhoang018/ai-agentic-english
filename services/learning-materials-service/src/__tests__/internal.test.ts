@@ -78,6 +78,30 @@ describe('internal routes', () => {
     });
   });
 
+  describe('GET /internal/learning-paths/:id', () => {
+    it('returns the path by id', async () => {
+      prisma.learningPath.findUnique.mockResolvedValue(existingActivePath);
+
+      const res = await request(createApp(prisma))
+        .get('/internal/learning-paths/path-1')
+        .set(INTERNAL_HEADER, INTERNAL_SECRET);
+
+      expect(res.status).toBe(200);
+      expect(res.body.id).toBe('path-1');
+      expect(res.body.pathDefinition).toEqual(pathDefinition);
+    });
+
+    it('returns 404 when path not found', async () => {
+      prisma.learningPath.findUnique.mockResolvedValue(null);
+
+      const res = await request(createApp(prisma))
+        .get('/internal/learning-paths/missing')
+        .set(INTERNAL_HEADER, INTERNAL_SECRET);
+
+      expect(res.status).toBe(404);
+    });
+  });
+
   describe('POST /internal/learning-paths', () => {
     it('returns 400 without userId', async () => {
       const res = await request(createApp(prisma))

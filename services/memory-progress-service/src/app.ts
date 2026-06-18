@@ -2,18 +2,21 @@ import { createInternalMiddleware, errorHandler, getEnv } from '@ai-agentic-engl
 import cors from 'cors';
 import express, { Express } from 'express';
 import { PrismaClient } from '../prisma/generated/client';
-import { HighlightContentGenerator, createStubHighlightContentGenerator } from './lib/highlightContentGenerator';
+import { AiTutorClient, createAiTutorClient } from './lib/aiTutorClient';
+import { HighlightContentGenerator, createAiTutorHighlightContentGenerator } from './lib/highlightContentGenerator';
 import { LearningMaterialsClient, createLearningMaterialsClient } from './lib/learningMaterialsClient';
 import { AppPrismaClient } from './lib/prisma';
 import { createExercisesRouter } from './routes/exercises';
 import { createInternalRouter } from './routes/internal';
 import { createLearnerModelsRouter } from './routes/learnerModels';
+import { createOnboardingRouter } from './routes/onboarding';
 import { createReviewCenterRouter } from './routes/reviewCenter';
 
 export function createApp(
   prisma: AppPrismaClient = new PrismaClient(),
   learningMaterials: LearningMaterialsClient = createLearningMaterialsClient(),
-  highlightContentGenerator: HighlightContentGenerator = createStubHighlightContentGenerator(),
+  highlightContentGenerator: HighlightContentGenerator = createAiTutorHighlightContentGenerator(),
+  aiTutor: AiTutorClient = createAiTutorClient(),
 ): Express {
   const app = express();
 
@@ -32,6 +35,7 @@ export function createApp(
   app.use('/learner-models', createLearnerModelsRouter(prisma));
   app.use('/exercises', createExercisesRouter(prisma, learningMaterials));
   app.use('/review-center', createReviewCenterRouter(prisma, highlightContentGenerator));
+  app.use('/onboarding', createOnboardingRouter(prisma, aiTutor));
 
   const internalSecret = getEnv('INTERNAL_SECRET', 'dev-internal-secret');
   app.use('/internal', createInternalMiddleware(internalSecret), createInternalRouter(prisma));
