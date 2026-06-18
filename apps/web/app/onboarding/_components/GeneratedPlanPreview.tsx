@@ -1,7 +1,10 @@
 export default function GeneratedPlanPreview() {
   return (
     <div className="mx-auto max-w-3xl rounded-xl bg-white p-8 shadow-[0_18px_52px_-34px_rgba(15,23,42,0.8)]">
-      <h2 className="mb-6 flex items-center gap-3 text-2xl font-bold"><span className="flex h-10 w-10 items-center justify-center rounded-full bg-primary text-white">↝</span>Lộ Trình Đề Xuất</h2>
+      <h2 className="mb-6 flex items-center gap-3 text-2xl font-bold">
+        <span className="material-symbols-outlined flex h-10 w-10 items-center justify-center rounded-full bg-primary text-white">route</span>
+        Lộ Trình Đề Xuất
+      </h2>
       <div className="space-y-5 border-l-2 border-outline-variant pl-7">
         {[
           ['Giai đoạn 1', 'Xây Dựng Nền Tảng', '1-2 Tháng', 'Củng cố ngữ pháp cốt lõi và mở rộng từ vựng cơ bản phục vụ giao tiếp hằng ngày.'],

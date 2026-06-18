@@ -1,5 +1,4 @@
 export const onboardingRoutes = {
-  username: '/onboarding/username',
   goals: '/onboarding/goals',
   level: '/onboarding/level',
   assessment: '/onboarding/assessment',

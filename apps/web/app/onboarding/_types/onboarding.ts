@@ -3,7 +3,6 @@ export type AssessmentMethod = 'test' | 'selfAssessment'
 export type SkillId = 'listening' | 'speaking' | 'reading' | 'writing'
 
 export interface OnboardingProfile {
-  username: string
   goalId: LearningGoalId
   assessmentMethod: AssessmentMethod
   levelScore: number

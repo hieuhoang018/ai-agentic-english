@@ -191,7 +191,9 @@ export default function DashboardTopBar() {
 
     writeStoredTrail(breadcrumbScope, normalizedTrail)
     writeLastPath(pathname)
-    setHistoryCrumbs(normalizedTrail)
+
+    const updateId = window.setTimeout(() => setHistoryCrumbs(normalizedTrail), 0)
+    return () => window.clearTimeout(updateId)
   }, [breadcrumbScope, fallbackCrumbs, pathname])
 
   const visibleCrumbs = historyCrumbs.length > 0 ? historyCrumbs : fallbackCrumbs
