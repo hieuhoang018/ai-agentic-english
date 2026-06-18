@@ -6,7 +6,7 @@ import { UserButton } from '@clerk/nextjs'
 
 export default function SideMenu() {
   const pathname = usePathname()
-  const isHome = pathname === '/main/homepage' || pathname === '/'
+  const isHome = pathname === '/main/homepage' || pathname === '/main/progress' || pathname === '/'
   const isPractice = pathname?.startsWith('/main/practice-center')
   const isReview = pathname?.startsWith('/main/review-center')
   const base = 'flex items-center px-4 py-3 rounded-lg transition-colors duration-200'

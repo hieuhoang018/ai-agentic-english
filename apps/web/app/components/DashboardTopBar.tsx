@@ -1,13 +1,18 @@
 "use client"
 
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { usePathname, useRouter } from 'next/navigation'
+import { usePathname } from 'next/navigation'
 
 type Crumb = {
   label: string
   href?: string
 }
+
+type BreadcrumbScope = 'home' | 'practice' | 'review' | 'other'
+
+const breadcrumbStoragePrefix = 'english-academy:breadcrumb-history'
+const lastPathStorageKey = 'english-academy:last-path'
 
 const skillLabels: Record<string, string> = {
   reading: 'Luyện Đọc',
@@ -85,40 +90,133 @@ function buildReviewCrumbs(pathname: string): Crumb[] {
 }
 
 function buildCrumbs(pathname: string): Crumb[] {
-  if (pathname === '/main/homepage') return [{ label: 'Trang chủ' }]
-  if (pathname === '/main/progress') return [{ label: 'Trang chủ', href: '/main/homepage' }, { label: 'Tiến độ học tập' }]
+  if (pathname === '/main/homepage') return [{ label: 'Trang chủ', href: '/main/homepage' }]
+  if (pathname === '/main/progress') return [{ label: 'Trang chủ', href: '/main/homepage' }, { label: 'Tiến độ học tập', href: '/main/progress' }]
   if (pathname.startsWith('/main/practice-center')) return buildPracticeCrumbs(pathname)
   if (pathname.startsWith('/main/review-center')) return buildReviewCrumbs(pathname)
-  return [{ label: 'English Academy' }]
+  return [{ label: 'English Academy', href: pathname }]
+}
+
+function getBreadcrumbScope(pathname: string): BreadcrumbScope {
+  if (pathname === '/main/homepage' || pathname === '/main/progress') return 'home'
+  if (pathname.startsWith('/main/practice-center')) return 'practice'
+  if (pathname.startsWith('/main/review-center')) return 'review'
+  return 'other'
+}
+
+function isSectionRoot(pathname: string) {
+  return pathname === '/main/practice-center' || pathname === '/main/review-center'
+}
+
+function getScopedStorageKey(scope: BreadcrumbScope) {
+  return `${breadcrumbStoragePrefix}:${scope}`
+}
+
+function getHistoryLabel(pathname: string) {
+  const crumbs = buildCrumbs(pathname)
+  return crumbs[crumbs.length - 1]?.label ?? 'English Academy'
+}
+
+function getCrumbForPath(pathname: string): Required<Crumb> {
+  return { label: getHistoryLabel(pathname), href: pathname }
+}
+
+function readStoredTrail(scope: BreadcrumbScope): Crumb[] {
+  if (typeof window === 'undefined') return []
+
+  try {
+    const rawTrail = window.sessionStorage.getItem(getScopedStorageKey(scope))
+    if (!rawTrail) return []
+    const parsed = JSON.parse(rawTrail)
+    if (!Array.isArray(parsed)) return []
+    return parsed.filter((item) => typeof item?.label === 'string' && typeof item?.href === 'string')
+  } catch {
+    return []
+  }
+}
+
+function writeStoredTrail(scope: BreadcrumbScope, trail: Crumb[]) {
+  if (typeof window === 'undefined') return
+  window.sessionStorage.setItem(getScopedStorageKey(scope), JSON.stringify(trail))
+}
+
+function readLastPath() {
+  if (typeof window === 'undefined') return null
+  return window.sessionStorage.getItem(lastPathStorageKey)
+}
+
+function writeLastPath(pathname: string) {
+  if (typeof window === 'undefined') return
+  window.sessionStorage.setItem(lastPathStorageKey, pathname)
+}
+
+function seedTrailFromStaticCrumbs(pathname: string, fallbackCrumbs: Crumb[]) {
+  return fallbackCrumbs
+    .map((crumb, index) => (index === fallbackCrumbs.length - 1 ? getCrumbForPath(pathname) : crumb))
+    .filter((crumb): crumb is Required<Crumb> => typeof crumb.label === 'string' && typeof crumb.href === 'string')
 }
 
 export default function DashboardTopBar() {
   const pathname = usePathname() || '/'
-  const router = useRouter()
-  const crumbs = useMemo(() => buildCrumbs(pathname), [pathname])
+  const fallbackCrumbs = useMemo(() => buildCrumbs(pathname), [pathname])
+  const breadcrumbScope = useMemo(() => getBreadcrumbScope(pathname), [pathname])
+  const [historyCrumbs, setHistoryCrumbs] = useState<Crumb[]>(fallbackCrumbs)
   const shouldHideBreadcrumb = pathname === '/main/homepage' || pathname === '/main/practice-center' || pathname === '/main/review-center'
-  const canGoBack = !shouldHideBreadcrumb
+
+  useEffect(() => {
+    const currentCrumb = getCrumbForPath(pathname)
+    const lastPath = readLastPath()
+    const lastScope = lastPath ? getBreadcrumbScope(lastPath) : null
+    const storedTrail = readStoredTrail(breadcrumbScope)
+    const existingIndex = storedTrail.findIndex((crumb) => crumb.href === pathname)
+
+    let nextTrail: Crumb[]
+
+    if (isSectionRoot(pathname)) {
+      nextTrail = [currentCrumb]
+    } else if (existingIndex >= 0) {
+      nextTrail = storedTrail.slice(0, existingIndex + 1)
+    } else if (lastPath && lastPath !== pathname && lastScope !== breadcrumbScope) {
+      nextTrail = [getCrumbForPath(lastPath), currentCrumb]
+    } else if (storedTrail.length > 0) {
+      nextTrail = [...storedTrail, currentCrumb].slice(-8)
+    } else {
+      nextTrail = seedTrailFromStaticCrumbs(pathname, fallbackCrumbs)
+    }
+
+    const normalizedTrail =
+      nextTrail.length > 0
+        ? nextTrail.map((crumb, index) => (index === nextTrail.length - 1 ? currentCrumb : crumb))
+        : [currentCrumb]
+
+    writeStoredTrail(breadcrumbScope, normalizedTrail)
+    writeLastPath(pathname)
+    setHistoryCrumbs(normalizedTrail)
+  }, [breadcrumbScope, fallbackCrumbs, pathname])
+
+  const visibleCrumbs = historyCrumbs.length > 0 ? historyCrumbs : fallbackCrumbs
+  const previousCrumb = visibleCrumbs.length > 1 ? visibleCrumbs[visibleCrumbs.length - 2] : fallbackCrumbs[fallbackCrumbs.length - 2]
+  const canGoBack = !shouldHideBreadcrumb && Boolean(previousCrumb?.href)
 
   return (
     <header className="bg-surface/90 dark:bg-inverse-surface/90 backdrop-blur-md sticky top-0 z-40 flex min-h-16 items-center w-full px-container-margin py-3 border-b border-outline-variant/60">
       <div className="flex min-w-0 flex-1 items-center gap-3">
         {canGoBack ? (
-          <button
-            type="button"
-            onClick={() => router.back()}
+          <Link
+            href={previousCrumb?.href ?? '/main/homepage'}
             className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-on-surface-variant transition-colors hover:bg-surface-container"
             aria-label="Quay lại"
           >
             <span className="material-symbols-outlined">arrow_back</span>
-          </button>
+          </Link>
         ) : null}
 
         {!shouldHideBreadcrumb ? (
           <nav className="flex min-w-0 items-center gap-2 text-sm text-on-surface-variant" aria-label="Breadcrumb">
-            {crumbs.map((crumb, index) => {
-              const isLast = index === crumbs.length - 1
+            {visibleCrumbs.map((crumb, index) => {
+              const isLast = index === visibleCrumbs.length - 1
               return (
-                <span key={`${crumb.label}-${index}`} className="flex min-w-0 items-center gap-2">
+                <span key={`${crumb.label}-${crumb.href ?? index}`} className="flex min-w-0 items-center gap-2">
                   {crumb.href && !isLast ? (
                     <Link className="truncate hover:text-primary" href={crumb.href}>
                       {crumb.label}
