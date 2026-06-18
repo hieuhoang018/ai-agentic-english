@@ -7,7 +7,7 @@ Session lifecycle:
     AGT-02 (best-effort — plan_loaded=False on failure or 404), initialise STM
     session state on AGT-06 (critical path — raises on failure), produce an
     opening message (canned per skill_focus in mock mode), append it to STM
-    context, and emit agent.session.start.
+    context, and emit session.start.
 
   process_turn: optionally transcribe audio via asr.transcribe (already
     implemented, unchanged), append the user turn to STM context, call the
@@ -15,7 +15,7 @@ Session lifecycle:
     turn to STM context.
 
   end_session: compute session duration, trigger AGT-06 consolidation
-    (idempotent), and emit agent.session.end with durationMinutes — this is
+    (idempotent), and emit session.end with durationMinutes — this is
     what AGT-01's handle_session_end consumer reacts to.
 
 pipeline.py and websocket_handler.py remain stubs this sprint; main.py calls
