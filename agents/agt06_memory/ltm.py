@@ -9,6 +9,16 @@ from datetime import datetime, timezone
 from agents.shared.db.postgres import fetchrow, fetch, execute
 
 
+_ALLOWED_PROFILE_FIELDS: frozenset[str] = frozenset({
+    "skill_scores",
+    "error_patterns",
+    "behavioral_profile",
+    "vocab_mastery",
+    "total_sessions",
+    "last_session_at",
+})
+
+
 def _vec_to_str(v: list[float]) -> str:
     """Convert a list of floats to pgvector format without spaces."""
     return "[" + ",".join(str(x) for x in v) + "]"
@@ -45,6 +55,10 @@ async def update_profile(clerk_user_id: str, fields: dict) -> dict | None:
     Partial update of learner_profiles.
     Only updates fields present in the dict; always sets updated_at.
     """
+    invalid = set(fields.keys()) - _ALLOWED_PROFILE_FIELDS
+    if invalid:
+        raise ValueError(f"update_profile: disallowed fields: {invalid}")
+
     set_clauses = []
     values = []
     idx = 1
