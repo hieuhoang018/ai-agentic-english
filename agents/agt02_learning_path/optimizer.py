@@ -50,7 +50,7 @@ def allocate_skills(profile: dict) -> dict[str, float]:
     """
     theta = profile.get("irt_theta") or {}
     gaps = {
-        skill: max(TARGET_THETA - float(theta.get(skill, 0.0)), 0.0) + 0.1
+        skill: max(TARGET_THETA - float(theta.get(skill) or 0.0), 0.0) + 0.1
         for skill in SKILLS
     }
     total_gap = sum(gaps.values())

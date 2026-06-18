@@ -71,3 +71,15 @@ def test_select_daily_activities_always_includes_at_least_one_per_funded_skill()
 
     assert len(activities) >= 1
     assert all(a["skill_domain"] == "S" for a in activities)
+
+
+def test_allocate_skills_handles_none_theta_values():
+    """theta values that are None (e.g. from a partial profile) must not crash."""
+    import pytest
+
+    profile = {"irt_theta": {"L": None, "S": 0.5, "R": None, "W": 1.0}}
+    result = allocate_skills(profile)
+
+    assert sum(result.values()) == pytest.approx(1.0, abs=1e-4)
+    for skill in ("L", "S", "R", "W"):
+        assert result[skill] >= MIN_ALLOCATION * 0.85  # Allow small rounding slack
