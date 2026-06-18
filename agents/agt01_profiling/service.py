@@ -16,7 +16,7 @@ import logging
 import os
 import httpx
 from copy import deepcopy
-from agents.shared.db.postgres import fetchrow, execute
+from agents.shared.db.postgres import fetchrow, execute, get_pool
 from agents.shared.db.redis_client import get_redis
 from agents.shared.models.learner import LearnerProfile, IrtTheta
 from agents.agt01_profiling import irt, vocabulary, behavioral
@@ -123,61 +123,75 @@ async def create_profile(clerk_user_id: str) -> dict:
 async def update_profile(clerk_user_id: str, updates: dict) -> dict:
     """
     Apply partial updates to a learner profile.
+    Wraps SELECT + UPDATE in a transaction with FOR UPDATE to prevent
+    lost-update races when two concurrent callers read the same base row.
     Invalidates the Redis cache after writing.
     """
-    row = await fetchrow(
-        "SELECT * FROM learner_profiles WHERE clerk_user_id = $1",
-        clerk_user_id,
-    )
-    if not row:
-        await create_profile(clerk_user_id)
-        row = await fetchrow(
-            "SELECT * FROM learner_profiles WHERE clerk_user_id = $1",
-            clerk_user_id,
-        )
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            row = await conn.fetchrow(
+                "SELECT * FROM learner_profiles WHERE clerk_user_id = $1 FOR UPDATE",
+                clerk_user_id,
+            )
+            if not row:
+                # Create profile outside the current transaction to avoid deadlock,
+                # then re-enter a fresh transaction with FOR UPDATE.
+                pass
 
-    current = _row_to_dict(row)
+        if not row:
+            await create_profile(clerk_user_id)
 
-    # Merge updates
-    for field, value in updates.items():
-        if field in ("irt_theta", "grammar_error_map", "behavioral_profile",
-                     "vocabulary_beta", "goal_profile"):
-            if isinstance(value, dict) and isinstance(current.get(field), dict):
-                # Deep merge: for each top-level key, if both sides are dicts, merge them.
-                # This preserves sibling error types within the same skill domain.
-                base_dict = current[field]
-                for k, v in value.items():
-                    if isinstance(v, dict) and isinstance(base_dict.get(k), dict):
-                        merged_sub = dict(base_dict[k])
-                        merged_sub.update(v)
-                        base_dict[k] = merged_sub
+        async with conn.transaction():
+            row = await conn.fetchrow(
+                "SELECT * FROM learner_profiles WHERE clerk_user_id = $1 FOR UPDATE",
+                clerk_user_id,
+            )
+            if not row:
+                return None
+
+            current = _row_to_dict(row)
+
+            # Merge updates
+            for field, value in updates.items():
+                if field in ("irt_theta", "grammar_error_map", "behavioral_profile",
+                             "vocabulary_beta", "goal_profile"):
+                    if isinstance(value, dict) and isinstance(current.get(field), dict):
+                        # Deep merge: for each top-level key, if both sides are dicts, merge them.
+                        # This preserves sibling error types within the same skill domain.
+                        base_dict = current[field]
+                        for k, v in value.items():
+                            if isinstance(v, dict) and isinstance(base_dict.get(k), dict):
+                                merged_sub = dict(base_dict[k])
+                                merged_sub.update(v)
+                                base_dict[k] = merged_sub
+                            else:
+                                base_dict[k] = v
                     else:
-                        base_dict[k] = v
-            else:
-                current[field] = value
-        else:
-            current[field] = value
+                        current[field] = value
+                else:
+                    current[field] = value
 
-    await execute(
-        """
-        UPDATE learner_profiles SET
-            irt_theta = $2::jsonb,
-            vocabulary_beta = $3::jsonb,
-            grammar_error_map = $4::jsonb,
-            behavioral_profile = $5::jsonb,
-            goal_profile = $6::jsonb,
-            cold_start_flag = $7,
-            updated_at = NOW()
-        WHERE clerk_user_id = $1
-        """,
-        clerk_user_id,
-        json.dumps(current.get("irt_theta", {})),
-        json.dumps(current.get("vocabulary_beta", {})),
-        json.dumps(current.get("grammar_error_map", {})),
-        json.dumps(current.get("behavioral_profile", {})),
-        json.dumps(current.get("goal_profile", {})),
-        current.get("cold_start_flag", True),
-    )
+            await conn.execute(
+                """
+                UPDATE learner_profiles SET
+                    irt_theta = $2::jsonb,
+                    vocabulary_beta = $3::jsonb,
+                    grammar_error_map = $4::jsonb,
+                    behavioral_profile = $5::jsonb,
+                    goal_profile = $6::jsonb,
+                    cold_start_flag = $7,
+                    updated_at = NOW()
+                WHERE clerk_user_id = $1
+                """,
+                clerk_user_id,
+                json.dumps(current.get("irt_theta", {})),
+                json.dumps(current.get("vocabulary_beta", {})),
+                json.dumps(current.get("grammar_error_map", {})),
+                json.dumps(current.get("behavioral_profile", {})),
+                json.dumps(current.get("goal_profile", {})),
+                current.get("cold_start_flag", True),
+            )
 
     # Invalidate cache — next read will re-populate from DB
     r = await get_redis()

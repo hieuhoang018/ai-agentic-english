@@ -146,10 +146,12 @@ async def start_session(clerk_user_id: str, skill_focus: str, session_id: str | 
     _profile, profile_loaded = await _fetch_profile(clerk_user_id, session_id)
     plan_loaded = await _fetch_plan(clerk_user_id)
 
-    _SESSION_PROFILES[session_id] = {"profile": _profile, "skill_focus": skill_focus}
-
     # Critical path: raises if AGT-06 STM is unavailable.
+    # _SESSION_PROFILES is written AFTER this so that a failure here
+    # does not leave an orphaned profile entry with no matching start time.
     await _stm_set_state(session_id, skill_focus)
+
+    _SESSION_PROFILES[session_id] = {"profile": _profile, "skill_focus": skill_focus}
 
     opening = _OPENING_MESSAGES.get(skill_focus, _OPENING_MESSAGES["SPEAKING"])
     if settings.INFERENCE_MODE != "mock":

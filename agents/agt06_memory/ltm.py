@@ -97,25 +97,22 @@ async def create_session(session_id: str, clerk_user_id: str, skill_focus: str) 
 
 async def close_session(session_id: str, summary_metrics: dict | None = None) -> bool:
     """
-    Set end_time on a session. Idempotent — returns False if already closed.
+    Idempotent session close. Returns True if this call closed the session,
+    False if it was already closed or not found.
+    Uses a single atomic UPDATE WHERE end_time IS NULL to prevent TOCTOU races.
     """
-    existing = await fetchrow(
-        "SELECT end_time FROM learning_sessions WHERE session_id = $1",
-        session_id,
-    )
-    if not existing or existing["end_time"] is not None:
-        return False  # already closed
-    await execute(
+    row = await fetchrow(
         """
         UPDATE learning_sessions
         SET end_time = NOW(),
             summary_metrics = $2
-        WHERE session_id = $1
+        WHERE session_id = $1 AND end_time IS NULL
+        RETURNING session_id
         """,
         session_id,
         json.dumps(summary_metrics or {}),
     )
-    return True
+    return row is not None
 
 
 async def get_sessions(clerk_user_id: str, limit: int = 20) -> list[dict]:
