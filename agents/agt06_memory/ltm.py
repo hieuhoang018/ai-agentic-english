@@ -189,7 +189,7 @@ async def upsert_vocab(clerk_user_id: str, word: str, context_sentence: str) -> 
             ),
             last_encounter = NOW(),
             encounter_count = vocabulary_mastery.encounter_count + 1,
-            sm_retrievability = GREATEST(0.0, vocabulary_mastery.sm_retrievability - 0.05)
+            sm_retrievability = LEAST(1.0, vocabulary_mastery.sm_retrievability + 0.05)
         """,
         clerk_user_id, word, context_sentence,
     )

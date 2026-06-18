@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import inspect
 import pytest
 
 from agents.agt06_memory.ltm import _vec_to_str, _ALLOWED_PROFILE_FIELDS, update_profile
+from agents.agt06_memory import ltm as ltm_module
 
 
 def test_vec_to_str_no_spaces():
@@ -41,3 +43,18 @@ async def test_update_profile_rejects_unknown_field():
 async def test_update_profile_rejects_mixed_fields():
     with pytest.raises(ValueError, match="disallowed fields"):
         await update_profile("user1", {"skill_scores": {}, "injected_field": "value"})
+
+
+def test_upsert_vocab_increments_sm_retrievability():
+    """The ON CONFLICT clause must increment sm_retrievability, not decrement."""
+    # Find the SQL string in the module source that handles vocab upsert.
+    # The correct direction is + 0.05 capped at 1.0.
+    source = inspect.getsource(ltm_module)
+    # Confirm increment direction is present
+    assert "sm_retrievability + 0.05" in source or "+ 0.05" in source, (
+        "upsert_vocab must increment sm_retrievability (+ 0.05), not decrement it"
+    )
+    # Confirm decrement direction is NOT present
+    assert "sm_retrievability - 0.05" not in source, (
+        "Found decrement direction (- 0.05) — must be increment"
+    )
