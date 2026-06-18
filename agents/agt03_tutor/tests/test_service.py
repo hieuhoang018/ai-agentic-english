@@ -213,7 +213,7 @@ async def test_get_session_state_returns_none_on_404():
 
 @respx.mock
 async def test_end_session_double_call_does_not_emit_twice(monkeypatch):
-    """Second end_session call must NOT emit agent.session.end again."""
+    """Second end_session call must NOT emit session.end again."""
     service._SESSION_START_TIMES["abc"] = service.time.monotonic() - 60
     service._SESSION_TURN_COUNTS["abc"] = 2
 

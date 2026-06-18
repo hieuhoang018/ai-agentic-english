@@ -3,9 +3,21 @@ from __future__ import annotations
 import asyncio
 from unittest.mock import AsyncMock
 
+import fakeredis.aioredis
 import pytest
 
 from agents.agt01_profiling import consumers
+
+
+@pytest.fixture()
+def fake_redis(monkeypatch):
+    fake = fakeredis.aioredis.FakeRedis()
+
+    async def fake_get_redis():
+        return fake
+
+    monkeypatch.setattr(consumers, "get_redis", fake_get_redis)
+    return fake
 
 
 async def test_handle_session_end_updates_behavioral_profile(monkeypatch):
@@ -17,7 +29,7 @@ async def test_handle_session_end_updates_behavioral_profile(monkeypatch):
     monkeypatch.setattr(consumers, "_get_base_profile", mock_get_base)
     monkeypatch.setattr(consumers, "update_profile", mock_update)
 
-    await consumers.handle_session_end("agent.session.end", {
+    await consumers.handle_session_end("session.end", {
         "clerkUserId": "user1",
         "durationMinutes": 20,
     })
@@ -38,7 +50,7 @@ async def test_handle_session_end_seeds_ewma_on_second_session(monkeypatch):
     monkeypatch.setattr(consumers, "_get_base_profile", mock_get_base)
     monkeypatch.setattr(consumers, "update_profile", mock_update)
 
-    await consumers.handle_session_end("agent.session.end", {
+    await consumers.handle_session_end("session.end", {
         "clerkUserId": "user1",
         "durationMinutes": 10,
     })
@@ -52,7 +64,7 @@ async def test_handle_session_end_missing_fields_is_noop(monkeypatch):
     mock_update = AsyncMock()
     monkeypatch.setattr(consumers, "update_profile", mock_update)
 
-    await consumers.handle_session_end("agent.session.end", {"clerkUserId": "user1"})
+    await consumers.handle_session_end("session.end", {"clerkUserId": "user1"})
 
     mock_update.assert_not_awaited()
 
@@ -115,6 +127,36 @@ async def test_handle_error_event_missing_clerk_user_id_is_noop(monkeypatch):
     })
 
     mock_update.assert_not_awaited()
+
+
+async def test_handle_session_end_with_session_id_is_idempotent(monkeypatch, fake_redis):
+    mock_get_base = AsyncMock(return_value={"clerk_user_id": "user1", "behavioral_profile": {}})
+    mock_update = AsyncMock(return_value={})
+    monkeypatch.setattr(consumers, "_get_base_profile", mock_get_base)
+    monkeypatch.setattr(consumers, "update_profile", mock_update)
+
+    event = {"clerkUserId": "user1", "durationMinutes": 20, "sessionId": "sess-abc"}
+
+    await consumers.handle_session_end("session.end", event)
+    await consumers.handle_session_end("session.end", event)
+
+    # update_profile must be called exactly once — the second delivery is skipped
+    mock_update.assert_awaited_once()
+
+
+async def test_handle_session_end_without_session_id_always_processes(monkeypatch):
+    # No sessionId → no dedup key → no Redis access needed → both calls process
+    mock_get_base = AsyncMock(return_value={"clerk_user_id": "user1", "behavioral_profile": {}})
+    mock_update = AsyncMock(return_value={})
+    monkeypatch.setattr(consumers, "_get_base_profile", mock_get_base)
+    monkeypatch.setattr(consumers, "update_profile", mock_update)
+
+    event = {"clerkUserId": "user1", "durationMinutes": 20}
+
+    await consumers.handle_session_end("session.end", event)
+    await consumers.handle_session_end("session.end", event)
+
+    assert mock_update.await_count == 2
 
 
 async def test_start_consumers_returns_cancellable_tasks(monkeypatch):
