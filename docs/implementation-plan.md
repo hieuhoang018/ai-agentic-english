@@ -193,6 +193,28 @@ Goal: a series of dependency-ordered phases, each producing a runnable, testable
 
 ---
 
+## Phase 8 — Live AI Inference Integration
+
+**Not yet scheduled.** Every phase above (0–7) is built and tested against `INFERENCE_MODE=mock` — `MockLlmClient`/`MockSttClient`/`MockTtsClient` returning deterministic canned responses, no GPU node, no real model calls anywhere in the repo. This phase is what swaps that out for the self-hosted, locally-run GPU inference stack described in README §6/§10, owned by a separate AI engineer. It starts whenever that engineer's local GPU inference node (LLM + co-located STT/TTS, running on local/on-prem hardware rather than a third-party cloud API) is ready to integrate against — no other phase depends on it, and Phases 0–7 should remain fully runnable in mock mode indefinitely (e.g. for CI, local dev, demos) even after this phase ships.
+
+**Exit criteria**: setting `INFERENCE_MODE=live` in AI Tutor Service swaps in real `LlmClient`/`SttClient`/`TtsClient` implementations with no call-site changes anywhere in the codebase (onboarding path-gen, grading, highlight generation, speaking pipeline all consume the interface, not the mock directly); each live adapter is contract-tested against the same fixtures/assertions the mock currently satisfies; output quality (path coherence, grading accuracy, transcript correctness) is evaluated against a held-out review set, not just interface conformance; GPU resource contention (queuing/backpressure across concurrent LLM + STT + TTS calls) is load-tested.
+
+**Deliverables**:
+- Real adapters in `packages/shared/src/inference/` implementing the existing `LlmClient`/`SttClient`/`TtsClient` interfaces (no interface changes expected — if the live model needs request/response shapes the mock didn't anticipate, that's a sign the interface itself needs a small revision here, done carefully since every consumer above already codes against it).
+- Config for reaching the local GPU inference node (hostname/port, timeouts, retry/backoff) — likely service-level env vars on AI Tutor Service only, since it remains the sole caller of the inference layer. No third-party API auth/secrets to manage: the model is self-hosted on local/on-prem GPU hardware, reachable like another internal service (e.g. added to `infra/docker-compose.yml` network, or a host/port the AI engineer's process exposes on the same local network) rather than over the public internet.
+- Latency/timeout/error-handling story for real model calls in the previously-synchronous paths (`POST /grading/submit` for open-ended grading, `POST /onboarding` path generation) — these were instant with mocks; real inference latency may force a UX or architecture reconsideration (e.g. async grading for open-ended responses) that doesn't apply to the deterministic-grading path.
+- GPU queuing/batching/priority/backpressure layer if concurrent load requires it (README §6 anticipates this as a future 3-layer split — business services / per-skill AI feature services / shared inference access layer — but don't build it preemptively; only if load-testing in this phase shows contention).
+- Evaluation harness comparing live-model output against mock/reference expectations for each of the 5 `LlmClient` methods + STT/TTS accuracy, run as a one-off validation rather than part of the CI Vitest suite (model output isn't deterministic, so it can't be asserted the way mock-backed tests are).
+- Pronunciation feedback (README §7.6, explicitly deferred in Phase 6) becomes in-scope here if it's prioritized, since it's the one feature that needs real audio analysis rather than text.
+
+**Sub-steps**: 1) confirm the local GPU inference node is reachable from AI Tutor Service's network (same docker-compose network, or a host/port on the local network if it runs outside compose) — 2) implement `LiveLlmClient` against `generateLearningPath`/`gradeOpenResponse`/`generateHighlightContent`/`tutorReply`/`analyzeSessionTranscript`, one method at a time, contract-testing each against existing mock-based test expectations before moving to the next — 3) implement `LiveSttClient`/`LiveTtsClient` similarly — 4) wire `INFERENCE_MODE=live` switch in AI Tutor Service bootstrap — 5) load-test concurrent inference calls, add queuing/backpressure only if needed — 6) run the evaluation harness against held-out cases, iterate on prompts/configs — 7) staged rollout (`live` in staging first, `mock` fallback path kept available).
+
+**Depends on**: Phase 3 (inference interface contract), Phase 4 (LLM call sites: onboarding, grading, highlights), Phase 6 (STT/TTS call sites: speaking pipeline) — i.e., everything that defines *where* inference is called; this phase only changes *what answers the call*.
+
+**Critical files**: `packages/shared/src/inference/llmClient.ts`, `sttClient.ts`, `ttsClient.ts` (interfaces, should need minimal changes), new `packages/shared/src/inference/live/*.ts` (or wherever the AI engineer's adapters land), `services/ai-tutor-service/src/lib/inferenceClients.ts`-equivalent bootstrap wiring (wherever `INFERENCE_MODE` is currently read).
+
+---
+
 ## Kafka Topic List (consolidated)
 
 | Topic | Producer | Consumer(s) | Event shape (key fields) | Phase |
