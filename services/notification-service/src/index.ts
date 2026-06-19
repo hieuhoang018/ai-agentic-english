@@ -1,4 +1,4 @@
-import { MockNovuClient, NovuClient } from '@ai-agentic-english/shared';
+import { getEnvInt, MockNovuClient, NovuClient } from '@ai-agentic-english/shared';
 import cron from 'node-cron';
 import { PrismaClient } from '../prisma/generated/client';
 import { createApp } from './app';
@@ -9,8 +9,7 @@ import { createUserServiceClient } from './lib/userServiceClient';
 import { runDailyReminder } from './scheduler/dailyReminder';
 import { runVocabOfTheDay } from './scheduler/vocabOfTheDay';
 
-const parsedPort = Number.parseInt(process.env.PORT ?? '', 10);
-const port = Number.isFinite(parsedPort) ? parsedPort : 4005;
+const port = getEnvInt('PORT', 4005);
 const app = createApp();
 
 app.listen(port, () => {
