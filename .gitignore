@@ -15,3 +15,4 @@ docs/superpowers/
 __pycache__/
 *.pyc
 *.pyo
+CLAUDE.local.md
