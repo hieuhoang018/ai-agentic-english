@@ -1,0 +1,5 @@
+-r ../requirements-base.txt
+# Phase 8+ only — uncomment when implementing CUSUM, PELT, risk model
+# scikit-learn>=1.4.0
+# ruptures>=1.1.9
+# statsmodels>=0.14.0

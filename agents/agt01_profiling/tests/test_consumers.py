@@ -134,6 +134,7 @@ async def test_handle_session_end_with_session_id_is_idempotent(monkeypatch, fak
     mock_update = AsyncMock(return_value={})
     monkeypatch.setattr(consumers, "_get_base_profile", mock_get_base)
     monkeypatch.setattr(consumers, "update_profile", mock_update)
+    monkeypatch.setattr(consumers, "_get_session_error_count", AsyncMock(return_value=0))
 
     event = {"clerkUserId": "user1", "durationMinutes": 20, "sessionId": "sess-abc"}
 
@@ -165,6 +166,7 @@ async def test_handle_session_end_dedup_key_is_written_atomically(monkeypatch, f
     mock_get_base = AsyncMock(return_value={"clerk_user_id": "user1", "behavioral_profile": {}})
     monkeypatch.setattr(consumers, "update_profile", mock_update)
     monkeypatch.setattr(consumers, "_get_base_profile", mock_get_base)
+    monkeypatch.setattr(consumers, "_get_session_error_count", AsyncMock(return_value=0))
 
     event = {"clerkUserId": "user1", "durationMinutes": 15, "sessionId": "sess-atomic"}
 
@@ -194,3 +196,90 @@ async def test_start_consumers_returns_cancellable_tasks(monkeypatch):
         assert isinstance(task, asyncio.Task)
         task.cancel()
     await asyncio.gather(*tasks, return_exceptions=True)
+
+
+# ── IRT theta update tests ────────────────────────────────────────────────────
+
+async def test_handle_session_end_updates_irt_theta_no_errors(monkeypatch, fake_redis):
+    """0 errors → score 1.0 → theta_new = 0.0 + 0.1*(1.0-0.5) = 0.05 for skill_focus SPEAKING (key S)."""
+    mock_get_base = AsyncMock(return_value={
+        "clerk_user_id": "user1",
+        "behavioral_profile": {},
+        "irt_theta": {"L": 0.0, "S": 0.0, "R": 0.0, "W": 0.0},
+    })
+    mock_update = AsyncMock(return_value={})
+    monkeypatch.setattr(consumers, "_get_base_profile", mock_get_base)
+    monkeypatch.setattr(consumers, "update_profile", mock_update)
+    monkeypatch.setattr(consumers, "_get_session_error_count", AsyncMock(return_value=0))
+
+    await consumers.handle_session_end("session.end", {
+        "clerkUserId": "user1",
+        "durationMinutes": 20,
+        "sessionId": "sess-clean",
+        "skillFocus": "SPEAKING",
+    })
+
+    mock_update.assert_awaited_once()
+    _, updates = mock_update.call_args.args
+    assert "irt_theta" in updates
+    assert updates["irt_theta"]["S"] == 0.05
+    # Sibling skill keys must be unchanged
+    assert updates["irt_theta"]["L"] == 0.0
+    assert updates["irt_theta"]["R"] == 0.0
+    assert updates["irt_theta"]["W"] == 0.0
+
+
+async def test_handle_session_end_updates_irt_theta_many_errors(monkeypatch, fake_redis):
+    """10 errors → score 0.1 → theta_new = 0.0 + 0.1*(0.1-0.5) = -0.04 for LISTENING (key L)."""
+    mock_get_base = AsyncMock(return_value={
+        "clerk_user_id": "user1",
+        "behavioral_profile": {},
+        "irt_theta": {"L": 0.0, "S": 0.0, "R": 0.0, "W": 0.0},
+    })
+    mock_update = AsyncMock(return_value={})
+    monkeypatch.setattr(consumers, "_get_base_profile", mock_get_base)
+    monkeypatch.setattr(consumers, "update_profile", mock_update)
+    monkeypatch.setattr(consumers, "_get_session_error_count", AsyncMock(return_value=10))
+
+    await consumers.handle_session_end("session.end", {
+        "clerkUserId": "user1",
+        "durationMinutes": 10,
+        "sessionId": "sess-hard",
+        "skillFocus": "LISTENING",
+    })
+
+    _, updates = mock_update.call_args.args
+    assert "irt_theta" in updates
+    assert updates["irt_theta"]["L"] == -0.04
+    assert updates["irt_theta"]["S"] == 0.0  # other keys untouched
+
+
+async def test_handle_session_end_irt_failure_does_not_block_behavioral(monkeypatch, fake_redis):
+    """If _get_session_error_count raises, behavioral update must still be written."""
+    mock_get_base = AsyncMock(return_value={
+        "clerk_user_id": "user1",
+        "behavioral_profile": {},
+    })
+    mock_update = AsyncMock(return_value={})
+    monkeypatch.setattr(consumers, "_get_base_profile", mock_get_base)
+    monkeypatch.setattr(consumers, "update_profile", mock_update)
+
+    async def _raise(_session_id: str) -> int:
+        raise RuntimeError("AGT-06 unreachable")
+
+    monkeypatch.setattr(consumers, "_get_session_error_count", _raise)
+
+    await consumers.handle_session_end("session.end", {
+        "clerkUserId": "user1",
+        "durationMinutes": 15,
+        "sessionId": "sess-fail",
+        "skillFocus": "WRITING",
+    })
+
+    # update_profile must still be called with behavioral data
+    mock_update.assert_awaited_once()
+    _, updates = mock_update.call_args.args
+    assert updates["cold_start_flag"] is False
+    assert "avg_session_length" in updates["behavioral_profile"]
+    # irt_theta must NOT be in the update when IRT block fails
+    assert "irt_theta" not in updates

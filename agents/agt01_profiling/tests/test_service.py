@@ -49,13 +49,14 @@ async def test_update_profile_partial_merge_only_touches_given_keys():
     assert profile["irt_theta"]["W"] == 0.0
 
 
+@respx.mock
 async def test_merge_on_read_combines_ltm_and_stm_without_persisting(patch_redis):
     """
     THE CRITICAL MERGE TEST.
 
     1. Seed LTM with a known grammar_error_map via update_profile.
-    2. Push a raw STM error event for the same (skill, error_type) directly
-       into Redis, simulating AGT-04's dual-write.
+    2. Mock AGT-06's errors endpoint to return one error event, simulating
+       the dual-write path (AGT-04 → AGT-06 STM → HTTP endpoint).
     3. get_profile(session_id=...) must return LTM + STM summed in-memory.
     4. get_profile() with NO session_id must return the LTM value only —
        proving the merge was never written back.
@@ -72,10 +73,13 @@ async def test_merge_on_read_combines_ltm_and_stm_without_persisting(patch_redis
         "grammar_error_map": {"SPEAKING": {"verb_tense": 1.0}},
     })
 
-    # Step 2: seed STM (raw Redis list, as AGT-04/AGT-06 would write it)
-    await patch_redis.rpush(
-        f"session:{session_id}:errors",
-        json.dumps({"skill_domain": "SPEAKING", "error_type": "verb_tense", "severity": 2}),
+    # Step 2: mock AGT-06 errors endpoint — service._get_stm_errors calls AGT-06 HTTP,
+    # it does not read Redis directly. Allow unlimited calls (steps 3 and 5 both hit it).
+    agt06_url = service.AGT06_BASE_URL
+    respx.get(f"{agt06_url}/sessions/{session_id}/errors").mock(
+        return_value=httpx.Response(200, json=[
+            {"skill_domain": "SPEAKING", "error_type": "verb_tense", "severity": 2}
+        ])
     )
 
     # Step 3: merged read

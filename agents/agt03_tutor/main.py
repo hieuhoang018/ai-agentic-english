@@ -1,7 +1,9 @@
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 
+from agents.shared.db.postgres import get_pool, close_pool
+from agents.shared.db.redis_client import get_redis, close_redis
 from agents.shared.events.producer import get_producer, close_producer
 from agents.agt03_tutor import service
 from agents.agt03_tutor.models import (
@@ -13,8 +15,12 @@ from agents.agt03_tutor.models import (
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    await get_pool()
+    await get_redis()
     await get_producer()
     yield
+    await close_pool()
+    await close_redis()
     await close_producer()
 
 
@@ -33,7 +39,10 @@ async def start_session(body: StartSessionRequest):
 
 @app.post("/sessions/turn", response_model=TurnResponse)
 async def turn(body: TurnRequest):
-    return await service.process_turn(body.session_id, body.user_text, body.audio_base64)
+    try:
+        return await service.process_turn(body.session_id, body.user_message, body.audio_base64)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
 
 
 @app.post("/sessions/end", response_model=EndSessionResponse)

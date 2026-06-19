@@ -63,8 +63,8 @@ async def _fetch_profile(clerk_user_id: str) -> dict:
 async def _fetch_catalog_summary() -> dict:
     """
     Fetch a per-skill summary of available learning materials, cached in Redis.
-    Falls back to {} on failure or if the route doesn't exist yet — the
-    optimizer's FALLBACK_ACTIVITIES cover that case.
+    On 404 from /internal/catalog-summary, retries /modules as fallback.
+    Falls back to {} on all other failures — optimizer FALLBACK_ACTIVITIES cover that.
     """
     r = await get_redis()
     cached = await r.get(CATALOG_CACHE_KEY)
@@ -75,6 +75,8 @@ async def _fetch_catalog_summary() -> dict:
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
             resp = await client.get(f"{LM_SERVICE_BASE_URL}/internal/catalog-summary")
+            if resp.status_code == 404:
+                resp = await client.get(f"{LM_SERVICE_BASE_URL}/modules")
             resp.raise_for_status()
             catalog = resp.json()
     except Exception as exc:

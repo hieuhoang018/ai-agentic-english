@@ -8,3 +8,9 @@ build/
 *.log
 .DS_Store
 .worktrees/
+.claude/
+docs/superpowers/
+.venv/
+__pycache__/
+*.pyc
+*.pyo

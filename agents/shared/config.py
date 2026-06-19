@@ -1,0 +1,48 @@
+from pydantic_settings import BaseSettings
+
+
+class Settings(BaseSettings):
+    # Agent LTM database (postgres-agents, port 5438)
+    AGENT_DATABASE_URL: str = "postgresql://postgres:postgres@localhost:5438/agent_ltm"
+
+    # Redis (shared with Node.js services — separate key namespaces)
+    REDIS_URL: str = "redis://localhost:6379"
+
+    # Kafka / Redpanda broker
+    KAFKA_BROKERS: str = "localhost:9092"
+
+    # MinIO (S3-compatible object storage)
+    MINIO_ENDPOINT: str = "http://localhost:9000"
+    MINIO_ACCESS_KEY: str = "minioadmin"
+    MINIO_SECRET_KEY: str = "minioadmin"
+
+    # Groq — Tier 1 LLM + ASR (free, 1,000 LLM RPD, 2,000 ASR RPD)
+    GROQ_API_KEY: str = ""
+    GROQ_BASE_URL: str = "https://api.groq.com/openai/v1"
+
+    # OpenRouter — Tier 2 LLM fallback (free, 50 RPD at $0 balance)
+    OPENROUTER_API_KEY: str = ""
+    OPENROUTER_BASE_URL: str = "https://openrouter.ai/api/v1"
+
+    # Ollama — Tier 3 LLM backstop + embeddings (unlimited, CPU)
+    OLLAMA_BASE_URL: str = "http://localhost:11434"
+    OLLAMA_MAX_LOADED_MODELS: int = 1
+
+    # LanguageTool — grammar analysis for AGT-04
+    # Container-internal URL (container port 8110, no host conflict with AGT-10)
+    LANGUAGETOOL_URL: str = "http://languagetool:8010/v2"
+
+    # Novu — notification delivery (AGT-10 only)
+    NOVU_API_KEY: str = ""
+    NOVU_APP_ID: str = ""
+
+    # Inference mode: "mock" uses stub responses, "live" uses real APIs
+    # Default is "mock" — all phases work without API keys in mock mode
+    INFERENCE_MODE: str = "mock"
+
+    class Config:
+        env_file = ".env"
+        extra = "ignore"
+
+
+settings = Settings()

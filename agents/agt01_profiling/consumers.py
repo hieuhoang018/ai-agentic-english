@@ -4,8 +4,9 @@ AGT-01 Kafka consumers.
 Two background consumer loops, started from main.py's lifespan:
 
   session.end -> handle_session_end
-    Updates behavioral_profile.avg_session_length via EWMA (agt01_profiling.behavioral)
-    and clears cold_start_flag once a session has completed.
+    Updates IRT theta for skill_focus (score derived from session error count
+    fetched from AGT-06 STM) and behavioral_profile.avg_session_length via EWMA.
+    Clears cold_start_flag once a session has completed.
 
   agent.errors -> handle_error_event
     Persists cumulative severity into LTM grammar_error_map[skillDomain][errorType].
@@ -21,18 +22,52 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
+
+import httpx
 
 from agents.shared.db.redis_client import get_redis
 from agents.shared.events.consumer import consume
 from agents.agt01_profiling.service import update_profile, _get_base_profile
 from agents.agt01_profiling.behavioral import update_behavioral_profile
+from agents.agt01_profiling import irt
 
 logger = logging.getLogger(__name__)
+
+AGT06_BASE_URL = os.environ.get("AGT06_BASE_URL", "http://agt06-memory:8106")
+
+# First character of skill_focus string → IRT theta dict key
+_SKILL_TO_THETA_KEY: dict[str, str] = {"S": "S", "L": "L", "R": "R", "W": "W"}
+
+
+async def _get_session_error_count(session_id: str) -> int:
+    """
+    Fetch the error count for a session from AGT-06 STM.
+    Best-effort — returns 0 on any failure so the IRT update still proceeds.
+    """
+    try:
+        async with httpx.AsyncClient(timeout=2.0) as client:
+            resp = await client.get(f"{AGT06_BASE_URL}/sessions/{session_id}/errors")
+            resp.raise_for_status()
+            return len(resp.json())
+    except Exception as exc:
+        logger.warning(
+            "handle_session_end: AGT-06 error fetch failed session=%s err=%s", session_id, exc
+        )
+        return 0
+
+
+def _session_score(num_errors: int) -> float:
+    """
+    Derive a [0.1, 1.0] session performance score from error count.
+    0 errors → 1.0 (perfect); each error subtracts 0.1; floor at 0.1.
+    """
+    return max(0.1, 1.0 - num_errors * 0.1)
 
 
 async def handle_session_end(topic: str, event: dict) -> None:
     """
-    event fields used: clerkUserId, durationMinutes (minutes, float), sessionId.
+    event fields used: clerkUserId, durationMinutes (float), sessionId, skillFocus.
     Emitted by AGT-03's end_session.
     """
     clerk_user_id = event.get("clerkUserId")
@@ -57,12 +92,35 @@ async def handle_session_end(topic: str, event: dict) -> None:
     updated_behavioral = update_behavioral_profile(
         profile.get("behavioral_profile") or {}, float(duration)
     )
-    await update_profile(clerk_user_id, {
+
+    updates: dict = {
         "behavioral_profile": updated_behavioral,
         "cold_start_flag": False,
-    })
+    }
 
-    logger.info("handle_session_end: updated behavioral profile for %s", clerk_user_id)
+    # IRT theta update: score derived from session error count, MAP approximation applied.
+    # Best-effort — failure here must not block the behavioral update above.
+    skill_focus = str(event.get("skillFocus") or "SPEAKING").upper()
+    skill_key = _SKILL_TO_THETA_KEY.get(skill_focus[0], "S")
+    try:
+        num_errors = await _get_session_error_count(session_id) if session_id else 0
+        score = _session_score(num_errors)
+        theta = dict(
+            profile.get("irt_theta") or {"L": 0.0, "S": 0.0, "R": 0.0, "W": 0.0}
+        )
+        theta[skill_key] = irt.update_theta(float(theta.get(skill_key, 0.0)), score)
+        updates["irt_theta"] = theta
+    except Exception as exc:
+        logger.warning(
+            "handle_session_end: IRT theta update failed user=%s err=%s", clerk_user_id, exc
+        )
+
+    await update_profile(clerk_user_id, updates)
+
+    logger.info(
+        "handle_session_end: updated profile for %s skill=%s irt_theta=%s",
+        clerk_user_id, skill_focus, updates.get("irt_theta"),
+    )
 
 
 async def handle_error_event(topic: str, event: dict) -> None:

@@ -14,19 +14,23 @@ class StartSessionResponse(BaseModel):
     clerk_user_id: str
     skill_focus: str
     opening_message: str
-    cold_start_flag: bool = True
+    profile_loaded: bool
+    plan_loaded: bool
 
 
 class TurnRequest(BaseModel):
     session_id: str
-    user_text: str | None = None
+    clerk_user_id: str
+    user_message: str | None = None
     audio_base64: str | None = None
 
 
 class TurnResponse(BaseModel):
     session_id: str
-    assistant_text: str
+    assistant_message: str
     transcript_text: str | None = None
+    mock_feedback: str | None = None
+    language: str = "en"
 
 
 class EndSessionRequest(BaseModel):
@@ -39,3 +43,4 @@ class EndSessionResponse(BaseModel):
     session_id: str
     consolidated: bool
     duration_minutes: float
+    turns_completed: int
