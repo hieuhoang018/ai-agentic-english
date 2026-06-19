@@ -17,5 +17,6 @@ export * from './events/reviewDue';
 export * from './events/userUpserted';
 export * from './http/asyncHandler';
 export * from './http/internal';
+export * from './http/internalHttpClient';
 export * from './notifications/novuClient';
 export * from './testing';
