@@ -1,5 +1,5 @@
 import { NovuClient, ReminderContextDto } from '@ai-agentic-english/shared';
-import { MemoryProgressClient } from '../lib/memoryProgressClient';
+import { ReminderContextClient } from '../lib/reminderContextClient';
 import { AppPrismaClient } from '../lib/prisma';
 import { UserServiceClient } from '../lib/userServiceClient';
 import { formatTimeInZone, getLocalDateKey } from './time';
@@ -15,7 +15,7 @@ export async function withScheduledReminder(
   now: Date,
   prisma: AppPrismaClient,
   userServiceClient: UserServiceClient,
-  memoryProgressClient: MemoryProgressClient,
+  reminderContextClient: ReminderContextClient,
   novuClient: NovuClient,
   handler: ReminderHandler,
 ): Promise<void> {
@@ -31,7 +31,7 @@ export async function withScheduledReminder(
     });
     if (alreadySent) continue;
 
-    const context = await memoryProgressClient.getReminderContext(user.clerkUserId);
+    const context = await reminderContextClient.getReminderContext(user.clerkUserId);
     const notified = await handler(user.clerkUserId, context, novuClient);
 
     if (notified) {

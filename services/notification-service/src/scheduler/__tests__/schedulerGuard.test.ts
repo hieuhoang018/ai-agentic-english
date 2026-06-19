@@ -1,7 +1,7 @@
 import { MockNovuClient, ReminderContextDto, UserSummaryDto } from '@ai-agentic-english/shared';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createMockPrisma, MockPrismaClient } from '../../__tests__/testPrisma';
-import { MemoryProgressClient } from '../../lib/memoryProgressClient';
+import { ReminderContextClient } from '../../lib/reminderContextClient';
 import { UserServiceClient } from '../../lib/userServiceClient';
 import { withScheduledReminder } from '../schedulerGuard';
 
@@ -23,7 +23,7 @@ const context: ReminderContextDto = { userId: 'user_abc', dueReviewCount: 2, voc
 describe('withScheduledReminder', () => {
   let prisma: MockPrismaClient;
   let userServiceClient: UserServiceClient;
-  let memoryProgressClient: MemoryProgressClient;
+  let reminderContextClient: MemoryProgressClient;
   let novuClient: MockNovuClient;
   let handler: ReturnType<typeof vi.fn>;
 
@@ -31,7 +31,7 @@ describe('withScheduledReminder', () => {
     prisma = createMockPrisma();
     novuClient = new MockNovuClient();
     userServiceClient = { listUsers: vi.fn().mockResolvedValue([user]) };
-    memoryProgressClient = { getReminderContext: vi.fn().mockResolvedValue(context) };
+    reminderContextClient = { getReminderContext: vi.fn().mockResolvedValue(context) };
     handler = vi.fn().mockResolvedValue(true);
     prisma.scheduledReminderRun.findUnique.mockResolvedValue(null);
   });
@@ -39,7 +39,7 @@ describe('withScheduledReminder', () => {
   it('calls handler with userId and context when time matches and not yet sent', async () => {
     const now = new Date('2024-03-15T09:00:00.000Z');
 
-    await withScheduledReminder('test-reminder', now, prisma, userServiceClient, memoryProgressClient, novuClient, handler);
+    await withScheduledReminder('test-reminder', now, prisma, userServiceClient, reminderContextClient, novuClient, handler);
 
     expect(handler).toHaveBeenCalledWith('user_abc', context, novuClient);
     expect(prisma.scheduledReminderRun.create).toHaveBeenCalledWith({
@@ -50,7 +50,7 @@ describe('withScheduledReminder', () => {
   it('skips handler and dedup write when local time does not match reminderTime', async () => {
     const now = new Date('2024-03-15T10:00:00.000Z');
 
-    await withScheduledReminder('test-reminder', now, prisma, userServiceClient, memoryProgressClient, novuClient, handler);
+    await withScheduledReminder('test-reminder', now, prisma, userServiceClient, reminderContextClient, novuClient, handler);
 
     expect(handler).not.toHaveBeenCalled();
     expect(prisma.scheduledReminderRun.create).not.toHaveBeenCalled();
@@ -62,7 +62,7 @@ describe('withScheduledReminder', () => {
     });
     const now = new Date('2024-03-15T09:00:00.000Z');
 
-    await withScheduledReminder('test-reminder', now, prisma, userServiceClient, memoryProgressClient, novuClient, handler);
+    await withScheduledReminder('test-reminder', now, prisma, userServiceClient, reminderContextClient, novuClient, handler);
 
     expect(handler).not.toHaveBeenCalled();
     expect(prisma.scheduledReminderRun.create).not.toHaveBeenCalled();
@@ -72,7 +72,7 @@ describe('withScheduledReminder', () => {
     handler.mockResolvedValue(false);
     const now = new Date('2024-03-15T09:00:00.000Z');
 
-    await withScheduledReminder('test-reminder', now, prisma, userServiceClient, memoryProgressClient, novuClient, handler);
+    await withScheduledReminder('test-reminder', now, prisma, userServiceClient, reminderContextClient, novuClient, handler);
 
     expect(handler).toHaveBeenCalled();
     expect(prisma.scheduledReminderRun.create).not.toHaveBeenCalled();
@@ -84,7 +84,7 @@ describe('withScheduledReminder', () => {
     ]);
     const now = new Date('2024-03-15T09:00:00.000Z');
 
-    await withScheduledReminder('test-reminder', now, prisma, userServiceClient, memoryProgressClient, novuClient, handler);
+    await withScheduledReminder('test-reminder', now, prisma, userServiceClient, reminderContextClient, novuClient, handler);
 
     expect(handler).not.toHaveBeenCalled();
   });
