@@ -1,6 +1,5 @@
-import { USER_UPSERTED_TOPIC, UserUpsertedEvent } from '@ai-agentic-english/shared';
+import { USER_UPSERTED_TOPIC, UserUpsertedEvent, createEvent } from '@ai-agentic-english/shared';
 import type { EventBus } from '@ai-agentic-english/shared';
-import { randomUUID } from 'crypto';
 
 export interface UserSyncedPayload {
   userId: string;
@@ -30,16 +29,13 @@ export function publishUserUpserted(
   eventBus: EventBus,
   payload: { clerkUserId: string; email: string; name?: string; action: 'created' | 'updated' },
 ) {
-  const event: UserUpsertedEvent = {
-    eventId: randomUUID(),
-    schemaVersion: 1,
-    occurredAt: new Date().toISOString(),
+  const event = createEvent<UserUpsertedEvent>({
     type: 'user.upserted',
     userId: payload.clerkUserId,
     email: payload.email,
     name: payload.name,
     action: payload.action,
-  };
+  });
   return eventBus.publish(USER_UPSERTED_TOPIC, { type: event.type, occurredAt: event.occurredAt, payload: event }, payload.clerkUserId);
 }
 
