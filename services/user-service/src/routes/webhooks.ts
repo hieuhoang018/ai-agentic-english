@@ -11,14 +11,13 @@ interface ClerkWebhookEvent {
 }
 
 export function createWebhooksRouter(prisma: AppPrismaClient, eventBus: EventBus): Router {
-  const secret = getEnv('CLERK_WEBHOOK_SECRET');
-  const wh = new Webhook(secret);
   const router = Router();
 
   router.post(
     '/clerk',
     express.raw({ type: 'application/json' }),
     asyncHandler(async (req, res) => {
+      const wh = new Webhook(getEnv('CLERK_WEBHOOK_SECRET'));
       let event: ClerkWebhookEvent;
       try {
         const svixHeaders: Record<string, string> = {
