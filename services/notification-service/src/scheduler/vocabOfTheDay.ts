@@ -1,5 +1,5 @@
 import { NovuClient } from '@ai-agentic-english/shared';
-import { MemoryProgressClient } from '../lib/memoryProgressClient';
+import { ReminderContextClient } from '../lib/reminderContextClient';
 import { AppPrismaClient } from '../lib/prisma';
 import { UserServiceClient } from '../lib/userServiceClient';
 import { formatTimeInZone, getLocalDateKey } from './time';
@@ -11,7 +11,7 @@ export async function runVocabOfTheDay(
   now: Date,
   prisma: AppPrismaClient,
   userServiceClient: UserServiceClient,
-  memoryProgressClient: MemoryProgressClient,
+  reminderContextClient: ReminderContextClient,
   novuClient: NovuClient,
 ): Promise<void> {
   const users = await userServiceClient.listUsers();
@@ -26,7 +26,7 @@ export async function runVocabOfTheDay(
     });
     if (alreadySent) continue;
 
-    const context = await memoryProgressClient.getReminderContext(user.clerkUserId);
+    const context = await reminderContextClient.getReminderContext(user.clerkUserId);
     if (!context.vocabOfTheDay) continue;
 
     await novuClient.triggerNotification({

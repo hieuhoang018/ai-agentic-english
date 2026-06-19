@@ -138,51 +138,10 @@ services:
               claims_to_verify:
                 - exp
 
-  - name: memory-progress-service
-    url: http://memory-progress-service:4003/health
-    routes:
-      - name: memory-progress-service-health
-        paths:
-          - /api/health/memory-progress-service
-        strip_path: true
-        methods:
-          - GET
-
-  - name: mp-onboarding
-    url: http://memory-progress-service:4003/onboarding
-    routes:
-      - name: mp-onboarding-route
-        paths:
-          - /api/onboarding
-        strip_path: true
-        plugins:
-          - name: jwt
-            config:
-              claims_to_verify:
-                - exp
-
-  - name: ai-tutor-service
-    url: http://ai-tutor-service:4004/health
-    routes:
-      - name: ai-tutor-service-health
-        paths:
-          - /api/health/ai-tutor-service
-        strip_path: true
-        methods:
-          - GET
-
-  - name: at-grading
-    url: http://ai-tutor-service:4004/grading
-    routes:
-      - name: at-grading-route
-        paths:
-          - /api/grading
-        strip_path: true
-        plugins:
-          - name: jwt
-            config:
-              claims_to_verify:
-                - exp
+  # TODO(Phase 6-TS, docs/agents-integration-plan.md §5c, §5d): add routes for the
+  # agreed onboarding/grading public contract once it's settled with the AI engineer
+  # and the apps/web owner. Previously: /api/onboarding -> memory-progress-service,
+  # /api/grading -> ai-tutor-service (both services retired).
 
   - name: notification-service
     url: http://notification-service:4005/health
