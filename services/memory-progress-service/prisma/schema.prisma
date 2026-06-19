@@ -9,26 +9,29 @@ datasource db {
 }
 
 model LearnerModel {
-  userId                 String   @id
+  userId                 String    @id
   currentLevel           Json
   dailyTimeBudgetMinutes Int
   goals                  Json
   weakAreas              Json
-  createdAt              DateTime @default(now())
-  updatedAt              DateTime @updatedAt
+  currentStreakDays      Int       @default(0)
+  lastActivityDate       DateTime?
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
 
   @@map("learner_models")
 }
 
 model Progress {
-  userId               String   @id
-  pathId               String
-  currentModuleId      String?
-  currentLessonId      String?
-  currentExerciseId    String?
-  completedExerciseIds Json     @default("[]")
-  createdAt            DateTime @default(now())
-  updatedAt            DateTime @updatedAt
+  userId                 String    @id
+  pathId                 String
+  currentModuleId        String?
+  currentLessonId        String?
+  currentExerciseId      String?
+  completedExerciseIds   Json      @default("[]")
+  firstLessonCompletedAt DateTime?
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
 
   @@map("progress")
 }

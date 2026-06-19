@@ -1,4 +1,4 @@
-import { TEST_WEBHOOK_SECRET } from '@ai-agentic-english/shared';
+import { EventBus, InMemoryEventBus, TEST_WEBHOOK_SECRET } from '@ai-agentic-english/shared';
 import request from 'supertest';
 import { Webhook } from 'svix';
 import { beforeEach, describe, expect, it } from 'vitest';
@@ -22,14 +22,16 @@ function signPayload(payload: unknown): { body: string; headers: Record<string, 
 
 describe('POST /webhooks/clerk', () => {
   let prisma: MockPrismaClient;
+  let eventBus: EventBus;
 
   beforeEach(() => {
     prisma = createMockPrisma();
+    eventBus = new InMemoryEventBus();
     process.env.CLERK_WEBHOOK_SECRET = TEST_WEBHOOK_SECRET;
   });
 
   it('rejects requests with an invalid signature', async () => {
-    const app = createApp(prisma);
+    const app = createApp(prisma, eventBus);
     const payload = {
       type: 'user.created',
       data: { id: 'user_123', email_addresses: [], first_name: null, last_name: null },
@@ -48,7 +50,7 @@ describe('POST /webhooks/clerk', () => {
   });
 
   it('upserts a user on user.created and user.updated', async () => {
-    const app = createApp(prisma);
+    const app = createApp(prisma, eventBus);
     prisma.user.upsert.mockResolvedValue({
       id: 'user-uuid-1',
       clerkUserId: 'user_123',
@@ -90,7 +92,7 @@ describe('POST /webhooks/clerk', () => {
   });
 
   it('deletes a user on user.deleted', async () => {
-    const app = createApp(prisma);
+    const app = createApp(prisma, eventBus);
     const payload = {
       type: 'user.deleted',
       data: { id: 'user_123' },

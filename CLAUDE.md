@@ -15,9 +15,12 @@ mostly-independent track with its own `apps/web/CLAUDE.md`.
 
 Key architectural decisions from the README (don't relitigate these without reason):
 
-- **Self-hosted AI inference** (LLM/STT/TTS on GPU nodes) is a first-class architectural concern,
-  not a deployment detail — but for this phase of work it's all mocked behind a swappable
-  interface (`INFERENCE_MODE=mock|live`) until a separate AI engineer drops in real adapters.
+- **Self-hosted AI inference** (LLM/STT/TTS on local/on-prem GPU hardware — not a third-party
+  cloud API) is a first-class architectural concern, not a deployment detail — but for Phases
+  0-7 it's all mocked behind a swappable interface (`INFERENCE_MODE=mock|live`). A separate AI
+  engineer drops in real adapters in **Phase 8** (not yet scheduled), reachable like another
+  internal service (docker-compose network / local host+port) rather than over the public
+  internet — no third-party auth/secrets to manage for it.
 - **5 backend services**, each owning its own Postgres DB, talking only by ID across services
   (no shared tables/FKs across service boundaries):
   - **User Service** — Clerk identity mirror (`clerkUserId`) + app settings. No passwords.
@@ -60,7 +63,7 @@ actual deliverable specs and exit criteria.
 
 ## Current Status
 
-**Branch:** `server/phase4` · **Last updated:** 2026-06-17
+**Branch:** `server/phase5` · **Last updated:** 2026-06-18
 
 | Phase | Scope | Status |
 |---|---|---|
@@ -69,9 +72,10 @@ actual deliverable specs and exit criteria.
 | 2 | Learning Materials Service (catalog, assessment, learning paths) | ✅ Done |
 | 3 | Memory & Progress Service + inference interface contract | ✅ Done |
 | 4 | AI Tutor: onboarding, grading, highlights | ✅ Done |
-| 5 | Notification Service + Kafka event wiring | ⬜ Not started |
+| 5 | Notification Service + Kafka event wiring | ✅ Done |
 | 6 | Real-time speaking (WebSocket, cascaded STT/LLM/TTS) | ⬜ Not started |
 | 7 | Offline sync endpoints | ⬜ Not started |
+| 8 | Live AI inference integration (real local GPU LLM/STT/TTS adapters, owned by AI engineer) | ⬜ Not scheduled |
 
 Phases 0-3 summary: tooling/infra scaffolded, User Service (Clerk auth + Kong JWT), Learning
 Materials Service (catalog/assessment/learning-paths), Memory & Progress Service (learner model,
@@ -122,6 +126,64 @@ unit tests — see chat history for the exact `curl`/script sequence if reproduc
 passing across all 6 backend workspaces, lint clean (the one lint failure is a pre-existing
 `apps/web` Next.js warning, unrelated to this work).
 
+### Phase 5 deliverables (per implementation plan §Phase 5) — all done
+
+Real `kafkajs` producer/consumer wiring replaced the `InMemoryEventBus` *default* everywhere
+(tests still inject `InMemoryEventBus` explicitly — same DI pattern as before, only the
+production default changed), plus the Notification Service itself.
+
+1. `packages/shared/src/events/kafkaEventBus.ts` (`createKafkaEventBus`, lazy-connect producer)
+   and `kafkaConsumer.ts` (`createKafkaConsumer`, generic consumer-group runner) — first real
+   Kafka client code in the repo. New event schemas: `userUpserted.ts`, `learningPathReady.ts`,
+   `achievementUnlocked.ts`, `reviewDue.ts`. `packages/shared/src/notifications/novuClient.ts`:
+   `NovuClient` interface + `MockNovuClient` (real adapter deferred — no sandbox account yet,
+   same swappable pattern as `INFERENCE_MODE`).
+2. Producers retrofitted: `user-service` publishes `user.upserted` (additive, alongside the
+   existing `user.created`/`user.updated`) after the Clerk webhook upsert; `ai-tutor-service`
+   publishes `learning-path.ready` after onboarding path generation;
+   `memory-progress-service`'s `attemptRecorded` consumer now publishes `achievement.unlocked`
+   for two of the three planned achievements — see point 4.
+3. Closed two long-standing gaps the consumers/scheduler needed to be meaningful:
+   `memory-progress-service`'s `attempt.recorded` consumer was previously dead code (only
+   invoked by its own test) — `src/kafka/bootstrap.ts` now runs a real consumer group, started
+   from `index.ts`. `GET /internal/reminders/:userId/context` (a Phase 3 deliverable that was
+   never built) now exists in `memory-progress-service`, and `user-service` gained
+   `GET /internal/users` (new for that service) so the notification scheduler can enumerate
+   users + settings.
+4. Achievement detection added to `consumeAttemptRecorded`
+   (`memory-progress-service/src/kafka/consumers/attemptRecorded.ts`): `first-lesson` (new
+   `Progress.firstLessonCompletedAt`, fires the first time path progression crosses into a new
+   lesson) and `7-day-streak` (new `LearnerModel.currentStreakDays`/`lastActivityDate`, calendar-day
+   diffing). `level-up` is intentionally not implemented — nothing in the codebase mutates
+   `LearnerModel.currentLevel` from attempt processing yet, so there's no real trigger for it;
+   flagged rather than faked.
+5. `notification-service` (previously just a `/health` scaffold): Prisma `ProcessedEvent`
+   (eventId dedup) + `ScheduledReminderRun` (userId+reminderType+runDate dedup);
+   `src/kafka/consumers/*.ts` (one pure handler per topic, dedup via `ProcessedEvent` then a
+   `NovuClient` call) + `src/kafka/bootstrap.ts` (one consumer group, all 4 topics, dispatches by
+   topic); `src/lib/userServiceClient.ts` / `memoryProgressClient.ts` (internal HTTP clients,
+   same `x-internal-secret` pattern as every other internal client); `src/scheduler/{dailyReminder,
+   vocabOfTheDay}.ts` (`node-cron`, hourly, per-user IANA-timezone time-of-day match against
+   `UserSettings.reminderTime`, deduped via `ScheduledReminderRun`).
+6. `review.due` (topic + consumer) is defined but has no producer wired — the plan marks it
+   "(optional)/low priority" and no existing call site justified one without overbuilding.
+   Documented as a deliberate gap, not a miss.
+
+Verified for real: brought up the actual `infra/docker-compose.yml` Postgres/Kafka containers,
+ran the new Prisma migrations against them, and round-tripped a real `user.upserted` event
+through `kafkajs` end-to-end — published via `createKafkaEventBus`, consumed by
+`notification-service`'s real consumer group, deduped correctly against the real
+`ProcessedEvent` table on redelivery. Also confirmed `memory-progress-service`'s
+`attempt.recorded` consumer group joins cleanly against the real broker. 164 tests passing
+across all 6 backend workspaces, lint clean (same pre-existing unrelated `apps/web` warning).
+
+**Kafka has a host-accessible listener now** — `infra/docker-compose.yml`'s `kafka` service
+advertises two listeners: `PLAINTEXT://kafka:9092` for container-to-container traffic (used by
+every service's compose `KAFKA_BROKERS` env) and `HOST://localhost:9094` for `npm run dev` on
+the host machine (used by every service's `.env.example`). This didn't matter before Phase 5
+because nothing actually connected to Kafka; without it, a host-side process trying to reach
+`kafka:9092` fails since that hostname only resolves inside the compose network.
+
 **Docker containers do not hot-reload** — `Dockerfile`s `COPY . .` at build time, no bind mounts.
 After changing service code, `docker compose build <service> && docker compose up -d <service>`
 (add `--no-cache` if you suspect a stale layer) before testing through the container; `npm run
@@ -129,11 +191,13 @@ dev` on the host picks up changes immediately and is the faster inner loop.
 
 ### Notes on what's already in place (useful when extending)
 
-- `packages/shared/src/events/eventBus.ts`: `EventBus` interface + `InMemoryEventBus` (records
-  published events in memory) — real Kafka producer/consumer wiring still pending for every
-  service; everything so far only stub-publishes via this in-memory bus (`user.upserted`,
-  `attempt.recorded`). Phase 5 is the natural place to introduce a real `kafkajs` client, since
-  it touches every service producing/consuming events at once.
+- `packages/shared/src/events/eventBus.ts`: `EventBus` interface + `InMemoryEventBus` (test-only
+  now — every service's `createApp`/bootstrap defaults to `createKafkaEventBus` in production,
+  same as Redis's `createRedisCacheClient`/`createInMemoryCacheClient` split). Real topics must
+  exist on the broker before a consumer subscribes (`kafka-topics.sh --create`, or just publish
+  once if the broker has `auto.create.topics.enable` on) — see the manual verification note above
+  if topics seem to vanish: the `kafka` container has no persistent volume, so a recreate wipes
+  them.
 - `ai-tutor-service/src/lib/redisCache.ts` is the first real Redis usage in the repo
   (`createRedisCacheClient` using the `redis` npm package, `createInMemoryCacheClient` for
   tests) — reuse this pattern rather than adding another Redis client lib.

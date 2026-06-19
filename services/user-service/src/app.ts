@@ -1,14 +1,15 @@
-import { EventBus, InMemoryEventBus, errorHandler } from '@ai-agentic-english/shared';
+import { EventBus, createInternalMiddleware, createKafkaEventBus, errorHandler, getEnv } from '@ai-agentic-english/shared';
 import { PrismaClient } from '../prisma/generated/client';
 import cors from 'cors';
 import express, { Express } from 'express';
 import { AppPrismaClient } from './lib/prisma';
+import { createInternalRouter } from './routes/internal';
 import { createUsersRouter } from './routes/users';
 import { createWebhooksRouter } from './routes/webhooks';
 
 export function createApp(
   prisma: AppPrismaClient = new PrismaClient(),
-  eventBus: EventBus = new InMemoryEventBus(),
+  eventBus: EventBus = createKafkaEventBus(getEnv('KAFKA_BROKERS', 'localhost:9092').split(',')),
 ): Express {
   const app = express();
 
@@ -30,6 +31,9 @@ export function createApp(
   });
 
   app.use('/users', createUsersRouter(prisma));
+
+  const internalSecret = getEnv('INTERNAL_SECRET', 'dev-internal-secret');
+  app.use('/internal', createInternalMiddleware(internalSecret), createInternalRouter(prisma));
 
   app.use(errorHandler);
 

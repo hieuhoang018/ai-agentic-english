@@ -168,4 +168,50 @@ describe('internal routes', () => {
       expect(res.body.currentModuleId).toBe('mod-1');
     });
   });
+
+  describe('GET /internal/reminders/:userId/context', () => {
+    it('returns 403 without internal secret header', async () => {
+      const res = await request(createApp(prisma)).get('/internal/reminders/user_123/context');
+      expect(res.status).toBe(403);
+    });
+
+    it('returns due review count and null vocabOfTheDay when there is no due vocab', async () => {
+      prisma.reviewSchedule.count.mockResolvedValue(3);
+      prisma.reviewSchedule.findFirst.mockResolvedValue(null);
+
+      const res = await request(createApp(prisma))
+        .get('/internal/reminders/user_123/context')
+        .set(INTERNAL_HEADER, INTERNAL_SECRET);
+
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual({ userId: 'user_123', dueReviewCount: 3, vocabOfTheDay: null });
+    });
+
+    it('returns the earliest-due vocab item as vocabOfTheDay', async () => {
+      prisma.reviewSchedule.count.mockResolvedValue(1);
+      prisma.reviewSchedule.findFirst.mockResolvedValue({ itemId: 'vocab-1', itemType: 'vocab' });
+      prisma.vocabItem.findUnique.mockResolvedValue({
+        id: 'vocab-1',
+        term: 'ubiquitous',
+        meaning: 'present everywhere',
+        exampleSentence: 'Smartphones are ubiquitous nowadays.',
+      });
+
+      const res = await request(createApp(prisma))
+        .get('/internal/reminders/user_123/context')
+        .set(INTERNAL_HEADER, INTERNAL_SECRET);
+
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual({
+        userId: 'user_123',
+        dueReviewCount: 1,
+        vocabOfTheDay: {
+          vocabItemId: 'vocab-1',
+          term: 'ubiquitous',
+          meaning: 'present everywhere',
+          exampleSentence: 'Smartphones are ubiquitous nowadays.',
+        },
+      });
+    });
+  });
 });

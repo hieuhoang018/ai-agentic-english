@@ -14,6 +14,7 @@ export type MockPrismaClient = {
     upsert: ReturnType<typeof vi.fn>;
   };
   reviewSchedule: {
+    count: ReturnType<typeof vi.fn>;
     findFirst: ReturnType<typeof vi.fn>;
     findMany: ReturnType<typeof vi.fn>;
     findUnique: ReturnType<typeof vi.fn>;
@@ -28,6 +29,7 @@ export type MockPrismaClient = {
   };
   vocabItem: {
     findMany: ReturnType<typeof vi.fn>;
+    findUnique: ReturnType<typeof vi.fn>;
   };
 } & AppPrismaClient;
 
@@ -45,6 +47,7 @@ export function createMockPrisma(): MockPrismaClient {
       upsert: vi.fn(),
     },
     reviewSchedule: {
+      count: vi.fn(),
       findFirst: vi.fn(),
       findMany: vi.fn(),
       findUnique: vi.fn(),
@@ -59,6 +62,7 @@ export function createMockPrisma(): MockPrismaClient {
     },
     vocabItem: {
       findMany: vi.fn(),
+      findUnique: vi.fn(),
     },
   } as unknown as MockPrismaClient;
 }

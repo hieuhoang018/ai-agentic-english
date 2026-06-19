@@ -1,4 +1,4 @@
-import { CatalogSummaryDto, LearningPathDto, LlmClient } from '@ai-agentic-english/shared';
+import { CatalogSummaryDto, EventBus, InMemoryEventBus, LearningPathDto, LlmClient } from '@ai-agentic-english/shared';
 import request from 'supertest';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp, HealthCheckClient } from '../app';
@@ -34,8 +34,10 @@ describe('POST /internal/onboarding/generate-path', () => {
   let llmClient: LlmClient;
   let learningMaterials: LearningMaterialsClient;
   let memoryProgress: MemoryProgressClient;
+  let eventBus: EventBus;
 
   beforeEach(() => {
+    eventBus = new InMemoryEventBus();
     llmClient = {
       generateLearningPath: vi.fn().mockResolvedValue({ pathDefinition }),
       gradeOpenResponse: vi.fn(),
@@ -52,7 +54,7 @@ describe('POST /internal/onboarding/generate-path', () => {
   });
 
   function buildApp() {
-    return createApp(fakePrisma, llmClient, undefined, undefined, learningMaterials, memoryProgress);
+    return createApp(fakePrisma, llmClient, eventBus, undefined, learningMaterials, memoryProgress);
   }
 
   it('returns 403 without the internal secret', async () => {
@@ -81,6 +83,13 @@ describe('POST /internal/onboarding/generate-path', () => {
       currentLessonId: 'les-1',
       currentExerciseId: 'ex-1',
     });
+    expect((eventBus as InMemoryEventBus).published).toContainEqual(
+      expect.objectContaining({
+        topic: 'learning-path.ready',
+        key: 'user_123',
+        event: expect.objectContaining({ payload: expect.objectContaining({ userId: 'user_123', pathId: 'path-1' }) }),
+      }),
+    );
   });
 
   it('returns 400 without a userId', async () => {

@@ -7,3 +7,18 @@ datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
+
+model ProcessedEvent {
+  eventId     String   @id
+  processedAt DateTime @default(now())
+}
+
+model ScheduledReminderRun {
+  id           String    @id @default(uuid())
+  userId       String
+  reminderType String
+  runDate      String
+  sentAt       DateTime  @default(now())
+
+  @@unique([userId, reminderType, runDate])
+}

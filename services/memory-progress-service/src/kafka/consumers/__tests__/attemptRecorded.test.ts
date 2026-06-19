@@ -1,4 +1,4 @@
-import { AttemptRecordedEvent } from '@ai-agentic-english/shared';
+import { AttemptRecordedEvent, EventBus, InMemoryEventBus } from '@ai-agentic-english/shared';
 import { describe, expect, it, beforeEach, vi } from 'vitest';
 import { State } from '../../../fsrs/scheduler';
 import { LearningMaterialsClient } from '../../../lib/learningMaterialsClient';
@@ -43,16 +43,19 @@ function baseEvent(overrides: Partial<AttemptRecordedEvent> = {}): AttemptRecord
 describe('consumeAttemptRecorded', () => {
   let prisma: MockPrismaClient;
   let learningMaterials: LearningMaterialsClient;
+  let eventBus: EventBus;
 
   beforeEach(() => {
     prisma = createMockPrisma();
     prisma.reviewSchedule.findUnique.mockResolvedValue(null);
     prisma.progress.findUnique.mockResolvedValue(null);
+    prisma.learnerModel.findUnique.mockResolvedValue(null);
     learningMaterials = createLearningMaterials();
+    eventBus = new InMemoryEventBus();
   });
 
   it('records the attempt', async () => {
-    await consumeAttemptRecorded(prisma, baseEvent(), learningMaterials, now);
+    await consumeAttemptRecorded(prisma, baseEvent(), learningMaterials, eventBus, now);
 
     expect(prisma.attempt.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
@@ -76,6 +79,7 @@ describe('consumeAttemptRecorded', () => {
         ],
       }),
       learningMaterials,
+      eventBus,
       now,
     );
 
@@ -88,12 +92,12 @@ describe('consumeAttemptRecorded', () => {
   });
 
   it('does not write mistakes when there are none', async () => {
-    await consumeAttemptRecorded(prisma, baseEvent(), learningMaterials, now);
+    await consumeAttemptRecorded(prisma, baseEvent(), learningMaterials, eventBus, now);
     expect(prisma.mistake.createMany).not.toHaveBeenCalled();
   });
 
   it('creates a fresh ReviewSchedule on first attempt (correct → Good grade)', async () => {
-    await consumeAttemptRecorded(prisma, baseEvent({ isCorrect: true }), learningMaterials, now);
+    await consumeAttemptRecorded(prisma, baseEvent({ isCorrect: true }), learningMaterials, eventBus, now);
 
     expect(prisma.reviewSchedule.upsert).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -118,7 +122,7 @@ describe('consumeAttemptRecorded', () => {
       state: State.Review,
     });
 
-    await consumeAttemptRecorded(prisma, baseEvent({ isCorrect: false }), learningMaterials, now);
+    await consumeAttemptRecorded(prisma, baseEvent({ isCorrect: false }), learningMaterials, eventBus, now);
 
     const call = prisma.reviewSchedule.upsert.mock.calls[0][0];
     expect(call.update.lapses).toBe(1);
@@ -132,7 +136,7 @@ describe('consumeAttemptRecorded', () => {
       completedExerciseIds: ['ex-0'],
     });
 
-    await consumeAttemptRecorded(prisma, baseEvent({ isCorrect: true }), learningMaterials, now);
+    await consumeAttemptRecorded(prisma, baseEvent({ isCorrect: true }), learningMaterials, eventBus, now);
 
     expect(prisma.progress.update).toHaveBeenCalledWith({
       where: { userId: 'user_123' },
@@ -147,7 +151,7 @@ describe('consumeAttemptRecorded', () => {
       completedExerciseIds: ['ex-1'],
     });
 
-    await consumeAttemptRecorded(prisma, baseEvent({ isCorrect: true }), learningMaterials, now);
+    await consumeAttemptRecorded(prisma, baseEvent({ isCorrect: true }), learningMaterials, eventBus, now);
 
     expect(prisma.progress.update).toHaveBeenCalledWith({
       where: { userId: 'user_123' },
@@ -159,13 +163,14 @@ describe('consumeAttemptRecorded', () => {
     prisma.progress.findUnique.mockResolvedValue({
       userId: 'user_123',
       pathId: 'path-1',
+      currentLessonId: 'les-1',
       completedExerciseIds: [],
     });
     const multiExercisePath = {
       modules: [{ moduleId: 'mod-1', lessons: [{ lessonId: 'les-1', exerciseIds: ['ex-1', 'ex-2'] }] }],
     };
 
-    await consumeAttemptRecorded(prisma, baseEvent({ isCorrect: true }), createLearningMaterials(multiExercisePath), now);
+    await consumeAttemptRecorded(prisma, baseEvent({ isCorrect: true }), createLearningMaterials(multiExercisePath), eventBus, now);
 
     expect(prisma.progress.update).toHaveBeenCalledWith({
       where: { userId: 'user_123' },
@@ -185,7 +190,7 @@ describe('consumeAttemptRecorded', () => {
       completedExerciseIds: [],
     });
 
-    await consumeAttemptRecorded(prisma, baseEvent({ isCorrect: true }), learningMaterials, now);
+    await consumeAttemptRecorded(prisma, baseEvent({ isCorrect: true }), learningMaterials, eventBus, now);
 
     expect(prisma.progress.update).toHaveBeenCalledWith({
       where: { userId: 'user_123' },
@@ -200,8 +205,123 @@ describe('consumeAttemptRecorded', () => {
       completedExerciseIds: [],
     });
 
-    await consumeAttemptRecorded(prisma, baseEvent({ isCorrect: false }), learningMaterials, now);
+    await consumeAttemptRecorded(prisma, baseEvent({ isCorrect: false }), learningMaterials, eventBus, now);
 
     expect(prisma.progress.update).not.toHaveBeenCalled();
+  });
+
+  describe('achievements', () => {
+    it('publishes first-lesson when the completed exercise crosses into a new lesson for the first time', async () => {
+      prisma.progress.findUnique.mockResolvedValue({
+        userId: 'user_123',
+        pathId: 'path-1',
+        currentLessonId: 'les-1',
+        completedExerciseIds: [],
+        firstLessonCompletedAt: null,
+      });
+      const twoLessonPath = {
+        modules: [
+          {
+            moduleId: 'mod-1',
+            lessons: [
+              { lessonId: 'les-1', exerciseIds: ['ex-1'] },
+              { lessonId: 'les-2', exerciseIds: ['ex-2'] },
+            ],
+          },
+        ],
+      };
+
+      await consumeAttemptRecorded(prisma, baseEvent({ isCorrect: true }), createLearningMaterials(twoLessonPath), eventBus, now);
+
+      expect(prisma.progress.update).toHaveBeenCalledWith({
+        where: { userId: 'user_123' },
+        data: expect.objectContaining({ firstLessonCompletedAt: now }),
+      });
+      const published = (eventBus as InMemoryEventBus).published;
+      expect(published).toContainEqual(
+        expect.objectContaining({
+          topic: 'achievement.unlocked',
+          event: expect.objectContaining({ payload: expect.objectContaining({ userId: 'user_123', achievementType: 'first-lesson' }) }),
+        }),
+      );
+    });
+
+    it('does not re-publish first-lesson once already recorded', async () => {
+      prisma.progress.findUnique.mockResolvedValue({
+        userId: 'user_123',
+        pathId: 'path-1',
+        currentLessonId: 'les-1',
+        completedExerciseIds: [],
+        firstLessonCompletedAt: new Date('2024-01-01T00:00:00.000Z'),
+      });
+      const twoLessonPath = {
+        modules: [
+          {
+            moduleId: 'mod-1',
+            lessons: [
+              { lessonId: 'les-1', exerciseIds: ['ex-1'] },
+              { lessonId: 'les-2', exerciseIds: ['ex-2'] },
+            ],
+          },
+        ],
+      };
+
+      await consumeAttemptRecorded(prisma, baseEvent({ isCorrect: true }), createLearningMaterials(twoLessonPath), eventBus, now);
+
+      const published = (eventBus as InMemoryEventBus).published;
+      expect(published.some((p) => p.topic === 'achievement.unlocked')).toBe(false);
+    });
+
+    it('increments the streak on a consecutive calendar day and publishes 7-day-streak at exactly 7', async () => {
+      prisma.learnerModel.findUnique.mockResolvedValue({
+        userId: 'user_123',
+        currentStreakDays: 6,
+        lastActivityDate: new Date('2024-01-09T00:00:00.000Z'),
+      });
+
+      await consumeAttemptRecorded(prisma, baseEvent({ isCorrect: true }), learningMaterials, eventBus, now);
+
+      expect(prisma.learnerModel.update).toHaveBeenCalledWith({
+        where: { userId: 'user_123' },
+        data: { currentStreakDays: 7, lastActivityDate: now },
+      });
+      const published = (eventBus as InMemoryEventBus).published;
+      expect(published).toContainEqual(
+        expect.objectContaining({
+          topic: 'achievement.unlocked',
+          event: expect.objectContaining({ payload: expect.objectContaining({ userId: 'user_123', achievementType: '7-day-streak' }) }),
+        }),
+      );
+    });
+
+    it('resets the streak to 1 after a gap of more than one day', async () => {
+      prisma.learnerModel.findUnique.mockResolvedValue({
+        userId: 'user_123',
+        currentStreakDays: 5,
+        lastActivityDate: new Date('2024-01-01T00:00:00.000Z'),
+      });
+
+      await consumeAttemptRecorded(prisma, baseEvent({ isCorrect: true }), learningMaterials, eventBus, now);
+
+      expect(prisma.learnerModel.update).toHaveBeenCalledWith({
+        where: { userId: 'user_123' },
+        data: { currentStreakDays: 1, lastActivityDate: now },
+      });
+    });
+
+    it('does not change the streak on a second attempt the same day', async () => {
+      prisma.learnerModel.findUnique.mockResolvedValue({
+        userId: 'user_123',
+        currentStreakDays: 3,
+        lastActivityDate: new Date('2024-01-10T00:00:00.000Z'),
+      });
+
+      await consumeAttemptRecorded(prisma, baseEvent({ isCorrect: true }), learningMaterials, eventBus, now);
+
+      expect(prisma.learnerModel.update).toHaveBeenCalledWith({
+        where: { userId: 'user_123' },
+        data: { currentStreakDays: 3, lastActivityDate: now },
+      });
+    });
   });
 });

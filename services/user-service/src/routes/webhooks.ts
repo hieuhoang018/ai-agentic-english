@@ -2,7 +2,7 @@ import { AppError, EventBus, UnauthorizedError, asyncHandler, getEnv } from '@ai
 import express, { Router } from 'express';
 import { Webhook } from 'svix';
 import { ClerkUserEventData, getFullName, getPrimaryEmail } from '../lib/clerkWebhookEvent';
-import { publishUserCreated, publishUserDeleted, publishUserUpdated } from '../events/publishers';
+import { publishUserCreated, publishUserDeleted, publishUserUpdated, publishUserUpserted } from '../events/publishers';
 import { AppPrismaClient } from '../lib/prisma';
 
 interface ClerkWebhookEvent {
@@ -60,8 +60,10 @@ export function createWebhooksRouter(prisma: AppPrismaClient, eventBus: EventBus
           const eventPayload = { userId: user.id, clerkUserId: user.clerkUserId, email: user.email };
           if (event.type === 'user.created') {
             await publishUserCreated(eventBus, eventPayload);
+            await publishUserUpserted(eventBus, { clerkUserId: user.clerkUserId, email: user.email, name: user.name ?? undefined, action: 'created' });
           } else {
             await publishUserUpdated(eventBus, eventPayload);
+            await publishUserUpserted(eventBus, { clerkUserId: user.clerkUserId, email: user.email, name: user.name ?? undefined, action: 'updated' });
           }
           break;
         }

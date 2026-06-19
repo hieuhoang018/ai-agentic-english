@@ -18,6 +18,13 @@ export interface UserDto {
   settings: UserSettingsDto;
 }
 
+export interface UserSummaryDto {
+  clerkUserId: UserId;
+  email: string;
+  name: string | null;
+  settings: UserSettingsDto;
+}
+
 export interface UpdateUserSettingsDto {
   dailyTimeBudgetMinutes?: number;
   preferredLanguage?: string;

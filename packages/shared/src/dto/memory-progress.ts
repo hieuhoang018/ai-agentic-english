@@ -75,3 +75,16 @@ export interface ReviewHighlightsDto {
   mistakes: HighlightMistakeDto[];
   vocab: HighlightVocabDto[];
 }
+
+export interface VocabOfTheDayDto {
+  vocabItemId: string;
+  term: string;
+  meaning: string;
+  exampleSentence: string | null;
+}
+
+export interface ReminderContextDto {
+  userId: string;
+  dueReviewCount: number;
+  vocabOfTheDay: VocabOfTheDayDto | null;
+}

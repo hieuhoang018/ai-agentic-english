@@ -1,4 +1,4 @@
-import { EventBus, InMemoryEventBus, LlmClient, createInternalMiddleware, createLlmClient, errorHandler, getEnv } from '@ai-agentic-english/shared';
+import { EventBus, LlmClient, createInternalMiddleware, createKafkaEventBus, createLlmClient, errorHandler, getEnv } from '@ai-agentic-english/shared';
 import cors from 'cors';
 import express, { Express } from 'express';
 import { PrismaClient } from '../prisma/generated/client';
@@ -16,7 +16,7 @@ export interface HealthCheckClient {
 export function createApp(
   prisma: HealthCheckClient = new PrismaClient(),
   llmClient: LlmClient = createLlmClient(),
-  eventBus: EventBus = new InMemoryEventBus(),
+  eventBus: EventBus = createKafkaEventBus(getEnv('KAFKA_BROKERS', 'localhost:9092').split(',')),
   cacheClient: CacheClient = createRedisCacheClient(),
   learningMaterials: LearningMaterialsClient = createLearningMaterialsClient(),
   memoryProgress: MemoryProgressClient = createMemoryProgressClient(),
@@ -41,7 +41,7 @@ export function createApp(
   app.use(
     '/internal',
     createInternalMiddleware(internalSecret),
-    createOnboardingRouter(llmClient, learningMaterials, memoryProgress),
+    createOnboardingRouter(llmClient, learningMaterials, memoryProgress, eventBus),
     createHighlightsRouter(llmClient, cacheClient),
   );
 
