@@ -1,12 +1,20 @@
+import { createInternalMiddleware, errorHandler, getEnv } from '@ai-agentic-english/shared';
 import cors from 'cors';
 import express, { Express } from 'express';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient } from '../prisma/generated/client';
+import { AppPrismaClient } from './lib/prisma';
+import { createAssessmentRouter } from './routes/assessment';
+import { createExercisesRouter } from './routes/exercises';
+import { createInternalRouter } from './routes/internal';
+import { createLearningPathsRouter } from './routes/learningPaths';
+import { createLessonsRouter } from './routes/lessons';
+import { createModulesRouter } from './routes/modules';
 
 export interface HealthCheckClient {
   $queryRaw: PrismaClient['$queryRaw'];
 }
 
-export function createApp(prisma: HealthCheckClient = new PrismaClient()): Express {
+export function createApp(prisma: AppPrismaClient = new PrismaClient()): Express {
   const app = express();
 
   app.use(cors());
@@ -20,6 +28,17 @@ export function createApp(prisma: HealthCheckClient = new PrismaClient()): Expre
       res.status(503).json({ status: 'error', service: 'learning-materials-service' });
     }
   });
+
+  app.use('/modules', createModulesRouter(prisma));
+  app.use('/lessons', createLessonsRouter(prisma));
+  app.use('/exercises', createExercisesRouter(prisma));
+  app.use('/assessment', createAssessmentRouter(prisma));
+  app.use('/learning-paths', createLearningPathsRouter(prisma));
+
+  const internalSecret = getEnv('INTERNAL_SECRET', 'dev-internal-secret');
+  app.use('/internal', createInternalMiddleware(internalSecret), createInternalRouter(prisma));
+
+  app.use(errorHandler);
 
   return app;
 }

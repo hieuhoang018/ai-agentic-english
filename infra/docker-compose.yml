@@ -187,6 +187,8 @@ services:
       DATABASE_URL: postgresql://postgres:postgres@postgres-user:5432/user_service
       REDIS_URL: redis://redis:6379
       KAFKA_BROKERS: kafka:9092
+      CLERK_WEBHOOK_SECRET: ${CLERK_WEBHOOK_SECRET:-whsec_aqtY1brapqEHcp2fCAUoFGNYxncE1jeNpoWZUOKTfNY=}
+      CLERK_ISSUER: ${CLERK_ISSUER:-https://test-clerk.example.com}
     depends_on:
       postgres-user:
         condition: service_healthy
@@ -219,6 +221,9 @@ services:
       DATABASE_URL: postgresql://postgres:postgres@postgres-memory-progress:5432/memory_progress_service
       REDIS_URL: redis://redis:6379
       KAFKA_BROKERS: kafka:9092
+      LEARNING_MATERIALS_SERVICE_URL: http://learning-materials-service:4002
+      AI_TUTOR_SERVICE_URL: http://ai-tutor-service:4004
+      INTERNAL_SECRET: dev-internal-secret
     depends_on:
       postgres-memory-progress:
         condition: service_healthy
@@ -236,6 +241,9 @@ services:
       REDIS_URL: redis://redis:6379
       KAFKA_BROKERS: kafka:9092
       INFERENCE_MODE: mock
+      LEARNING_MATERIALS_SERVICE_URL: http://learning-materials-service:4002
+      MEMORY_PROGRESS_SERVICE_URL: http://memory-progress-service:4003
+      INTERNAL_SECRET: dev-internal-secret
     depends_on:
       postgres-ai-tutor:
         condition: service_healthy

@@ -1,11 +1,35 @@
 _format_version: '3.0'
 _transform: true
 
-# Phase 0: routing only, no auth yet. Clerk JWT/OIDC validation on `/api/*`
-# (excluding `/health` and `/webhooks/*`) is added in Phase 1.
+# Phase 0: routing only, no auth yet.
+#
+# Phase 1: `/api/<service>/*` routes are validated with the Kong `jwt`
+# plugin, using a static RS256 public key matching the test JWKS in
+# `@ai-agentic-english/shared` (packages/shared/src/testing/index.ts). The
+# consumer's `key` matches the JWT `iss` claim (TEST_ISSUER). To swap in a
+# real Clerk app, regenerate `rsa_public_key` from the Clerk JWKS and update
+# `key`/`rsa_public_key` below - no other config changes are needed.
+#
+# `/health` and `/webhooks/*` routes are left unauthenticated.
 #
 # Each backend service exposes `GET /health`, routed here as
 # `/api/health/<service>` for the Phase 0 verification step.
+
+consumers:
+  - username: clerk-test
+    jwt_secrets:
+      - key: https://elegant-anchovy-29.clerk.accounts.dev
+        algorithm: RS256
+        rsa_public_key: |
+          -----BEGIN PUBLIC KEY-----
+          MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAuuN04KpT0b6I4BCr87mT
+          nYd+ku8a8Y7LEHCMrrwMJcaPFio6i2C73G1equcp+Zb88agYmgX+iStGT694YjOb
+          OVmCQy+n4DUB2rHeu+fbso8T+OXojZjVwfqw3PMthNX7BIQcAkVoK8eEBRzUPXYz
+          0mUPkqVxpDxpzLoW6jvj+iES7ZhaUfsviekFaa3NY2i6R+qjzpLraRmJAGc3o+qA
+          xcDLIELHlH9mJA1xxcRLU0tSel3fSsbuDX/FNC5+ifx94WC6tuaTAzRa5gsonrN2
+          5mGZM4fWjt4l+FNuyA1qUoyp5XqOQQSBueIGJmvGI0vJLofCzD4E8iwVaZS4ZMS8
+          wQIDAQAB
+          -----END PUBLIC KEY-----
 
 services:
   - name: user-service
@@ -18,7 +42,28 @@ services:
         methods:
           - GET
 
-  - name: learning-materials-service
+  - name: user-service-webhooks
+    url: http://user-service:4001/webhooks
+    routes:
+      - name: user-service-webhooks
+        paths:
+          - /api/webhooks/user-service
+        strip_path: true
+
+  - name: user-service-api
+    url: http://user-service:4001/users
+    routes:
+      - name: user-service-api
+        paths:
+          - /api/users
+        strip_path: true
+        plugins:
+          - name: jwt
+            config:
+              claims_to_verify:
+                - exp
+
+  - name: learning-materials-service-health
     url: http://learning-materials-service:4002/health
     routes:
       - name: learning-materials-service-health
@@ -27,6 +72,71 @@ services:
         strip_path: true
         methods:
           - GET
+
+  - name: lm-modules
+    url: http://learning-materials-service:4002/modules
+    routes:
+      - name: lm-modules-route
+        paths:
+          - /api/modules
+        strip_path: true
+        plugins:
+          - name: jwt
+            config:
+              claims_to_verify:
+                - exp
+
+  - name: lm-lessons
+    url: http://learning-materials-service:4002/lessons
+    routes:
+      - name: lm-lessons-route
+        paths:
+          - /api/lessons
+        strip_path: true
+        plugins:
+          - name: jwt
+            config:
+              claims_to_verify:
+                - exp
+
+  - name: lm-exercises
+    url: http://learning-materials-service:4002/exercises
+    routes:
+      - name: lm-exercises-route
+        paths:
+          - /api/exercises
+        strip_path: true
+        plugins:
+          - name: jwt
+            config:
+              claims_to_verify:
+                - exp
+
+  - name: lm-assessment
+    url: http://learning-materials-service:4002/assessment
+    routes:
+      - name: lm-assessment-route
+        paths:
+          - /api/assessment
+        strip_path: true
+        plugins:
+          - name: jwt
+            config:
+              claims_to_verify:
+                - exp
+
+  - name: lm-learning-paths
+    url: http://learning-materials-service:4002/learning-paths
+    routes:
+      - name: lm-learning-paths-route
+        paths:
+          - /api/learning-paths
+        strip_path: true
+        plugins:
+          - name: jwt
+            config:
+              claims_to_verify:
+                - exp
 
   - name: memory-progress-service
     url: http://memory-progress-service:4003/health
@@ -38,6 +148,19 @@ services:
         methods:
           - GET
 
+  - name: mp-onboarding
+    url: http://memory-progress-service:4003/onboarding
+    routes:
+      - name: mp-onboarding-route
+        paths:
+          - /api/onboarding
+        strip_path: true
+        plugins:
+          - name: jwt
+            config:
+              claims_to_verify:
+                - exp
+
   - name: ai-tutor-service
     url: http://ai-tutor-service:4004/health
     routes:
@@ -47,6 +170,19 @@ services:
         strip_path: true
         methods:
           - GET
+
+  - name: at-grading
+    url: http://ai-tutor-service:4004/grading
+    routes:
+      - name: at-grading-route
+        paths:
+          - /api/grading
+        strip_path: true
+        plugins:
+          - name: jwt
+            config:
+              claims_to_verify:
+                - exp
 
   - name: notification-service
     url: http://notification-service:4005/health

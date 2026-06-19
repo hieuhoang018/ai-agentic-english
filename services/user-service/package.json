@@ -15,15 +15,16 @@
     "@ai-agentic-english/shared": "*",
     "@prisma/client": "6.19.3",
     "cors": "2.8.5",
-    "express": "4.22.2"
+    "express": "4.22.2",
+    "svix": "1.95.2"
   },
   "devDependencies": {
     "@ai-agentic-english/config": "*",
     "@types/cors": "2.8.17",
     "@types/express": "4.17.21",
-    "@types/supertest": "6.0.2",
+    "@types/supertest": "^6.0.2",
     "prisma": "6.19.3",
-    "supertest": "7.2.2",
+    "supertest": "^7.2.2",
     "tsx": "4.19.2"
   }
 }

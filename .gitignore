@@ -2,13 +2,14 @@ node_modules/
 dist/
 build/
 .next/
+**/prisma/generated/
 .env
 .env.*
 !.env.example
 *.log
 .DS_Store
-.worktrees/
 .claude/
+.worktrees/
 docs/superpowers/
 .venv/
 __pycache__/
