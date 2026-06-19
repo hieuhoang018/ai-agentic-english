@@ -23,7 +23,7 @@ const context: ReminderContextDto = { userId: 'user_abc', dueReviewCount: 2, voc
 describe('withScheduledReminder', () => {
   let prisma: MockPrismaClient;
   let userServiceClient: UserServiceClient;
-  let reminderContextClient: MemoryProgressClient;
+  let reminderContextClient: ReminderContextClient;
   let novuClient: MockNovuClient;
   let handler: ReturnType<typeof vi.fn>;
 
