@@ -16,7 +16,8 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "jose": "6.2.3"
+    "jose": "6.2.3",
+    "kafkajs": "^2.2.4"
   },
   "devDependencies": {
     "@ai-agentic-english/config": "*",

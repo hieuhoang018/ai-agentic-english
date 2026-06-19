@@ -1,4 +1,4 @@
-import { UserDto, UserSettingsDto } from '@ai-agentic-english/shared';
+import { UserDto, UserSettingsDto, UserSummaryDto } from '@ai-agentic-english/shared';
 import { User, UserSettings } from '../../prisma/generated/client';
 
 export function toUserSettingsDto(settings: UserSettings): UserSettingsDto {
@@ -8,6 +8,15 @@ export function toUserSettingsDto(settings: UserSettings): UserSettingsDto {
     reminderTime: settings.reminderTime,
     timezone: settings.timezone,
     notificationChannelHints: settings.notificationChannelHints as Record<string, unknown>,
+  };
+}
+
+export function toUserSummaryDto(user: User & { settings: UserSettings }): UserSummaryDto {
+  return {
+    clerkUserId: user.clerkUserId,
+    email: user.email,
+    name: user.name,
+    settings: toUserSettingsDto(user.settings),
   };
 }
 

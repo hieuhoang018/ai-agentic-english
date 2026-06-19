@@ -1,4 +1,10 @@
-import { CreateLearnerModelInput, InitializeProgressInput, ValidationError, asyncHandler } from '@ai-agentic-english/shared';
+import {
+  CreateLearnerModelInput,
+  InitializeProgressInput,
+  ReminderContextDto,
+  ValidationError,
+  asyncHandler,
+} from '@ai-agentic-english/shared';
 import { Router } from 'express';
 import { Prisma } from '../../prisma/generated/client';
 import { upsertLearnerModel } from '../lib/learnerModel';
@@ -40,6 +46,41 @@ export function createInternalRouter(prisma: AppPrismaClient): Router {
       });
 
       res.status(201).json(toProgressDto(progress));
+    }),
+  );
+
+  router.get(
+    '/reminders/:userId/context',
+    asyncHandler(async (req, res) => {
+      const { userId } = req.params;
+
+      const dueReviewCount = await prisma.reviewSchedule.count({
+        where: { userId, due: { lte: new Date() } },
+      });
+
+      const nextDueVocabSchedule = await prisma.reviewSchedule.findFirst({
+        where: { userId, itemType: 'vocab' },
+        orderBy: { due: 'asc' },
+      });
+
+      const vocabItem = nextDueVocabSchedule
+        ? await prisma.vocabItem.findUnique({ where: { id: nextDueVocabSchedule.itemId } })
+        : null;
+
+      const context: ReminderContextDto = {
+        userId,
+        dueReviewCount,
+        vocabOfTheDay: vocabItem
+          ? {
+              vocabItemId: vocabItem.id,
+              term: vocabItem.term,
+              meaning: vocabItem.meaning,
+              exampleSentence: vocabItem.exampleSentence ?? null,
+            }
+          : null,
+      };
+
+      res.json(context);
     }),
   );
 

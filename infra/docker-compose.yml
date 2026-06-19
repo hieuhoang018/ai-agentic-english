@@ -110,13 +110,17 @@ services:
     restart: unless-stopped
     ports:
       - '9092:9092'
+      - '9094:9094'
     environment:
       KAFKA_NODE_ID: 1
       KAFKA_PROCESS_ROLES: broker,controller
-      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      # PLAINTEXT is for container-to-container traffic (KAFKA_BROKERS=kafka:9092 in each
+      # service's compose env); HOST is for `npm run dev` on the host machine reaching this
+      # same broker via the published port (KAFKA_BROKERS=localhost:9094 in .env.example).
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093,HOST://0.0.0.0:9094
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,HOST://localhost:9094
       KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,HOST:PLAINTEXT
       KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       CLUSTER_ID: ai-agentic-english-kafka
@@ -189,6 +193,7 @@ services:
       KAFKA_BROKERS: kafka:9092
       CLERK_WEBHOOK_SECRET: ${CLERK_WEBHOOK_SECRET:-whsec_aqtY1brapqEHcp2fCAUoFGNYxncE1jeNpoWZUOKTfNY=}
       CLERK_ISSUER: ${CLERK_ISSUER:-https://test-clerk.example.com}
+      INTERNAL_SECRET: dev-internal-secret
     depends_on:
       postgres-user:
         condition: service_healthy
@@ -260,6 +265,9 @@ services:
       DATABASE_URL: postgresql://postgres:postgres@postgres-notification:5432/notification_service
       REDIS_URL: redis://redis:6379
       KAFKA_BROKERS: kafka:9092
+      USER_SERVICE_URL: http://user-service:4001
+      MEMORY_PROGRESS_SERVICE_URL: http://memory-progress-service:4003
+      INTERNAL_SECRET: dev-internal-secret
     depends_on:
       postgres-notification:
         condition: service_healthy

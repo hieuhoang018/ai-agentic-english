@@ -1,4 +1,14 @@
-import { CefrLevel, LlmClient, Skill, ValidationError, asyncHandler } from '@ai-agentic-english/shared';
+import {
+  CefrLevel,
+  EventBus,
+  LearningPathReadyEvent,
+  LEARNING_PATH_READY_TOPIC,
+  LlmClient,
+  Skill,
+  ValidationError,
+  asyncHandler,
+} from '@ai-agentic-english/shared';
+import { randomUUID } from 'crypto';
 import { Router } from 'express';
 import { LearningMaterialsClient } from '../lib/learningMaterialsClient';
 import { MemoryProgressClient } from '../lib/memoryProgressClient';
@@ -14,6 +24,7 @@ export function createOnboardingRouter(
   llmClient: LlmClient,
   learningMaterials: LearningMaterialsClient,
   memoryProgress: MemoryProgressClient,
+  eventBus: EventBus,
 ): Router {
   const router = Router();
 
@@ -48,6 +59,16 @@ export function createOnboardingRouter(
       });
 
       res.status(201).json(path);
+
+      const event: LearningPathReadyEvent = {
+        eventId: randomUUID(),
+        schemaVersion: 1,
+        occurredAt: new Date().toISOString(),
+        type: 'learning-path.ready',
+        userId,
+        pathId: path.id,
+      };
+      await eventBus.publish(LEARNING_PATH_READY_TOPIC, { type: event.type, occurredAt: event.occurredAt, payload: event }, userId);
     }),
   );
 
