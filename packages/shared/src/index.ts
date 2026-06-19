@@ -8,6 +8,7 @@ export * from './dto/memory-progress';
 export * from './dto/offline';
 export * from './env';
 export * from './events/achievementUnlocked';
+export * from './events/createEvent';
 export * from './events/base';
 export * from './events/eventBus';
 export * from './events/kafkaConsumer';
