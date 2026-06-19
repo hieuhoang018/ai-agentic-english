@@ -264,6 +264,254 @@ services:
       postgres-notification:
         condition: service_healthy
 
+  # ── Agent infrastructure ────────────────────────────────────────────────────
+  postgres-agents:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    ports:
+      - '5438:5432'
+    environment:
+      POSTGRES_DB: agent_ltm
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - postgres-agents-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres -d agent_ltm']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  languagetool:
+    image: silviof/docker-languagetool:latest
+    restart: unless-stopped
+    ports:
+      - '8082:8010'
+    environment:
+      Java_Xms: 256m
+      Java_Xmx: 1g
+
+  ollama:
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    ports:
+      - '11434:11434'
+    volumes:
+      - ollama-models:/root/.ollama
+    environment:
+      OLLAMA_MAX_LOADED_MODELS: '1'
+
+  minio-init-agents:
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 minioadmin minioadmin &&
+      mc mb -p local/pronunciation-audio &&
+      mc mb -p local/exercise-audio &&
+      mc mb -p local/writing-samples &&
+      exit 0
+      "
+
+  # ── Agent services (ports 8101-8111) ────────────────────────────────────────
+  agt01-profiling:
+    build:
+      context: ../agents
+      dockerfile: agt01_profiling/Dockerfile
+    restart: unless-stopped
+    ports:
+      - '8101:8101'
+    environment:
+      AGENT_DATABASE_URL: postgresql://postgres:postgres@postgres-agents:5432/agent_ltm
+      REDIS_URL: redis://redis:6379
+      KAFKA_BROKERS: kafka:9092
+      INFERENCE_MODE: mock
+    depends_on:
+      postgres-agents:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      kafka:
+        condition: service_started
+
+  agt02-learning-path:
+    build:
+      context: ../agents
+      dockerfile: agt02_learning_path/Dockerfile
+    restart: unless-stopped
+    ports:
+      - '8102:8102'
+    environment:
+      AGENT_DATABASE_URL: postgresql://postgres:postgres@postgres-agents:5432/agent_ltm
+      REDIS_URL: redis://redis:6379
+      KAFKA_BROKERS: kafka:9092
+      INFERENCE_MODE: mock
+    depends_on:
+      postgres-agents:
+        condition: service_healthy
+
+  agt03-tutor:
+    build:
+      context: ../agents
+      dockerfile: agt03_tutor/Dockerfile
+    restart: unless-stopped
+    ports:
+      - '8103:8103'
+    environment:
+      AGENT_DATABASE_URL: postgresql://postgres:postgres@postgres-agents:5432/agent_ltm
+      REDIS_URL: redis://redis:6379
+      KAFKA_BROKERS: kafka:9092
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+      INFERENCE_MODE: mock
+    depends_on:
+      postgres-agents:
+        condition: service_healthy
+
+  agt04-feedback:
+    build:
+      context: ../agents
+      dockerfile: agt04_feedback/Dockerfile
+    restart: unless-stopped
+    ports:
+      - '8104:8104'
+    environment:
+      AGENT_DATABASE_URL: postgresql://postgres:postgres@postgres-agents:5432/agent_ltm
+      REDIS_URL: redis://redis:6379
+      KAFKA_BROKERS: kafka:9092
+      LANGUAGETOOL_URL: http://languagetool:8010/v2
+      INFERENCE_MODE: mock
+    depends_on:
+      postgres-agents:
+        condition: service_healthy
+      languagetool:
+        condition: service_started
+
+  agt05-assessment:
+    build:
+      context: ../agents
+      dockerfile: agt05_assessment/Dockerfile
+    restart: unless-stopped
+    ports:
+      - '8105:8105'
+    environment:
+      AGENT_DATABASE_URL: postgresql://postgres:postgres@postgres-agents:5432/agent_ltm
+      REDIS_URL: redis://redis:6379
+      KAFKA_BROKERS: kafka:9092
+      INFERENCE_MODE: mock
+    depends_on:
+      postgres-agents:
+        condition: service_healthy
+
+  agt06-memory:
+    build:
+      context: ../agents
+      dockerfile: agt06_memory/Dockerfile
+    restart: unless-stopped
+    ports:
+      - '8106:8106'
+    environment:
+      AGENT_DATABASE_URL: postgresql://postgres:postgres@postgres-agents:5432/agent_ltm
+      REDIS_URL: redis://redis:6379
+      KAFKA_BROKERS: kafka:9092
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+      OLLAMA_BASE_URL: http://ollama:11434
+      INFERENCE_MODE: mock
+    depends_on:
+      postgres-agents:
+        condition: service_healthy
+      ollama:
+        condition: service_started
+
+  agt07-review:
+    build:
+      context: ../agents
+      dockerfile: agt07_review/Dockerfile
+    restart: unless-stopped
+    ports:
+      - '8107:8107'
+    environment:
+      AGENT_DATABASE_URL: postgresql://postgres:postgres@postgres-agents:5432/agent_ltm
+      REDIS_URL: redis://redis:6379
+      KAFKA_BROKERS: kafka:9092
+      INFERENCE_MODE: mock
+    depends_on:
+      postgres-agents:
+        condition: service_healthy
+
+  agt08-analysis:
+    build:
+      context: ../agents
+      dockerfile: agt08_analysis/Dockerfile
+    restart: unless-stopped
+    ports:
+      - '8108:8108'
+    environment:
+      AGENT_DATABASE_URL: postgresql://postgres:postgres@postgres-agents:5432/agent_ltm
+      REDIS_URL: redis://redis:6379
+      KAFKA_BROKERS: kafka:9092
+      INFERENCE_MODE: mock
+    depends_on:
+      postgres-agents:
+        condition: service_healthy
+
+  agt09-recommendation:
+    build:
+      context: ../agents
+      dockerfile: agt09_recommendation/Dockerfile
+    restart: unless-stopped
+    ports:
+      - '8109:8109'
+    environment:
+      AGENT_DATABASE_URL: postgresql://postgres:postgres@postgres-agents:5432/agent_ltm
+      REDIS_URL: redis://redis:6379
+      KAFKA_BROKERS: kafka:9092
+      INFERENCE_MODE: mock
+    depends_on:
+      postgres-agents:
+        condition: service_healthy
+
+  agt10-habit:
+    build:
+      context: ../agents
+      dockerfile: agt10_habit/Dockerfile
+    restart: unless-stopped
+    ports:
+      - '8110:8110'
+    environment:
+      AGENT_DATABASE_URL: postgresql://postgres:postgres@postgres-agents:5432/agent_ltm
+      REDIS_URL: redis://redis:6379
+      KAFKA_BROKERS: kafka:9092
+      NOVU_API_KEY: ${NOVU_API_KEY:-}
+      NOVU_APP_ID: ${NOVU_APP_ID:-}
+      INFERENCE_MODE: mock
+    depends_on:
+      postgres-agents:
+        condition: service_healthy
+
+  agt11-translation:
+    build:
+      context: ../agents
+      dockerfile: agt11_translation/Dockerfile
+    restart: unless-stopped
+    ports:
+      - '8111:8111'
+    environment:
+      REDIS_URL: redis://redis:6379
+      KAFKA_BROKERS: kafka:9092
+      OLLAMA_BASE_URL: http://ollama:11434
+      INFERENCE_MODE: mock
+    depends_on:
+      redis:
+        condition: service_started
+      ollama:
+        condition: service_started
+
 volumes:
   postgres-user-data:
   postgres-learning-materials-data:
@@ -271,3 +519,5 @@ volumes:
   postgres-ai-tutor-data:
   postgres-notification-data:
   minio-data:
+  postgres-agents-data:
+  ollama-models:

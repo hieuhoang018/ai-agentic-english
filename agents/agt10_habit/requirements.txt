@@ -1,0 +1,3 @@
+-r ../requirements-base.txt
+# Phase 8+ only — uncomment when implementing GMM notification timing
+# scikit-learn>=1.4.0

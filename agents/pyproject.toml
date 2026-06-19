@@ -1,0 +1,12 @@
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+pythonpath = [".."]
+testpaths = [
+    "agt01_profiling/tests",
+    "agt02_learning_path/tests",
+    "agt03_tutor/tests",
+    "agt06_memory/tests",
+]
+markers = [
+    "integration: requires a live postgres-agents on localhost:5438 with migrations applied (docker compose up -d postgres-agents && infra/scripts/run-agent-migrations.sh)",
+]
