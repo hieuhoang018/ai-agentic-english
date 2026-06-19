@@ -185,26 +185,36 @@ a separate, mostly-independent track.
 
 Recommended order, each step independently verifiable:
 
-1. **Freeze new feature work** on `ai-tutor-service`/`memory-progress-service` — no further
-   investment, they're being deleted.
-2. **AI engineer**: build the two retargeting endpoints from §5a (reminder context) and the
-   curriculum integration from §5b, plus the AGT-10 Novu→event change from §4. These can land
-   without touching TS at all.
-3. **TS**: update `notification-service`'s `memoryProgressClient.ts` (rename/retarget to the
-   new agent base URL + port), add a Kafka consumer for `learning-path.ready` /
-   `achievement.unlocked` events now originating from AGT-02/AGT-10 (consumer code mostly
-   unchanged if the shape contract in §4 is honored — mainly a config/env change for which
-   service is "the producer," nothing in the consumer logic should need to change).
-4. **Joint**: settle §5c (onboarding/grading public contract) with the frontend owner, then
-   build whichever orchestration endpoints were agreed, plus the matching Kong route changes.
-5. **Delete** `services/ai-tutor-service`, `services/memory-progress-service`,
-   `packages/shared/src/inference/`, their Postgres services/volumes in
-   `infra/docker-compose.yml`, and their Kong routes.
-6. **Update `CLAUDE.md`** "Current Status" and the service list once the cut is live — at that
-   point the documented "5 backend services" becomes 3 TS + the `agents/` stack, and
-   `docs/implementation-plan.md` Phases 6/7 (real-time speaking, offline sync) need owners
-   reassigned (likely fully Python-side for speaking; offline sync TBD since it touches
-   review/progress data that's moving to Python).
+1. ✅ **Done.** **Freeze new feature work** on `ai-tutor-service`/`memory-progress-service` — no
+   further investment, they're being deleted. (Moot now — see step 5.)
+2. ⬜ **Not started — blocked on the AI engineer.** Build the two retargeting endpoints from
+   §5a (reminder context) and the curriculum integration from §5b, plus the AGT-10 Novu→event
+   change from §4. These can land without touching TS at all.
+3. 🔁 **Partially done, placeholder only.** `notification-service`'s reminder-context client
+   was renamed (`memoryProgressClient.ts` → `reminderContextClient.ts`,
+   `MEMORY_PROGRESS_SERVICE_URL` → `AGENTS_REMINDER_CONTEXT_URL`, placeholder default
+   `http://localhost:4106`) so swapping in the real agent base URL is a one-line config change
+   — but it still points nowhere real until step 2 lands. The `learning-path.ready` /
+   `achievement.unlocked` Kafka consumers already existed (built in Phase 5) and needed no code
+   change per the shape contract in §4; they're untested against a real AGT-02/AGT-10 producer
+   yet — that verification is still blocked on step 2.
+4. ⬜ **Not started — open joint decision.** Settle §5c (onboarding/grading public contract)
+   with the AI engineer + frontend owner, then build whichever orchestration endpoints were
+   agreed, plus the matching Kong route changes. Until this lands there are **no public
+   onboarding or grading routes at all** (deliberate gap, not an oversight — see step 5).
+5. ✅ **Done** (out of the order listed above — steps 3-7 of `docs/implementation-plan.md`'s
+   own Phase 6-TS checklist were independent of steps 1-2/4 and didn't need to wait). Deleted
+   `services/ai-tutor-service`, `services/memory-progress-service`,
+   `packages/shared/src/inference/` (+ the now-dead `attempt.recorded` event); trimmed
+   `infra/docker-compose.yml` (dropped `postgres-ai-tutor`/`postgres-memory-progress` +
+   containers + `INFERENCE_MODE`) and `gateway/kong/kong.yml` (dropped the four routes for the
+   retired services, left a `TODO` for step 4's replacement routes); pruned `package-lock.json`
+   (16 stale packages incl. `ts-fsrs`, `redis`, the two deleted service workspace entries). Root
+   `npm run build|lint|test` all pass (75 tests).
+6. ✅ **Done** (in `CLAUDE.local.md`, not `CLAUDE.md` — this repo keeps that status doc as a
+   private, gitignored file per its own header convention). `docs/implementation-plan.md`
+   Phase 7 (offline sync) still needs an owner — genuinely blocked on step 2/4 settling data
+   ownership on the agent side, not just on this checklist.
 
 ## 8. Acceptance criteria for "the merge is done"
 
