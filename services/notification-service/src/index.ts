@@ -3,7 +3,7 @@ import cron from 'node-cron';
 import { PrismaClient } from '../prisma/generated/client';
 import { createApp } from './app';
 import { startNotificationConsumer } from './kafka/bootstrap';
-import { createMemoryProgressClient } from './lib/memoryProgressClient';
+import { createReminderContextClient } from './lib/reminderContextClient';
 import { createLiveNovuClient } from './lib/novuClient';
 import { createUserServiceClient } from './lib/userServiceClient';
 import { runDailyReminder } from './scheduler/dailyReminder';
@@ -18,10 +18,10 @@ app.listen(port, () => {
 });
 
 const prisma = new PrismaClient();
-// Same swappable pattern as INFERENCE_MODE: real client when NOVU_API_KEY is set, mock otherwise.
+// Real client when NOVU_API_KEY is set, mock otherwise.
 const novuClient: NovuClient = process.env.NOVU_API_KEY ? createLiveNovuClient(process.env.NOVU_API_KEY) : new MockNovuClient();
 const userServiceClient = createUserServiceClient();
-const memoryProgressClient = createMemoryProgressClient();
+const reminderContextClient = createReminderContextClient();
 
 startNotificationConsumer(prisma, novuClient).catch((error) => {
   console.error('Failed to start notification Kafka consumer', error);
@@ -29,10 +29,10 @@ startNotificationConsumer(prisma, novuClient).catch((error) => {
 
 cron.schedule('0 * * * *', () => {
   const now = new Date();
-  runDailyReminder(now, prisma, userServiceClient, memoryProgressClient, novuClient).catch((error) => {
+  runDailyReminder(now, prisma, userServiceClient, reminderContextClient, novuClient).catch((error) => {
     console.error('Daily reminder job failed', error);
   });
-  runVocabOfTheDay(now, prisma, userServiceClient, memoryProgressClient, novuClient).catch((error) => {
+  runVocabOfTheDay(now, prisma, userServiceClient, reminderContextClient, novuClient).catch((error) => {
     console.error('Vocab of the day job failed', error);
   });
 });

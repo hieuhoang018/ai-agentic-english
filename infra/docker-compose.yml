@@ -40,40 +40,6 @@ services:
       timeout: 5s
       retries: 10
 
-  postgres-memory-progress:
-    image: *postgres-image
-    restart: unless-stopped
-    environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: memory_progress_service
-    ports:
-      - '5435:5432'
-    volumes:
-      - postgres-memory-progress-data:/var/lib/postgresql/data
-    healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U postgres']
-      interval: 5s
-      timeout: 5s
-      retries: 10
-
-  postgres-ai-tutor:
-    image: *postgres-image
-    restart: unless-stopped
-    environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: ai_tutor_service
-    ports:
-      - '5436:5432'
-    volumes:
-      - postgres-ai-tutor-data:/var/lib/postgresql/data
-    healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U postgres']
-      interval: 5s
-      timeout: 5s
-      retries: 10
-
   postgres-notification:
     image: *postgres-image
     restart: unless-stopped
@@ -172,8 +138,6 @@ services:
     depends_on:
       - user-service
       - learning-materials-service
-      - memory-progress-service
-      - ai-tutor-service
       - notification-service
 
   # ---------------------------------------------------------------------
@@ -214,45 +178,6 @@ services:
       postgres-learning-materials:
         condition: service_healthy
 
-  memory-progress-service:
-    build:
-      context: ..
-      dockerfile: services/memory-progress-service/Dockerfile
-    restart: unless-stopped
-    ports:
-      - '4003:4003'
-    environment:
-      PORT: 4003
-      DATABASE_URL: postgresql://postgres:postgres@postgres-memory-progress:5432/memory_progress_service
-      REDIS_URL: redis://redis:6379
-      KAFKA_BROKERS: kafka:9092
-      LEARNING_MATERIALS_SERVICE_URL: http://learning-materials-service:4002
-      AI_TUTOR_SERVICE_URL: http://ai-tutor-service:4004
-      INTERNAL_SECRET: dev-internal-secret
-    depends_on:
-      postgres-memory-progress:
-        condition: service_healthy
-
-  ai-tutor-service:
-    build:
-      context: ..
-      dockerfile: services/ai-tutor-service/Dockerfile
-    restart: unless-stopped
-    ports:
-      - '4004:4004'
-    environment:
-      PORT: 4004
-      DATABASE_URL: postgresql://postgres:postgres@postgres-ai-tutor:5432/ai_tutor_service
-      REDIS_URL: redis://redis:6379
-      KAFKA_BROKERS: kafka:9092
-      INFERENCE_MODE: mock
-      LEARNING_MATERIALS_SERVICE_URL: http://learning-materials-service:4002
-      MEMORY_PROGRESS_SERVICE_URL: http://memory-progress-service:4003
-      INTERNAL_SECRET: dev-internal-secret
-    depends_on:
-      postgres-ai-tutor:
-        condition: service_healthy
-
   notification-service:
     build:
       context: ..
@@ -266,7 +191,9 @@ services:
       REDIS_URL: redis://redis:6379
       KAFKA_BROKERS: kafka:9092
       USER_SERVICE_URL: http://user-service:4001
-      MEMORY_PROGRESS_SERVICE_URL: http://memory-progress-service:4003
+      # Placeholder until the AI engineer publishes the agents-stack reminder-context endpoint
+      # (docs/agents-integration-plan.md §5a) — update this URL only, no code change needed.
+      AGENTS_REMINDER_CONTEXT_URL: http://localhost:4106
       INTERNAL_SECRET: dev-internal-secret
     depends_on:
       postgres-notification:
@@ -523,8 +450,6 @@ services:
 volumes:
   postgres-user-data:
   postgres-learning-materials-data:
-  postgres-memory-progress-data:
-  postgres-ai-tutor-data:
   postgres-notification-data:
   minio-data:
   postgres-agents-data:

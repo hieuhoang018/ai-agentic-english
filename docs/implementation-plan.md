@@ -1,5 +1,17 @@
 # AI Agentic English — Server-Side Implementation Plan
 
+> **⚠️ 2026-06-19 architecture split**: Phases 3 and 4 below (Memory & Progress Service, AI
+> Tutor Service) are being retired — that responsibility, plus Phase 6 (real-time speaking) and
+> the entire inference layer, now belongs to a separate AI engineer's Python `agents/` stack
+> (AGT-01..11), not this TS codebase. This team's ongoing scope is User Service, Learning
+> Materials Service, and Notification Service only. The full contract between the two stacks
+> (Kafka topics, HTTP endpoints, migration sequencing, acceptance criteria) is in
+> **`docs/agents-integration-plan.md`** — read that first for anything touching the boundary.
+> Phases 0-5 below are kept as historical record of what was actually built; Phase 6 is
+> reassigned (see inline note); Phase 7 ownership is TBD pending the cutover; Phase 8 is
+> superseded entirely. The new "Phase 6-TS" work (this team's cutover tasks) is tracked in
+> `CLAUDE.md`'s Current Status, not duplicated here.
+
 ## Context
 
 The repo currently has only a folder skeleton (per-package `package.json` + `README.md` stubs under `apps/web`, `services/*`, `packages/shared`, `gateway/kong`, `infra`, `docs`) created from the architecture described in the root `README.md`. No real code exists yet.
@@ -95,6 +107,12 @@ Goal: a series of dependency-ordered phases, each producing a runnable, testable
 
 ## Phase 3 — Memory & Progress Service (core dynamic state) + Inference Interface Contract
 
+> **Retired 2026-06-19**: this service and the inference interface contract are being removed
+> from the TS codebase. Responsibility (learner model, progress, FSRS-equivalent scheduling,
+> mistakes, attempts, vocab/highlights) moves to the `agents/` stack (primarily AGT-01, AGT-06,
+> AGT-07 — using SM-2, not `ts-fsrs`). See `docs/agents-integration-plan.md`. Kept below as
+> historical record only.
+
 **Exit criteria**: learner model creatable from onboarding inputs; progress + FSRS schedule storage and deterministic "next exercise/review" selection; mistakes store + deterministic highlight-item selection (content generation deferred to Phase 4); inference interface contract defined in `packages/shared`; tests cover FSRS scheduling (via `ts-fsrs`), next-exercise selection, and highlight selection.
 
 **Deliverables**:
@@ -113,6 +131,12 @@ Goal: a series of dependency-ordered phases, each producing a runnable, testable
 ---
 
 ## Phase 4 — AI Tutor Service: Onboarding, Grading, Highlights (sync flows, no realtime yet)
+
+> **Retired 2026-06-19**: this service is being removed from the TS codebase. Responsibility
+> (onboarding path generation, grading, highlight content, and the inference layer itself)
+> moves to the `agents/` stack (AGT-01 through AGT-05). See `docs/agents-integration-plan.md`
+> for the new public-contract decision needed (onboarding/grading orchestration endpoints) and
+> the curriculum-integration requirement on AGT-02. Kept below as historical record only.
 
 **Exit criteria**: 8.2.1 onboarding works end-to-end against mock LLM (assessment/self-assessment → learner model → sync path generation → path stored in Learning Materials → progress initialized → path returned); 8.2.2 exercise attempt works (next exercise served, objective grading deterministic, open-ended via mock LLM, feedback sync, attempt recorded async via Kafka); 8.2.3b highlight content generation works with Redis caching; integration tests cover all three flows end-to-end.
 
@@ -134,6 +158,13 @@ Goal: a series of dependency-ordered phases, each producing a runnable, testable
 
 ## Phase 5 — Notification Service + Kafka Event Wiring
 
+> **Update 2026-06-19**: this service stays on the TS side and is not being retired. However,
+> the *producer* side of `learning-path.ready` (was AI Tutor Service) and `achievement.unlocked`
+> (was Memory & Progress Service) is moving to the `agents/` stack (AGT-02 and AGT-10
+> respectively) — event shapes are unchanged, so the consumers below should not need code
+> changes, only a verification pass once the new producers are live. See
+> `docs/agents-integration-plan.md` §4 and the Phase 6-TS checklist in `CLAUDE.md`.
+
 **Exit criteria**: all business events in the Kafka topic list are published; Notification Service consumes them and triggers Novu (real sandbox account); scheduler fires daily-reminder + vocab-of-day jobs reading `/reminders/:userId/context`; subscriber sync to Novu via `user.upserted`; tests cover both event-driven and schedule-driven paths.
 
 **Deliverables**:
@@ -152,6 +183,14 @@ Goal: a series of dependency-ordered phases, each producing a runnable, testable
 ---
 
 ## Phase 6 — Real-Time Speaking (most complex, built last among core flows)
+
+> **Reassigned 2026-06-19**: this phase will not be built in `services/ai-tutor-service` or
+> anywhere else in this TS codebase. It is now entirely the AI engineer's responsibility, on
+> top of `agents/agt03_tutor` (which already has `websocket_handler.py`/`pipeline.py`/`asr.py`
+> scaffolding but no ticket-issuance endpoint or TTS yet). Removed from this team's roadmap.
+> Kept below only as the original spec the AI engineer can use as a reference for what "done"
+> looks like. See `docs/agents-integration-plan.md` §5d and §6 for the known gaps (no TTS
+> anywhere yet, Kong routing TBD).
 
 **Exit criteria**: 8.2.4 works against mock STT/TTS/LLM end-to-end — Kong validates JWT and routes to AI Tutor's ticket-issuing endpoint → client opens WebSocket directly to AI Tutor with ticket → AI Tutor validates ticket (Redis, one-time use) → loads learner context once → per-turn cascaded pipeline (mock STT → mock LLM → mock TTS), persisting transcript per turn → session end/timeout triggers single full-transcript analysis → publishes `speaking-session.analyzed` → Memory & Progress consumes and updates learner model + stores pattern findings. WebSocket integration test (via `ws` in Vitest) covers ticket issuance, handshake, multi-turn exchange, and session-end analysis + Kafka assertion.
 
@@ -175,7 +214,56 @@ Goal: a series of dependency-ordered phases, each producing a runnable, testable
 
 ---
 
+## Phase 6-TS — Integration Cutover (this team's side of the split)
+
+**This is this team's actual next phase** — replacing the now-reassigned Phase 6 above. Full
+bidirectional contract (including the AI engineer's to-dos) is in
+`docs/agents-integration-plan.md`; this section lists only what this team executes.
+
+**Exit criteria**: `services/ai-tutor-service` and `services/memory-progress-service` no longer
+exist in the repo; `notification-service` sources reminder context and its two retargeted Kafka
+event producers from the `agents/` stack instead; `infra/docker-compose.yml` and
+`gateway/kong/kong.yml` reflect the 3-TS-service + `agents/` topology; root
+`npm run test|lint|build` pass against the trimmed workspace.
+
+**Deliverables / sub-steps**:
+1. Retarget `notification-service/src/lib/memoryProgressClient.ts` to the AI engineer's new
+   reminder-context endpoint (replacing `memory-progress-service`'s
+   `GET /internal/reminders/:userId/context`) — same `ReminderContextDto` shape, only the base
+   URL/port changes. **Blocked on** the AI engineer exposing that endpoint (their action item,
+   see `docs/agents-integration-plan.md` §5a).
+2. Verify (not modify, unless shapes drift) `notification-service`'s existing Kafka consumers
+   (`learningPathReady.ts`, `achievementUnlocked.ts`, `reviewDue.ts`) against the new producers
+   (AGT-02, AGT-10) once those are live — run the same kind of real-Kafka end-to-end check used
+   to verify Phase 5.
+3. Delete `services/ai-tutor-service/` and `services/memory-progress-service/` (workspace entry
+   in root `package.json`, Dockerfiles, CI references, any `.env.example`s referencing them).
+4. Delete `packages/shared/src/inference/` (`LlmClient`/`SttClient`/`TtsClient` interfaces +
+   mocks) and the `ts-fsrs` dependency — no remaining TS consumer.
+5. `infra/docker-compose.yml`: remove `postgres-ai-tutor`, `postgres-memory-progress` (services
+   + volumes) and the `ai-tutor-service`/`memory-progress-service` containers.
+6. `gateway/kong/kong.yml`: remove routes for the retired services; add routes for whatever
+   onboarding/grading public contract is agreed with the AI engineer and the `apps/web` owner
+   (open joint decision — `docs/agents-integration-plan.md` §5c).
+7. Re-run root `npm run test|lint|build`; update `CLAUDE.md` Current Status once this lands.
+
+**Depends on**: the AI engineer's side of `docs/agents-integration-plan.md` (reminder-context
+endpoint, curriculum integration, AGT-10 Novu→event change) landing first for steps 1-2; steps
+3-7 can happen independently.
+
+**Critical files**: `services/notification-service/src/lib/memoryProgressClient.ts`,
+root `package.json` (workspaces list), `infra/docker-compose.yml`, `gateway/kong/kong.yml`,
+`packages/shared/src/inference/*`.
+
+---
+
 ## Phase 7 — Offline Sync Endpoints
+
+> **Ownership TBD 2026-06-19**: originally depended on Phase 3 (Memory & Progress's FSRS/
+> `ReviewSchedule`) and Phase 4 (highlight caching), both now retired from this codebase. Whether
+> this becomes an `agents/`-side deliverable or stays a TS concern (e.g. a thin proxy) is an
+> open decision — revisit once Phase 6-TS lands and the new data ownership is settled. Kept
+> below as the original spec for reference.
 
 **Exit criteria**: `GET /offline-package` returns due flashcards + FSRS state + latest highlight snapshot; `POST /offline-sync` replays queued review results through the same deterministic FSRS/learner-model logic as 8.2.3a; tests confirm sync replay produces identical FSRS state to the equivalent online attempt sequence.
 
@@ -194,6 +282,13 @@ Goal: a series of dependency-ordered phases, each producing a runnable, testable
 ---
 
 ## Phase 8 — Live AI Inference Integration
+
+> **Superseded 2026-06-19**: there is no longer a TS-side inference layer to integrate against —
+> `INFERENCE_MODE=mock|live` and `packages/shared/src/inference/` are being deleted in Phase
+> 6-TS. The AI engineer's `agents/shared/llm/router.py` (Groq → OpenRouter → Ollama) plus
+> `agt03_tutor/asr.py` (Groq Whisper) already implement most of what this phase describes,
+> entirely within the `agents/` stack. Kept below as historical reference for the original
+> intent (model tiers, latency concerns) — not an active phase for either side.
 
 **Not yet scheduled.** Every phase above (0–7) is built and tested against `INFERENCE_MODE=mock` — `MockLlmClient`/`MockSttClient`/`MockTtsClient` returning deterministic canned responses, no GPU node, no real model calls anywhere in the repo. This phase is what swaps that out for the self-hosted, locally-run GPU inference stack described in README §6/§10, owned by a separate AI engineer. It starts whenever that engineer's local GPU inference node (LLM + co-located STT/TTS, running on local/on-prem hardware rather than a third-party cloud API) is ready to integrate against — no other phase depends on it, and Phases 0–7 should remain fully runnable in mock mode indefinitely (e.g. for CI, local dev, demos) even after this phase ships.
 
