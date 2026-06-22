@@ -1,12 +1,18 @@
 """
 Habit Building Agent service.
-Manages streak tracking, re-engagement escalation, and notification scheduling.
+Manages streak tracking and milestone notifications via Kafka.
+Re-engagement notifications are handled by notification-service's cron scheduler — not here.
 """
 
 import logging
-from agents.agt10_habit.novu import trigger, sync_subscriber
+from agents.shared.events.producer import emit_ts_event
 
 logger = logging.getLogger(__name__)
+
+_ACHIEVEMENT_TYPE_MAP = {
+    "7-day streak": "7-day-streak",
+    "first-lesson": "first-lesson",
+}
 
 
 async def check_re_engagement(
@@ -17,39 +23,29 @@ async def check_re_engagement(
     review_due_count: int = 0,
 ) -> str | None:
     """
-    Trigger the appropriate re-engagement Novu template based on absence duration.
-    Returns the template ID triggered, or None if no action taken.
-
-    Escalation protocol:
-      1 day  → daily reminder
-      3 days → re-engagement nudge
-      7 days → weekly progress summary (email)
-      risk > 0.7 → proactive intervention
+    No-op. Re-engagement notifications (daily-reminder, re-engagement-nudge,
+    weekly-progress-summary) are sent by notification-service's cron scheduler,
+    which fetches context from AGT-07. AGT-10 must not duplicate those calls.
     """
-    payload_base = {
-        "streakDays": streak_days,
-        "reviewsDue": review_due_count,
-        "daysSince": days_since_last_session,
-    }
-
-    if days_since_last_session >= 7:
-        template = "weekly-progress-summary"
-    elif days_since_last_session >= 3:
-        template = "re-engagement-nudge"
-    elif days_since_last_session >= 1:
-        template = "daily-reminder"
-    elif risk_score > 0.7:
-        template = "proactive-intervention"
-    else:
-        return None
-
-    await trigger(template, clerk_user_id, payload_base)
-    return template
+    return None
 
 
 async def send_milestone(clerk_user_id: str, milestone_name: str) -> None:
-    """Trigger a milestone celebration notification."""
-    await trigger("milestone-celebration", clerk_user_id, {"milestoneName": milestone_name})
+    """
+    Emit achievement.unlocked Kafka event if the milestone maps to a known AchievementType.
+    Unknown milestones (e.g. '30-day streak', '100-day streak') are silently skipped —
+    add them to _ACHIEVEMENT_TYPE_MAP and the TS AchievementType union when Novu templates exist.
+    """
+    achievement_type = _ACHIEVEMENT_TYPE_MAP.get(milestone_name)
+    if achievement_type is None:
+        logger.info("Skipping Kafka emit for unrecognised milestone=%s", milestone_name)
+        return
+    await emit_ts_event(
+        "achievement.unlocked",
+        "achievement.unlocked",
+        {"userId": clerk_user_id, "achievementType": achievement_type, "metadata": {}},
+        key=clerk_user_id,
+    )
 
 
 async def record_session_complete(
@@ -63,7 +59,6 @@ async def record_session_complete(
     """
     new_streak = current_streak + 1
 
-    # Check streak milestones
     if new_streak in (7, 30, 100):
         await send_milestone(clerk_user_id, f"{new_streak}-day streak")
 
