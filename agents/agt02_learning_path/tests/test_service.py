@@ -191,10 +191,7 @@ async def test_generate_plan_creates_active_plan_with_activities(monkeypatch):
             "cold_start_flag": True,
         })
     )
-    respx.get(f"{service.LM_SERVICE_BASE_URL}/internal/catalog-summary").mock(
-        return_value=httpx.Response(404)
-    )
-    respx.get(f"{service.LM_SERVICE_BASE_URL}/modules").mock(
+    respx.get(f"{service.LM_SERVICE_BASE_URL}/internal/catalog/summary").mock(
         return_value=httpx.Response(404)
     )
     respx.post(f"{service.LM_SERVICE_BASE_URL}/internal/learning-paths").mock(
@@ -226,10 +223,7 @@ async def test_generate_plan_twice_deactivates_previous_and_increments_version(m
     respx.get(f"{service.AGT01_BASE_URL}/profile/{clerk_id}").mock(
         return_value=httpx.Response(200, json={"clerk_user_id": clerk_id, "irt_theta": {}, "cold_start_flag": True})
     )
-    respx.get(f"{service.LM_SERVICE_BASE_URL}/internal/catalog-summary").mock(
-        return_value=httpx.Response(404)
-    )
-    respx.get(f"{service.LM_SERVICE_BASE_URL}/modules").mock(
+    respx.get(f"{service.LM_SERVICE_BASE_URL}/internal/catalog/summary").mock(
         return_value=httpx.Response(404)
     )
     respx.post(f"{service.LM_SERVICE_BASE_URL}/internal/learning-paths").mock(
@@ -266,7 +260,7 @@ async def test_generate_plan_falls_back_when_agt01_unreachable(monkeypatch):
     clerk_id = f"test-user-{uuid.uuid4()}"
 
     respx.get(f"{service.AGT01_BASE_URL}/profile/{clerk_id}").mock(side_effect=httpx.ConnectError("refused"))
-    respx.get(f"{service.LM_SERVICE_BASE_URL}/internal/catalog-summary").mock(side_effect=httpx.ConnectError("refused"))
+    respx.get(f"{service.LM_SERVICE_BASE_URL}/internal/catalog/summary").mock(side_effect=httpx.ConnectError("refused"))
     respx.post(f"{service.LM_SERVICE_BASE_URL}/internal/learning-paths").mock(
         return_value=httpx.Response(200)
     )
@@ -284,17 +278,36 @@ async def test_generate_plan_falls_back_when_agt01_unreachable(monkeypatch):
 
 
 @respx.mock
-async def test_fetch_catalog_summary_falls_back_to_modules_on_404(monkeypatch, patch_redis):
-    respx.get(f"{service.LM_SERVICE_BASE_URL}/internal/catalog-summary").mock(
-        return_value=httpx.Response(404)
-    )
-    respx.get(f"{service.LM_SERVICE_BASE_URL}/modules").mock(
-        return_value=httpx.Response(200, json={"speaking": ["module-1"], "writing": ["module-2"]})
+async def test_fetch_catalog_summary_groups_modules_by_skill_code(monkeypatch, patch_redis):
+    respx.get(f"{service.LM_SERVICE_BASE_URL}/internal/catalog/summary").mock(
+        return_value=httpx.Response(200, json={
+            "modules": [
+                {"id": "m1", "title": "Client calls", "cefrLevel": "B1", "skillFocus": "speaking", "lessonCount": 3, "exerciseCount": 9},
+                {"id": "m2", "title": "Follow-up emails", "cefrLevel": "B2", "skillFocus": "writing", "lessonCount": 2, "exerciseCount": 6},
+            ],
+            "totalModules": 2,
+            "totalLessons": 5,
+            "totalExercises": 15,
+        })
     )
 
     catalog = await service._fetch_catalog_summary()
 
-    assert catalog == {"speaking": ["module-1"], "writing": ["module-2"]}
+    assert catalog == {
+        "S": [{"activity_type": "speaking_module", "title": "Client calls", "estimated_minutes": 15, "difficulty": "B1"}],
+        "W": [{"activity_type": "writing_module", "title": "Follow-up emails", "estimated_minutes": 10, "difficulty": "B2"}],
+    }
+
+
+@respx.mock
+async def test_fetch_catalog_summary_falls_back_to_empty_on_404(monkeypatch, patch_redis):
+    respx.get(f"{service.LM_SERVICE_BASE_URL}/internal/catalog/summary").mock(
+        return_value=httpx.Response(404)
+    )
+
+    catalog = await service._fetch_catalog_summary()
+
+    assert catalog == {}
 
 
 @respx.mock
@@ -304,10 +317,9 @@ async def test_lm_service_sync_failure_does_not_block_plan_creation(monkeypatch)
     respx.get(f"{service.AGT01_BASE_URL}/profile/{clerk_id}").mock(
         return_value=httpx.Response(200, json={"clerk_user_id": clerk_id, "irt_theta": {}, "cold_start_flag": True})
     )
-    respx.get(f"{service.LM_SERVICE_BASE_URL}/internal/catalog-summary").mock(
+    respx.get(f"{service.LM_SERVICE_BASE_URL}/internal/catalog/summary").mock(
         return_value=httpx.Response(404)
     )
-    respx.get(f"{service.LM_SERVICE_BASE_URL}/modules").mock(return_value=httpx.Response(404))
     # LM service sync is down — must not block plan creation
     respx.post(f"{service.LM_SERVICE_BASE_URL}/internal/learning-paths").mock(
         side_effect=httpx.ConnectError("refused")

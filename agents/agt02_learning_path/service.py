@@ -8,8 +8,8 @@ generate_plan() flow:
   2. If the caller supplied skill_estimates, overlay them onto irt_theta.
   3. Compute skill_allocation via optimizer.allocate_skills().
   4. Fetch (and Redis-cache) a catalog summary from the Learning Materials
-     service. Falls back to {} (triggers optimizer.FALLBACK_ACTIVITIES) if
-     unreachable or the route doesn't exist yet.
+     service, grouped by skill code. Falls back to {} (triggers
+     optimizer.FALLBACK_ACTIVITIES) if unreachable.
   5. Build an LLM prompt describing the profile, allocation, and goals.
   6. Call the LLM router (AGT02, async tier) for a short rationale.
   7. Select today's activities via optimizer.select_daily_activities().
@@ -38,6 +38,10 @@ logger = logging.getLogger(__name__)
 
 AGT01_BASE_URL = os.environ.get("AGT01_BASE_URL", "http://agt01-profiling:8101")
 LM_SERVICE_BASE_URL = os.environ.get("LM_SERVICE_BASE_URL", "http://learning-materials-service:4002")
+LM_INTERNAL_SECRET = os.environ.get("LM_INTERNAL_SECRET", "dev-internal-secret")
+
+# learning-materials-service's Module.skillFocus values -> optimizer skill codes (L/S/R/W).
+_SKILL_FOCUS_TO_CODE = {"listening": "L", "speaking": "S", "reading": "R", "writing": "W"}
 
 CATALOG_CACHE_KEY = "catalog:summary"
 CATALOG_CACHE_TTL = 3600  # 1 hour
@@ -60,25 +64,47 @@ async def _fetch_profile(clerk_user_id: str) -> dict:
         return dict(_COLD_START_PROFILE)
 
 
+def _modules_to_skill_catalog(modules: list[dict]) -> dict[str, list[dict]]:
+    """
+    Group learning-materials-service module summaries by optimizer skill code,
+    converting each module into an activity dict select_daily_activities() understands.
+    Modules with an unrecognized skillFocus are skipped.
+    """
+    catalog: dict[str, list[dict]] = {}
+    for module in modules:
+        skill = _SKILL_FOCUS_TO_CODE.get(module.get("skillFocus"))
+        if not skill:
+            continue
+        lesson_count = module.get("lessonCount") or 1
+        catalog.setdefault(skill, []).append({
+            "activity_type": f"{module['skillFocus']}_module",
+            "title": module["title"],
+            "estimated_minutes": min(max(lesson_count * 5, 5), 20),
+            "difficulty": module.get("cefrLevel", "B1"),
+        })
+    return catalog
+
+
 async def _fetch_catalog_summary() -> dict:
     """
-    Fetch a per-skill summary of available learning materials, cached in Redis.
-    On 404 from /internal/catalog-summary, retries /modules as fallback.
-    Falls back to {} on all other failures — optimizer FALLBACK_ACTIVITIES cover that.
+    Fetch the module catalog from learning-materials-service and group it by
+    skill code, cached in Redis. Falls back to {} on any failure — optimizer
+    FALLBACK_ACTIVITIES covers that.
     """
     r = await get_redis()
     cached = await r.get(CATALOG_CACHE_KEY)
     if cached:
         return json.loads(cached)
 
-    catalog = {}
+    catalog: dict[str, list[dict]] = {}
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
-            resp = await client.get(f"{LM_SERVICE_BASE_URL}/internal/catalog-summary")
-            if resp.status_code == 404:
-                resp = await client.get(f"{LM_SERVICE_BASE_URL}/modules")
+            resp = await client.get(
+                f"{LM_SERVICE_BASE_URL}/internal/catalog/summary",
+                headers={"x-internal-secret": LM_INTERNAL_SECRET},
+            )
             resp.raise_for_status()
-            catalog = resp.json()
+            catalog = _modules_to_skill_catalog(resp.json().get("modules", []))
     except Exception as exc:
         logger.warning("generate_plan: catalog summary fetch failed: %s", exc)
 
