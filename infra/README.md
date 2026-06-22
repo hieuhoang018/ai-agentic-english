@@ -15,23 +15,24 @@ cd infra && docker compose up -d --build
 
 This brings up:
 
-- 5x Postgres (one per service): `postgres-user` (5433), `postgres-learning-materials` (5434),
-  `postgres-memory-progress` (5435), `postgres-ai-tutor` (5436), `postgres-notification` (5437)
-- `redis` (6379), `kafka` (9092, KRaft single-node), `minio` (9000 API / 9001 console) +
-  `minio-init` (one-shot, creates the `audio` and `attachments` buckets)
+- 3x Postgres (TS services): `postgres-user` (5433), `postgres-learning-materials` (5434),
+  `postgres-notification` (5437)
+- 1x Postgres (agent LTM, pgvector): `postgres-agents` (5438)
+- `redis` (6379), `kafka` (9092, KRaft single-node), `minio` (9000 API / 9001 console)
 - `kong` (8000 proxy / 8001 admin), DB-less, declarative config from `gateway/kong/kong.yml`
-- The 5 backend services, each built from its own `Dockerfile`, exposed on 4001-4005 and
-  also reachable through Kong
+- TS backend services: `user-service` (4001), `learning-materials-service` (4002),
+  `notification-service` (4005), all reachable through Kong
+- Python agent services: `agt01`–`agt11` (ports 8101–8111) + `agt-orchestrator` (8100)
 
 ### Verify
 
 ```bash
-curl http://localhost:4001/health                      # direct
-curl http://localhost:8000/api/health/user-service      # via Kong
+curl http://localhost:4001/health                        # user-service direct
+curl http://localhost:8000/api/health/user-service       # via Kong
+curl http://localhost:4002/health                        # learning-materials-service
+curl http://localhost:4005/health                        # notification-service
+curl http://localhost:8100/health                        # agt-orchestrator
 ```
-
-Repeat for `learning-materials-service` (4002), `memory-progress-service` (4003),
-`ai-tutor-service` (4004), `notification-service` (4005).
 
 ### Other useful commands
 

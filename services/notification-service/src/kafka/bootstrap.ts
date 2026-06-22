@@ -4,8 +4,6 @@ import {
   LEARNING_PATH_READY_TOPIC,
   LearningPathReadyEvent,
   NovuClient,
-  REVIEW_DUE_TOPIC,
-  ReviewDueEvent,
   USER_UPSERTED_TOPIC,
   UserUpsertedEvent,
   createKafkaConsumer,
@@ -14,7 +12,6 @@ import {
 import { AppPrismaClient } from '../lib/prisma';
 import { handleAchievementUnlocked } from './consumers/achievementUnlocked';
 import { handleLearningPathReady } from './consumers/learningPathReady';
-import { handleReviewDue } from './consumers/reviewDue';
 import { handleUserUpserted } from './consumers/userUpserted';
 
 export function startNotificationConsumer(prisma: AppPrismaClient, novuClient: NovuClient) {
@@ -22,7 +19,7 @@ export function startNotificationConsumer(prisma: AppPrismaClient, novuClient: N
   const consumer = createKafkaConsumer({
     brokers,
     groupId: 'notification-service',
-    topics: [USER_UPSERTED_TOPIC, LEARNING_PATH_READY_TOPIC, ACHIEVEMENT_UNLOCKED_TOPIC, REVIEW_DUE_TOPIC],
+    topics: [USER_UPSERTED_TOPIC, LEARNING_PATH_READY_TOPIC, ACHIEVEMENT_UNLOCKED_TOPIC],
     onMessage: async (topic, event) => {
       switch (topic) {
         case USER_UPSERTED_TOPIC:
@@ -31,8 +28,6 @@ export function startNotificationConsumer(prisma: AppPrismaClient, novuClient: N
           return handleLearningPathReady(prisma, novuClient, event.payload as LearningPathReadyEvent);
         case ACHIEVEMENT_UNLOCKED_TOPIC:
           return handleAchievementUnlocked(prisma, novuClient, event.payload as AchievementUnlockedEvent);
-        case REVIEW_DUE_TOPIC:
-          return handleReviewDue(prisma, novuClient, event.payload as ReviewDueEvent);
         default:
           return undefined;
       }

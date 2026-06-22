@@ -12,6 +12,9 @@ logger = logging.getLogger(__name__)
 _ACHIEVEMENT_TYPE_MAP = {
     "7-day streak": "7-day-streak",
     "first-lesson": "first-lesson",
+    # "level-up" is the third AchievementType in the TS shared package but has no producer here:
+    # it represents a CEFR level advancement (A1→A2, etc.) and belongs in AGT-05 (assessment)
+    # once IRT theta thresholds are defined. Tracked in: TODO implement level-up in AGT-05.
 }
 
 
