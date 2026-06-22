@@ -13,7 +13,7 @@ Rubric dimensions (0.0–1.0 each):
 
 import json
 import logging
-from agents.shared.llm.router import call_llm, AgentID
+from openai import AsyncOpenAI
 from agents.shared.config import settings
 
 logger = logging.getLogger(__name__)
@@ -56,7 +56,12 @@ async def score_writing(text: str, context: str = "professional email") -> dict:
     ]
 
     try:
-        raw = await call_llm(messages, AgentID.AGT04)
+        client = AsyncOpenAI(base_url=settings.OLLAMA_BASE_URL + "/v1", api_key="ollama")
+        resp = await client.chat.completions.create(
+            model="qwen2.5:7b",
+            messages=messages,
+        )
+        raw = resp.choices[0].message.content or ""
         scores = json.loads(raw)
         # Validate expected keys
         for key in ("grammar", "coherence", "cohesion", "register", "structure"):

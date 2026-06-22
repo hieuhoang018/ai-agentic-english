@@ -43,4 +43,5 @@ async def respond(body: RespondRequest):
         body.correct,
         body.prior_responses,
         body.skill_domain,
+        body.clerk_user_id,
     )

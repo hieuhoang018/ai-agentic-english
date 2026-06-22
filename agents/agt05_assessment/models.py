@@ -7,6 +7,7 @@ class StartAssessmentRequest(BaseModel):
 
 
 class RespondRequest(BaseModel):
+    clerk_user_id: str
     assessment_id: str
     item_id: str
     correct: bool

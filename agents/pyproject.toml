@@ -5,6 +5,8 @@ testpaths = [
     "agt01_profiling/tests",
     "agt02_learning_path/tests",
     "agt03_tutor/tests",
+    "agt04_feedback/tests",
+    "agt05_assessment/tests",
     "agt06_memory/tests",
     "agt07_review/tests",
     "agt10_habit/tests",

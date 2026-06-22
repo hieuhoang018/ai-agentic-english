@@ -6,12 +6,13 @@ At scaffold: sequential item delivery with stub theta estimation.
 Full 3PL IRT + Fisher information maximisation deferred to Phase 8+.
 """
 
+import json
 import httpx
 import logging
 from agents.agt05_assessment.cat_engine import (
     estimate_theta_stub, select_next_item_stub, should_terminate
 )
-from agents.shared.db.postgres import fetchrow, execute
+from agents.shared.db.postgres import execute
 from agents.agt01_profiling.irt import theta_to_cefr
 
 logger = logging.getLogger(__name__)
@@ -67,6 +68,7 @@ async def record_response(
     correct: bool,
     prior_responses: list[dict],
     skill_domain: str,
+    clerk_user_id: str,
 ) -> dict:
     """Record a response and return the next item or termination result."""
     responses = prior_responses + [{"item_id": item_id, "correct": correct}]
@@ -74,6 +76,17 @@ async def record_response(
 
     if should_terminate(responses):
         cefr = theta_to_cefr(theta)
+        await execute(
+            """INSERT INTO assessment_history
+               (clerk_user_id, skill_domain, item_id, response, irt_score, cefr_band)
+               VALUES ($1, $2, $3, $4::jsonb, $5, $6)""",
+            clerk_user_id,
+            skill_domain,
+            assessment_id,
+            json.dumps(responses),
+            theta,
+            cefr,
+        )
         return {
             "assessment_id": assessment_id,
             "skill_domain": skill_domain,
