@@ -139,6 +139,7 @@ services:
       - user-service
       - learning-materials-service
       - notification-service
+      - agt-orchestrator
 
   # ---------------------------------------------------------------------
   # Backend services
@@ -444,6 +445,29 @@ services:
       redis:
         condition: service_started
       ollama:
+        condition: service_started
+
+  agt-orchestrator:
+    build:
+      context: ../agents
+      dockerfile: agt_orchestrator/Dockerfile
+    restart: unless-stopped
+    ports:
+      - '8100:8100'
+    environment:
+      KAFKA_BROKERS: kafka:9092
+      AGT01_BASE_URL: http://agt01-profiling:8101
+      AGT02_BASE_URL: http://agt02-learning-path:8102
+      LM_SERVICE_BASE_URL: http://learning-materials-service:4002
+      INTERNAL_SECRET: dev-internal-secret
+    depends_on:
+      kafka:
+        condition: service_started
+      agt01-profiling:
+        condition: service_started
+      agt02-learning-path:
+        condition: service_started
+      learning-materials-service:
         condition: service_started
 
 volumes:
