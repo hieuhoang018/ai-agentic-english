@@ -139,6 +139,7 @@ services:
       - user-service
       - learning-materials-service
       - notification-service
+      - agt-orchestrator
 
   # ---------------------------------------------------------------------
   # Backend services
@@ -174,6 +175,7 @@ services:
       DATABASE_URL: postgresql://postgres:postgres@postgres-learning-materials:5432/learning_materials_service
       REDIS_URL: redis://redis:6379
       KAFKA_BROKERS: kafka:9092
+      INTERNAL_SECRET: dev-internal-secret
     depends_on:
       postgres-learning-materials:
         condition: service_healthy
@@ -191,9 +193,7 @@ services:
       REDIS_URL: redis://redis:6379
       KAFKA_BROKERS: kafka:9092
       USER_SERVICE_URL: http://user-service:4001
-      # Placeholder until the AI engineer publishes the agents-stack reminder-context endpoint
-      # (docs/agents-integration-plan.md §5a) — update this URL only, no code change needed.
-      AGENTS_REMINDER_CONTEXT_URL: http://localhost:4106
+      REVIEW_AGENT_URL: http://agt07-review:8107
       INTERNAL_SECRET: dev-internal-secret
     depends_on:
       postgres-notification:
@@ -375,6 +375,7 @@ services:
       REDIS_URL: redis://redis:6379
       KAFKA_BROKERS: kafka:9092
       INFERENCE_MODE: mock
+      INTERNAL_SECRET: dev-internal-secret
     depends_on:
       postgres-agents:
         condition: service_healthy
@@ -422,8 +423,6 @@ services:
       AGENT_DATABASE_URL: postgresql://postgres:postgres@postgres-agents:5432/agent_ltm
       REDIS_URL: redis://redis:6379
       KAFKA_BROKERS: kafka:9092
-      NOVU_API_KEY: ${NOVU_API_KEY:-}
-      NOVU_APP_ID: ${NOVU_APP_ID:-}
       INFERENCE_MODE: mock
     depends_on:
       postgres-agents:
@@ -445,6 +444,29 @@ services:
       redis:
         condition: service_started
       ollama:
+        condition: service_started
+
+  agt-orchestrator:
+    build:
+      context: ../agents
+      dockerfile: agt_orchestrator/Dockerfile
+    restart: unless-stopped
+    ports:
+      - '8100:8100'
+    environment:
+      KAFKA_BROKERS: kafka:9092
+      AGT01_BASE_URL: http://agt01-profiling:8101
+      AGT02_BASE_URL: http://agt02-learning-path:8102
+      LM_SERVICE_BASE_URL: http://learning-materials-service:4002
+      INTERNAL_SECRET: dev-internal-secret
+    depends_on:
+      kafka:
+        condition: service_started
+      agt01-profiling:
+        condition: service_started
+      agt02-learning-path:
+        condition: service_started
+      learning-materials-service:
         condition: service_started
 
 volumes:

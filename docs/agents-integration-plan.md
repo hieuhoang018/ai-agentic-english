@@ -1,8 +1,21 @@
 # AI Agents Integration Plan
 
-**Status:** Proposed — pending sign-off before implementation starts.
+> **DEPRECATED — implementation complete as of 2026-06-22.**
+> This document contained known defects and was superseded during execution. See commits `530477e`–`0ed404e` on branch `main` for the actual implementation.
+
+**Status:** ✅ COMPLETE — all integration tasks shipped.
 **Owners:** TS backend (this team) ↔ AI engineer (`agents/` Python stack).
-**Last updated:** 2026-06-19.
+**Last updated:** 2026-06-22.
+
+## Completed Work (2026-06-22)
+
+| Task | Commit | Description |
+|---|---|---|
+| A-1 | `530477e` | Fix `REVIEW_AGENT_URL` env var; notification-service now correctly calls AGT-07 |
+| B-1 | `119cad4` | Add `emit_ts_event()` to shared producer — DomainEvent wrapper for TS consumers |
+| B-2 | `a1d7b78` | AGT-10: replace Novu calls with `achievement.unlocked` Kafka events |
+| B-3 | `5f3ce6f` | AGT-07: add `GET /internal/reminders/{userId}/context` with `x-internal-secret` auth |
+| B-4/C-1 | `4027b6b`,`0ed404e` | New `agt_orchestrator` (port 8100) — onboarding + grading endpoints, Kong JWT routes |
 
 ## 1. Why this document exists
 

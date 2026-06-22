@@ -138,10 +138,35 @@ services:
               claims_to_verify:
                 - exp
 
-  # TODO(Phase 6-TS, docs/agents-integration-plan.md §5c, §5d): add routes for the
-  # agreed onboarding/grading public contract once it's settled with the AI engineer
-  # and the apps/web owner. Previously: /api/onboarding -> memory-progress-service,
-  # /api/grading -> ai-tutor-service (both services retired).
+  - name: agt-orchestrator-onboarding
+    url: http://agt-orchestrator:8100/orchestrate/onboarding
+    routes:
+      - name: agt-orchestrator-onboarding-route
+        paths:
+          - /api/orchestrate/onboarding
+        strip_path: true
+        methods:
+          - POST
+        plugins:
+          - name: jwt
+            config:
+              claims_to_verify:
+                - exp
+
+  - name: agt-orchestrator-grading
+    url: http://agt-orchestrator:8100/orchestrate/grading
+    routes:
+      - name: agt-orchestrator-grading-route
+        paths:
+          - /api/orchestrate/grading
+        strip_path: true
+        methods:
+          - POST
+        plugins:
+          - name: jwt
+            config:
+              claims_to_verify:
+                - exp
 
   - name: notification-service
     url: http://notification-service:4005/health
