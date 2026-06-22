@@ -40,6 +40,9 @@ class Settings(BaseSettings):
     # Default is "mock" — all phases work without API keys in mock mode
     INFERENCE_MODE: str = "mock"
 
+    # Shared secret for internal service-to-service calls (e.g. notification-service → AGT-07)
+    INTERNAL_SECRET: str = "dev-internal-secret"
+
     class Config:
         env_file = ".env"
         extra = "ignore"
