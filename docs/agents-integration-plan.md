@@ -1,5 +1,8 @@
 # AI Agents Integration Plan
 
+> **DEPRECATED — superseded by `docs/superpowers/plans/2026-06-19-stack-consolidation.md`.**
+> This document contains known defects (factual error about AGT-10's Kafka consumers, unresolved §5a/§5c decisions, wrong sequencing). Do not follow it.
+
 **Status:** Proposed — pending sign-off before implementation starts.
 **Owners:** TS backend (this team) ↔ AI engineer (`agents/` Python stack).
 **Last updated:** 2026-06-19.

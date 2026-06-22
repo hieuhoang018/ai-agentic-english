@@ -6,7 +6,7 @@ export interface ReminderContextClient {
 
 export function createReminderContextClient(): ReminderContextClient {
   const http = createInternalHttpClient(
-    getEnv('AGENTS_REMINDER_CONTEXT_URL', 'http://localhost:4106'),
+    getEnv('REVIEW_AGENT_URL', 'http://localhost:8107'),
     getEnv('INTERNAL_SECRET', 'dev-internal-secret'),
   );
 

@@ -191,9 +191,7 @@ services:
       REDIS_URL: redis://redis:6379
       KAFKA_BROKERS: kafka:9092
       USER_SERVICE_URL: http://user-service:4001
-      # Placeholder until the AI engineer publishes the agents-stack reminder-context endpoint
-      # (docs/agents-integration-plan.md §5a) — update this URL only, no code change needed.
-      AGENTS_REMINDER_CONTEXT_URL: http://localhost:4106
+      REVIEW_AGENT_URL: http://agt07-review:8107
       INTERNAL_SECRET: dev-internal-secret
     depends_on:
       postgres-notification:
@@ -375,6 +373,7 @@ services:
       REDIS_URL: redis://redis:6379
       KAFKA_BROKERS: kafka:9092
       INFERENCE_MODE: mock
+      INTERNAL_SECRET: dev-internal-secret
     depends_on:
       postgres-agents:
         condition: service_healthy
