@@ -139,3 +139,21 @@ async def test_onboarding_missing_userid():
             json={"currentLevel": "B1"},
         )
     assert resp.status_code == 422
+
+
+@respx.mock
+async def test_onboarding_agt01_unreachable(monkeypatch):
+    """Connection error to AGT-01 must return 502."""
+    monkeypatch.setattr("agents.agt_orchestrator.main.emit_ts_event", AsyncMock())
+
+    respx.post("http://agt01-profiling:8101/profile/user_test").mock(
+        side_effect=httpx.ConnectError("Connection refused")
+    )
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.post(
+            "/orchestrate/onboarding",
+            json={"userId": "user_test"},
+        )
+
+    assert resp.status_code == 502

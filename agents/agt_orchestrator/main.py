@@ -47,25 +47,33 @@ async def health():
 @app.post("/orchestrate/onboarding", status_code=201)
 async def orchestrate_onboarding(body: OnboardingRequest):
     async with httpx.AsyncClient(timeout=10.0) as client:
-        r1 = await client.post(
-            f"{AGT01_BASE_URL}/profile/{body.userId}",
-            json={
-                "clerk_user_id": body.userId,
-                "goal_profile": {"currentLevel": body.currentLevel, "goals": body.goals},
-            },
-        )
-        if r1.status_code >= 500:
+        try:
+            r1 = await client.post(
+                f"{AGT01_BASE_URL}/profile/{body.userId}",
+                json={
+                    "clerk_user_id": body.userId,
+                    "goal_profile": {"currentLevel": body.currentLevel, "goals": body.goals},
+                },
+            )
+        except httpx.HTTPError as exc:
+            logger.error("AGT-01 unreachable: %s", exc)
+            raise HTTPException(status_code=502, detail="AGT-01 profile creation failed")
+        if not r1.is_success:
             raise HTTPException(status_code=502, detail="AGT-01 profile creation failed")
 
-        r2 = await client.post(
-            f"{AGT02_BASE_URL}/plans/{body.userId}/generate",
-            json={
-                "skill_estimates": None,
-                "daily_minutes": body.dailyTimeBudgetMinutes,
-                "goals": body.goals,
-            },
-        )
-        if r2.status_code >= 500:
+        try:
+            r2 = await client.post(
+                f"{AGT02_BASE_URL}/plans/{body.userId}/generate",
+                json={
+                    "skill_estimates": None,
+                    "daily_minutes": body.dailyTimeBudgetMinutes,
+                    "goals": body.goals,
+                },
+            )
+        except httpx.HTTPError as exc:
+            logger.error("AGT-02 unreachable: %s", exc)
+            raise HTTPException(status_code=502, detail="AGT-02 plan generation failed")
+        if not r2.is_success:
             raise HTTPException(status_code=502, detail="AGT-02 plan generation failed")
 
     plan = r2.json()
@@ -90,15 +98,19 @@ async def orchestrate_onboarding(body: OnboardingRequest):
 
 @app.post("/orchestrate/grading")
 async def orchestrate_grading(body: GradingRequest):
-    async with httpx.AsyncClient(timeout=10.0) as client:
-        r = await client.get(
-            f"{LM_SERVICE_BASE_URL}/internal/exercises/{body.exerciseId}",
-            headers={"x-internal-secret": INTERNAL_SECRET},
-        )
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            r = await client.get(
+                f"{LM_SERVICE_BASE_URL}/internal/exercises/{body.exerciseId}",
+                headers={"x-internal-secret": INTERNAL_SECRET},
+            )
+    except httpx.HTTPError as exc:
+        logger.error("LMS unreachable for exercise=%s: %s", body.exerciseId, exc)
+        raise HTTPException(status_code=502, detail="LMS service unreachable")
 
     if r.status_code == 404:
         raise HTTPException(status_code=404, detail="Exercise not found")
-    if r.status_code >= 500:
+    if not r.is_success:
         raise HTTPException(status_code=502, detail="LMS exercise fetch failed")
 
     exercise = r.json()

@@ -256,3 +256,39 @@ async def test_grading_missing_field():
             json={"attemptedAnswer": "B", "userId": "user_test"},
         )
     assert resp.status_code == 422
+
+
+@respx.mock
+async def test_grading_lms_unreachable(monkeypatch):
+    """Connection error to LMS must return 502."""
+    monkeypatch.setattr("agents.agt_orchestrator.main.emit", AsyncMock())
+
+    respx.get("http://learning-materials-service:4002/internal/exercises/ex-1").mock(
+        side_effect=httpx.ConnectError("Connection refused")
+    )
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.post(
+            "/orchestrate/grading",
+            json={"exerciseId": "ex-1", "attemptedAnswer": "B", "userId": "user_test"},
+        )
+
+    assert resp.status_code == 502
+
+
+@respx.mock
+async def test_grading_lms_timeout(monkeypatch):
+    """Timeout from LMS must return 502."""
+    monkeypatch.setattr("agents.agt_orchestrator.main.emit", AsyncMock())
+
+    respx.get("http://learning-materials-service:4002/internal/exercises/ex-1").mock(
+        side_effect=httpx.TimeoutException("Request timed out")
+    )
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.post(
+            "/orchestrate/grading",
+            json={"exerciseId": "ex-1", "attemptedAnswer": "B", "userId": "user_test"},
+        )
+
+    assert resp.status_code == 502
