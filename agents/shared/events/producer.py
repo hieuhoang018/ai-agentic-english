@@ -47,3 +47,32 @@ async def emit(topic: str, payload: dict, agent_id: str, key: str | None = None)
         await producer.send(topic, value=event, key=key)
     except Exception as exc:
         logger.error("Kafka emit failed topic=%s agent=%s error=%s", topic, agent_id, exc)
+
+
+async def emit_ts_event(topic: str, event_type: str, payload: dict, key: str | None = None) -> None:
+    """
+    Emit a Kafka event in the DomainEvent envelope expected by the TS notification-service.
+
+    The TS consumer (packages/shared/src/events/kafkaConsumer.ts) parses each message as
+    { type, occurredAt, payload } and passes event.payload to handlers. The payload must
+    contain eventId, schemaVersion, occurredAt, type, plus any domain fields.
+
+    Use this (not emit()) for topics consumed by TS: achievement.unlocked, learning-path.ready.
+    """
+    producer = await get_producer()
+    now = datetime.now(timezone.utc).isoformat()
+    message = {
+        "type": event_type,
+        "occurredAt": now,
+        "payload": {
+            "eventId": str(uuid.uuid4()),
+            "schemaVersion": 1,
+            "occurredAt": now,
+            "type": event_type,
+            **payload,
+        },
+    }
+    try:
+        await producer.send(topic, value=message, key=key)
+    except Exception as exc:
+        logger.error("Kafka emit_ts_event failed topic=%s type=%s error=%s", topic, event_type, exc)
