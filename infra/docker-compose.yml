@@ -283,9 +283,13 @@ services:
       REDIS_URL: redis://redis:6379
       KAFKA_BROKERS: kafka:9092
       INFERENCE_MODE: mock
+      LM_SERVICE_BASE_URL: http://learning-materials-service:4002
+      LM_INTERNAL_SECRET: dev-internal-secret
     depends_on:
       postgres-agents:
         condition: service_healthy
+      learning-materials-service:
+        condition: service_started
 
   agt03-tutor:
     build:
