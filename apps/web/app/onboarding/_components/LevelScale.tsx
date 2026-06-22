@@ -17,7 +17,7 @@ export default function LevelScale() {
               onClick={() => setLevel(value)}
               className={`relative z-10 flex h-11 w-11 items-center justify-center rounded-full border-2 font-semibold shadow-sm transition-colors ${
                 value <= level ? 'border-primary bg-blue-50 text-primary' : 'border-outline-variant bg-surface text-on-surface'
-              } ${value === level ? 'bg-primary text-white shadow-md' : ''}`}
+              } ${value === level ? 'bg-primary !text-white shadow-md' : ''}`}
               aria-label={`Chọn mức ${value}`}
             >
               {value}

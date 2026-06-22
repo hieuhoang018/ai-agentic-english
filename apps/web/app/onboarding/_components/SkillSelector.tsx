@@ -8,7 +8,7 @@ type SkillSelectorProps = {
 }
 
 export default function SkillSelector({ skills }: SkillSelectorProps) {
-  const [selected, setSelected] = useState(['listening', 'speaking'])
+  const [selected, setSelected] = useState<string[]>([])
 
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

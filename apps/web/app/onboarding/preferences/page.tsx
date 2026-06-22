@@ -6,7 +6,15 @@ import { onboardingRoutes } from '../_utils/onboarding-routes'
 
 export default function PreferencesPage() {
   return (
-    <OnboardingShell step={3} title="Lựa chọn cá nhân hóa" description="Chia sẻ mục tiêu để Wise Mentor thiết kế lộ trình học phù hợp nhất dành riêng cho bạn." backHref={onboardingRoutes.level} nextHref={onboardingRoutes.plan} nextLabel="Bắt đầu đánh giá">
+    <OnboardingShell
+      step={3}
+      title="Lựa chọn cá nhân hóa"
+      description="Chia sẻ mục tiêu để Wise Mentor thiết kế lộ trình học phù hợp nhất dành riêng cho bạn."
+      backHref={onboardingRoutes.level}
+      nextHref={onboardingRoutes.plan}
+      nextLabel="Bắt đầu đánh giá"
+      showFooterBack={false}
+    >
       <section>
         <h2 className="mb-8 flex items-center gap-2 text-lg font-semibold">
           <span className="material-symbols-outlined text-primary">schedule</span>

@@ -402,3 +402,27 @@ interface OnboardingProfile {
 - Review Center and progress pages use the dashboard shell with sidebar.
 - Onboarding uses its own centered shell and does not show sidebar.
 - API integration, persistence, audio playback, real AI grading, and notification scheduling are later milestones.
+
+
+# Need fixing
+
+1. onboarding/goals (fixed)
+Make the selection on the onboarding/goals page more clear, maybe instead of changing the color of only the border, change the color of the selected card also. Then make the selection single-selection.
+
+2. onboarding/assessment (fixed)
+On the onboarding/assessment page, the "Quay lại" button next to the "Câu sau" button should have the text "Câu trước" and should direct to the previous question of the test, and "Câu sau" button should direct to the next question of the test. After the test is completed (the final question is selected), the "Câu sau" button will change to "Đánh giá" button that lead to the page where the score and evaluation of the onboarding test are shown. On the page that show the score and evaluation of the onboarding test, there should be a button "Tiếp tục" to direct to the next onboarding phase. Implement and change the related files in the onboarding flow according to the provided description. You are free to design the missing page, but keep the consistency with other pages in the onboarding flow.
+
+3. onboarding/assessment (fixed)
+Add a "Quay lại" button in the onboarding/assessment page on top of the heading "Làm bài test trình độ" that route back to the onboarding/level page
+
+4. onboarding/assessment/results (fixed)
+On the results page, show the number of correct question, level evaluation on the scale from 0 to 10, and skill summary
+
+5. onboarding/assessment/results (fixed)
+On the onboarding/assessment/results page, set the transparency of the number circle before the selected circle in the level evaluation scale to 10
+
+6. onboarding/preferences (fixed)
+On the onboarding/preferences page, remove the extra "Quay lại" button next to the "Bắt đầu đánh giá" button, and unselected the default selection Listening and Speaking in the focused skills selection (there should be no default selection)
+
+7. onboarding/self-assessment (fixed)
+On the onboarding/self-assessment page, remove the extra "Quay lại" button next to the "Tiếp tục" button, and make the number in the selected circle visible, maybe change the color of the number in the selected circle to white

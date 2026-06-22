@@ -10,6 +10,7 @@ type OnboardingShellProps = {
   backHref?: string
   nextHref?: string
   nextLabel?: string
+  showFooterBack?: boolean
   wide?: boolean
 }
 
@@ -21,6 +22,7 @@ export default function OnboardingShell({
   children,
   backHref,
   nextHref,
+  showFooterBack = true,
   nextLabel = 'Tiếp tục',
   wide = false,
 }: OnboardingShellProps) {
@@ -40,7 +42,7 @@ export default function OnboardingShell({
       </main>
       {nextHref ? (
         <footer className="flex flex-wrap justify-end gap-4 border-t border-outline-variant/50 bg-surface p-6">
-          {backHref ? (
+          {backHref && showFooterBack ? (
             <Link href={backHref} className="flex h-12 items-center gap-2 rounded-full border border-outline px-6 font-semibold text-on-surface">
               <span className="material-symbols-outlined">arrow_back</span>
               Quay lại

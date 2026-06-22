@@ -10,6 +10,7 @@ export default function SelfAssessmentPage() {
       description="Hãy chọn mức độ bạn tự tin nhất với khả năng tiếng Anh hiện tại của mình. Điều này giúp Wise Mentor cá nhân hóa lộ trình học tập tối ưu cho bạn."
       backHref={onboardingRoutes.level}
       nextHref={onboardingRoutes.preferences}
+      showFooterBack={false}
       wide
     >
       <LevelScale />

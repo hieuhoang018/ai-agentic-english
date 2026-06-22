@@ -1,20 +1,25 @@
-"use client"
-
-import { useState } from 'react'
-
 type ChoiceCardProps = {
   title: string
   description: string
   icon: string
   tone?: string
-  defaultSelected?: boolean
+  selected: boolean
+  onSelect: () => void
 }
 
-export default function ChoiceCard({ title, description, icon, tone = 'bg-blue-50 text-primary', defaultSelected = false }: ChoiceCardProps) {
-  const [selected, setSelected] = useState(defaultSelected)
-
+export default function ChoiceCard({ title, description, icon, tone = 'bg-blue-50 text-primary', selected, onSelect }: ChoiceCardProps) {
   return (
-    <button onClick={() => setSelected((value) => !value)} className={`min-h-36 rounded-lg border bg-white p-5 text-left transition-colors ${selected ? 'border-primary bg-blue-50/40' : 'border-outline-variant hover:border-primary'}`}>
+    <button
+      type="button"
+      onClick={onSelect}
+      aria-pressed={selected}
+      className={`relative min-h-36 rounded-lg border p-5 text-left transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ${selected ? 'border-primary bg-primary-container/10 shadow-sm' : 'border-outline-variant bg-white hover:border-primary hover:bg-blue-50/40'}`}
+    >
+      {selected ? (
+        <span className="absolute right-4 top-4 flex h-6 w-6 items-center justify-center rounded-full bg-primary text-sm text-white">
+          <span className="material-symbols-outlined text-base">check</span>
+        </span>
+      ) : null}
       <span className={`mb-5 flex h-12 w-12 items-center justify-center rounded-full ${tone}`}><span className="material-symbols-outlined">{icon}</span></span>
       <h2 className="text-xl font-semibold text-on-surface">{title}</h2>
       <p className="mt-1 text-sm text-on-surface-variant">{description}</p>
