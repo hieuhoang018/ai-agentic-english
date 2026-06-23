@@ -1,5 +1,5 @@
 """
-Writing quality assessment using Ollama structured rubric prompt.
+Writing quality assessment using the three-tier LLM router.
 Post-submission only — never in the real-time speaking path.
 Target latency: <20s (acceptable for post-submission feedback).
 
@@ -13,8 +13,8 @@ Rubric dimensions (0.0–1.0 each):
 
 import json
 import logging
-from openai import AsyncOpenAI
 from agents.shared.config import settings
+from agents.shared.llm.router import call_llm, AgentID
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +37,7 @@ async def score_writing(text: str, context: str = "professional email") -> dict:
     """
     Score a writing sample against the professional writing rubric.
     In mock mode: returns plausible stub scores.
+    Routes through the three-tier LLM router (Groq → OpenRouter → Ollama).
     """
     if settings.INFERENCE_MODE == "mock":
         return {
@@ -56,14 +57,8 @@ async def score_writing(text: str, context: str = "professional email") -> dict:
     ]
 
     try:
-        client = AsyncOpenAI(base_url=settings.OLLAMA_BASE_URL + "/v1", api_key="ollama")
-        resp = await client.chat.completions.create(
-            model="qwen2.5:7b",
-            messages=messages,
-        )
-        raw = resp.choices[0].message.content or ""
+        raw = await call_llm(messages, AgentID.AGT04)
         scores = json.loads(raw)
-        # Validate expected keys
         for key in ("grammar", "coherence", "cohesion", "register", "structure"):
             scores.setdefault(key, 0.5)
         scores.setdefault("vietnamese_indirectness", False)
