@@ -43,6 +43,10 @@ class Settings(BaseSettings):
     # Shared secret for internal service-to-service calls (e.g. notification-service → AGT-07)
     INTERNAL_SECRET: str = "dev-internal-secret"
 
+    # Cross-agent base URLs (override in Docker via env; defaults target localhost for dev)
+    AGT06_BASE_URL: str = "http://localhost:8106"
+    LMS_BASE_URL: str = "http://localhost:4002"
+
     class Config:
         env_file = ".env"
         extra = "ignore"

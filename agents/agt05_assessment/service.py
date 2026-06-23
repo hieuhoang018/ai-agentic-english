@@ -7,17 +7,20 @@ Full 3PL IRT + Fisher information maximisation deferred to Phase 8+.
 """
 
 import json
+import uuid
 import httpx
 import logging
 from agents.agt05_assessment.cat_engine import (
     estimate_theta_stub, select_next_item_stub, should_terminate
 )
+from agents.shared.config import settings
 from agents.shared.db.postgres import execute
+from agents.shared.db.redis_client import get_redis
 from agents.shared.cefr import theta_to_cefr
 
 logger = logging.getLogger(__name__)
 
-LMS_BASE = "http://learning-materials-service:4002"
+LMS_BASE = settings.LMS_BASE_URL
 
 
 async def _fetch_item_bank(skill_domain: str) -> list[dict]:

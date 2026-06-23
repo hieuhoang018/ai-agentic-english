@@ -10,14 +10,16 @@ DUAL-WRITE PROTOCOL (critical):
   If Kafka write fails: log and continue (session continues without event)
 """
 
+import asyncio
 import httpx
 import logging
+from agents.shared.config import settings
 from agents.agt04_feedback import grammar, fluency, writing_quality, pedagogical
 from agents.shared.events.producer import emit
 
 logger = logging.getLogger(__name__)
 
-AGT06_BASE = "http://agt06-memory:8106"
+AGT06_BASE = settings.AGT06_BASE_URL
 
 
 async def _stm_append_error(session_id: str, clerk_user_id: str, error: dict) -> None:
