@@ -23,11 +23,12 @@ logger = logging.getLogger(__name__)
 LMS_BASE = settings.LMS_BASE_URL
 
 
-async def _fetch_item_bank(skill_domain: str) -> list[dict]:
-    """
-    Fetch assessment items for a skill domain from Learning Materials Service.
-    Returns items with IRT parameters (b, a, c).
-    """
+_ITEM_BANK_TTL = 300
+_ITEM_BANK_KEY = "agt05:item_bank:{}"
+
+
+async def _fetch_lms_items(skill_domain: str) -> list[dict]:
+    """Raw HTTP fetch from Learning Materials Service — no caching."""
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
             r = await client.get(
@@ -39,6 +40,30 @@ async def _fetch_item_bank(skill_domain: str) -> list[dict]:
     except Exception as exc:
         logger.warning("Could not fetch item bank for %s: %s", skill_domain, exc)
         return []
+
+
+async def _fetch_item_bank(skill_domain: str) -> list[dict]:
+    """
+    Fetch assessment items with a 300-second Redis cache.
+    Cache miss: call LMS and store result (only if non-empty).
+    Cache hit: deserialize and return without calling LMS.
+    """
+    redis = get_redis()
+    key = _ITEM_BANK_KEY.format(skill_domain)
+    try:
+        cached = await redis.get(key)
+        if cached is not None:
+            return json.loads(cached)
+    except Exception as exc:
+        logger.warning("Redis get failed for %s: %s — falling through to LMS", key, exc)
+
+    items = await _fetch_lms_items(skill_domain)
+    if items:
+        try:
+            await redis.set(key, json.dumps(items), ex=_ITEM_BANK_TTL)
+        except Exception as exc:
+            logger.warning("Redis set failed for %s: %s — cache not populated", key, exc)
+    return items
 
 
 async def start_assessment(clerk_user_id: str, skill_domain: str) -> dict:
