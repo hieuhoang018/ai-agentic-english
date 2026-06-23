@@ -2,11 +2,14 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from agents.agt05_assessment.service import start_assessment, record_response
 from agents.agt05_assessment.models import StartAssessmentRequest, RespondRequest
+from agents.shared.db.postgres import get_pool, close_pool
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    await get_pool()   # pre-warm connection pool so first request doesn't pay the cost
     yield
+    await close_pool()
 
 
 app = FastAPI(

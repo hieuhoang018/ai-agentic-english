@@ -1,5 +1,6 @@
 import json
 import pytest
+from unittest.mock import AsyncMock, patch
 from agents.agt05_assessment.service import record_response
 
 
@@ -248,3 +249,172 @@ async def test_non_terminated_items_answered_count(mock_item_bank, capture_execu
         clerk_user_id="test-user",
     )
     assert result["items_answered"] == 28
+
+
+# ── start_assessment ──────────────────────────────────────────────────────────
+
+@pytest.fixture
+def mock_item_bank_start(monkeypatch):
+    items = [
+        {"item_id": f"item-{i}", "difficulty_param": round(i / 15.0 - 1.0, 3)}
+        for i in range(1, 31)
+    ]
+    async def fake_fetch(skill_domain):
+        return items
+    monkeypatch.setattr("agents.agt05_assessment.service._fetch_item_bank", fake_fetch)
+    return items
+
+
+async def test_start_assessment_returns_assessment_id(mock_item_bank_start):
+    from agents.agt05_assessment.service import start_assessment
+    result = await start_assessment("user-001", "READING")
+    assert "assessment_id" in result
+    assert result["assessment_id"] != ""
+
+
+async def test_start_assessment_id_contains_user_id(mock_item_bank_start):
+    from agents.agt05_assessment.service import start_assessment
+    result = await start_assessment("user-abc", "READING")
+    assert "user-abc" in result["assessment_id"]
+
+
+async def test_start_assessment_ids_unique_across_calls(mock_item_bank_start):
+    """Two calls for the same user+skill must produce different assessment IDs."""
+    from agents.agt05_assessment.service import start_assessment
+    r1 = await start_assessment("user-001", "READING")
+    r2 = await start_assessment("user-001", "READING")
+    assert r1["assessment_id"] != r2["assessment_id"]
+
+
+async def test_start_assessment_returns_first_item(mock_item_bank_start):
+    from agents.agt05_assessment.service import start_assessment
+    result = await start_assessment("user-001", "READING")
+    assert result["current_item"] is not None
+    assert "item_id" in result["current_item"]
+
+
+async def test_start_assessment_initial_state(mock_item_bank_start):
+    from agents.agt05_assessment.service import start_assessment
+    result = await start_assessment("user-001", "READING")
+    assert result["current_theta"] == 0.0
+    assert result["items_answered"] == 0
+    assert result["terminated"] is False
+
+
+async def test_start_assessment_item_bank_unavailable(monkeypatch):
+    import agents.agt05_assessment.service as svc
+    monkeypatch.setattr(svc, "_fetch_item_bank", AsyncMock(return_value=[]))
+    from agents.agt05_assessment.service import start_assessment
+    result = await start_assessment("user-001", "READING")
+    assert "error" in result
+    assert result["skill_domain"] == "READING"
+
+
+# ── D9: Postgres error handling ───────────────────────────────────────────────
+
+async def test_postgres_error_does_not_propagate_on_termination(monkeypatch):
+    """Postgres write failure at termination must be caught; response still returned."""
+    async def failing_execute(query, *args):
+        raise Exception("Postgres connection lost")
+
+    monkeypatch.setattr("agents.agt05_assessment.service.execute", failing_execute)
+    prior = _build_prior(correct_count=16, total=29)
+    result = await record_response(
+        assessment_id="test-pg-err",
+        item_id="item-30",
+        correct=True,
+        prior_responses=prior,
+        skill_domain="READING",
+        clerk_user_id="user-pg",
+    )
+    # Must return a valid termination shape despite DB failure
+    assert result["terminated"] is True
+    assert "cefr_band" in result
+    assert "final_theta" in result
+
+
+async def test_postgres_error_result_has_correct_cefr(monkeypatch):
+    async def failing_execute(query, *args):
+        raise Exception("Postgres connection lost")
+
+    monkeypatch.setattr("agents.agt05_assessment.service.execute", failing_execute)
+    prior = _build_prior(correct_count=16, total=29)
+    result = await record_response(
+        assessment_id="test-pg-err",
+        item_id="item-30",
+        correct=True,
+        prior_responses=prior,
+        skill_domain="READING",
+        clerk_user_id="user-pg",
+    )
+    assert result["cefr_band"] == "B1"
+
+
+# ── D10: early-exhaustion response shape ─────────────────────────────────────
+
+@pytest.fixture
+def early_exhaustion_setup(monkeypatch, mock_item_bank):
+    """Item bank runs out after 5 items (well below 30-item threshold)."""
+    monkeypatch.setattr(
+        "agents.agt05_assessment.service.select_next_item_stub",
+        lambda theta, answered_ids, bank: None,  # always exhausted
+    )
+    monkeypatch.setattr(
+        "agents.agt05_assessment.service.should_terminate",
+        lambda responses: False,  # not at 30-item threshold
+    )
+
+
+async def test_early_exhaustion_returns_terminated_true(early_exhaustion_setup, capture_execute):
+    prior = _build_prior(correct_count=3, total=4)
+    result = await record_response(
+        assessment_id="test-exhaust",
+        item_id="item-5",
+        correct=True,
+        prior_responses=prior,
+        skill_domain="READING",
+        clerk_user_id="user-exhaust",
+    )
+    assert result["terminated"] is True
+
+
+async def test_early_exhaustion_has_cefr_band(early_exhaustion_setup, capture_execute):
+    prior = _build_prior(correct_count=3, total=4)
+    result = await record_response(
+        assessment_id="test-exhaust",
+        item_id="item-5",
+        correct=True,
+        prior_responses=prior,
+        skill_domain="READING",
+        clerk_user_id="user-exhaust",
+    )
+    assert "cefr_band" in result
+    assert result["cefr_band"] != ""
+
+
+async def test_early_exhaustion_has_final_theta(early_exhaustion_setup, capture_execute):
+    prior = _build_prior(correct_count=3, total=4)
+    result = await record_response(
+        assessment_id="test-exhaust",
+        item_id="item-5",
+        correct=True,
+        prior_responses=prior,
+        skill_domain="READING",
+        clerk_user_id="user-exhaust",
+    )
+    assert "final_theta" in result
+    assert "confidence_interval" in result
+
+
+async def test_early_exhaustion_has_no_current_item_key(early_exhaustion_setup, capture_execute):
+    """current_item must not appear in a terminal response."""
+    prior = _build_prior(correct_count=3, total=4)
+    result = await record_response(
+        assessment_id="test-exhaust",
+        item_id="item-5",
+        correct=True,
+        prior_responses=prior,
+        skill_domain="READING",
+        clerk_user_id="user-exhaust",
+    )
+    assert "current_item" not in result

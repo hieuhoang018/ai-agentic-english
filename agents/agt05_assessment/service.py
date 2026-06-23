@@ -103,7 +103,36 @@ async def record_response(
     theta = estimate_theta_stub(responses)
 
     if should_terminate(responses):
-        cefr = theta_to_cefr(theta)
+        return await _terminate(assessment_id, clerk_user_id, skill_domain, responses, theta)
+
+    item_bank = await _fetch_item_bank(skill_domain)
+    answered_ids = [r["item_id"] for r in responses]
+    next_item = select_next_item_stub(theta, answered_ids, item_bank)
+
+    if next_item is None:
+        # Item bank exhausted before 30-item threshold — still a terminal state.
+        return await _terminate(assessment_id, clerk_user_id, skill_domain, responses, theta)
+
+    return {
+        "assessment_id": assessment_id,
+        "skill_domain": skill_domain,
+        "current_item": next_item,
+        "items_answered": len(responses),
+        "current_theta": theta,
+        "terminated": False,
+    }
+
+
+async def _terminate(
+    assessment_id: str,
+    clerk_user_id: str,
+    skill_domain: str,
+    responses: list[dict],
+    theta: float,
+) -> dict:
+    """Persist assessment result and return the terminal response shape."""
+    cefr = theta_to_cefr(theta)
+    try:
         await execute(
             """INSERT INTO assessment_history
                (clerk_user_id, skill_domain, item_id, response, irt_score, cefr_band)
@@ -115,25 +144,17 @@ async def record_response(
             theta,
             cefr,
         )
-        return {
-            "assessment_id": assessment_id,
-            "skill_domain": skill_domain,
-            "terminated": True,
-            "items_answered": len(responses),
-            "final_theta": theta,
-            "cefr_band": cefr,
-            "confidence_interval": [round(theta - 0.5, 3), round(theta + 0.5, 3)],
-        }
-
-    item_bank = await _fetch_item_bank(skill_domain)
-    answered_ids = [r["item_id"] for r in responses]
-    next_item = select_next_item_stub(theta, answered_ids, item_bank)
-
+    except Exception as exc:
+        logger.error(
+            "Postgres write failed for assessment %s: %s — result not persisted",
+            assessment_id, exc,
+        )
     return {
         "assessment_id": assessment_id,
         "skill_domain": skill_domain,
-        "current_item": next_item,
+        "terminated": True,
         "items_answered": len(responses),
-        "current_theta": theta,
-        "terminated": next_item is None,
+        "final_theta": theta,
+        "cefr_band": cefr,
+        "confidence_interval": [round(theta - 0.5, 3), round(theta + 0.5, 3)],
     }
