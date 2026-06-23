@@ -54,10 +54,14 @@ async def _kafka_emit_error(session_id: str, clerk_user_id: str, error: dict) ->
 async def record_error(session_id: str, clerk_user_id: str, error: dict) -> None:
     """
     Dual-write a single error event.
-    Caller is AGT-04 internally — called for every detected error.
+    STM write raises on failure (session correctness requires it).
+    Kafka write is best-effort — exceptions are caught and logged.
     """
     await _stm_append_error(session_id, clerk_user_id, error)  # raises on failure
-    await _kafka_emit_error(session_id, clerk_user_id, error)   # best-effort
+    try:
+        await _kafka_emit_error(session_id, clerk_user_id, error)
+    except Exception as exc:
+        logger.error("Kafka emit raised unexpectedly session=%s error=%s", session_id, exc)
 
 
 async def analyze_speaking_turn(
@@ -69,27 +73,34 @@ async def analyze_speaking_turn(
 ) -> dict:
     """
     Analyze a single speaking turn.
-    Returns feedback and records all errors via dual-write.
+    Returns feedback and records all errors via concurrent dual-write.
     """
-    # Grammar analysis
     grammar_errors = await grammar.analyze_grammar(transcript, skill_domain)
-
-    # Fluency metrics
     fluency_metrics = fluency.compute_fluency_metrics(transcript, duration_seconds)
 
-    # Collect all error types for throttle check
     error_types = [e.get("errorType", "grammar") for e in grammar_errors]
     throttled, priority_type = pedagogical.should_throttle(error_types)
 
-    # Dual-write each error
-    for err in grammar_errors:
-        error_event = {
+    error_events = [
+        {
             "error_type": err.get("errorType", "grammar"),
             "skill_domain": skill_domain,
             "severity": err.get("severity", 1),
             "context_excerpt": transcript[:100],
         }
-        await record_error(session_id, clerk_user_id, error_event)
+        for err in grammar_errors
+    ]
+
+    # Fire all STM+Kafka writes concurrently. Collect results so every write
+    # completes before we raise on any STM failure — maximises persistence.
+    if error_events:
+        results = await asyncio.gather(
+            *[record_error(session_id, clerk_user_id, ev) for ev in error_events],
+            return_exceptions=True,
+        )
+        stm_failures = [r for r in results if isinstance(r, Exception)]
+        if stm_failures:
+            raise stm_failures[0]
 
     return {
         "grammar_errors": grammar_errors if not throttled else [
@@ -111,19 +122,33 @@ async def analyze_writing(
     """
     Analyze a writing submission. Post-submission — not real-time.
     Returns annotated quality scores and grammar errors.
+
+    NOTE: Error throttling is intentionally NOT applied here. Writing feedback
+    is reviewed asynchronously by the learner, so surfacing all errors is
+    desirable. Throttling applies only to real-time speaking feedback where
+    cognitive overload is a concern.
     """
     grammar_errors = await grammar.analyze_grammar(draft, skill_domain="WRITING")
     quality_scores = await writing_quality.score_writing(draft, context=prompt)
 
-    # Dual-write each grammar error
-    for err in grammar_errors:
-        error_event = {
+    error_events = [
+        {
             "error_type": err.get("errorType", "grammar"),
             "skill_domain": "WRITING",
             "severity": err.get("severity", 1),
             "context_excerpt": draft[:100],
         }
-        await record_error(session_id, clerk_user_id, error_event)
+        for err in grammar_errors
+    ]
+
+    if error_events:
+        results = await asyncio.gather(
+            *[record_error(session_id, clerk_user_id, ev) for ev in error_events],
+            return_exceptions=True,
+        )
+        stm_failures = [r for r in results if isinstance(r, Exception)]
+        if stm_failures:
+            raise stm_failures[0]
 
     return {
         "quality_scores": quality_scores,
