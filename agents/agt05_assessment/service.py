@@ -56,7 +56,7 @@ async def start_assessment(clerk_user_id: str, skill_domain: str) -> dict:
         return {"error": "No items available", "skill_domain": skill_domain}
 
     return {
-        "assessment_id": f"{clerk_user_id}_{skill_domain}_stub",
+        "assessment_id": f"{clerk_user_id}_{skill_domain}_{uuid.uuid4().hex[:8]}",
         "skill_domain": skill_domain,
         "current_item": first_item,
         "items_answered": 0,
