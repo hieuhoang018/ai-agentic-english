@@ -9,7 +9,10 @@ testpaths = [
     "agt05_assessment/tests",
     "agt06_memory/tests",
     "agt07_review/tests",
+    "agt08_analysis/tests",
+    "agt09_recommendation/tests",
     "agt10_habit/tests",
+    "agt11_translation/tests",
     "agt_orchestrator/tests",
 ]
 markers = [

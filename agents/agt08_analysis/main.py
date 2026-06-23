@@ -1,11 +1,16 @@
+import asyncio
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from agents.agt08_analysis.service import run_analysis
+from agents.agt08_analysis.consumers import start_consumers
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    tasks = await start_consumers()
     yield
+    for t in tasks:
+        t.cancel()
 
 
 app = FastAPI(

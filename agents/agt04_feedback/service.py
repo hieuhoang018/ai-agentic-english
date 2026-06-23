@@ -11,6 +11,7 @@ DUAL-WRITE PROTOCOL (critical):
 """
 
 import asyncio
+import os
 import httpx
 import logging
 from agents.shared.config import settings
@@ -20,6 +21,7 @@ from agents.shared.events.producer import emit
 logger = logging.getLogger(__name__)
 
 AGT06_BASE = settings.AGT06_BASE_URL
+AGT11_BASE = os.environ.get("AGT11_BASE_URL", "http://agt11-translation:8111")
 
 
 async def _stm_append_error(session_id: str, clerk_user_id: str, error: dict) -> None:
@@ -64,6 +66,37 @@ async def record_error(session_id: str, clerk_user_id: str, error: dict) -> None
         logger.error("Kafka emit raised unexpectedly session=%s error=%s", session_id, exc)
 
 
+async def _get_bilingual_explanation(
+    error_type: str,
+    example: str,
+    clerk_user_id: str,
+) -> str | None:
+    """
+    Call AGT-11 /explain for a bilingual grammar error explanation.
+    Returns Vietnamese explanation string, or None on any failure.
+    Degrades gracefully — AGT-11 unavailability never causes a 500.
+    """
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.post(
+                f"{AGT11_BASE}/explain",
+                json={
+                    "error_type": error_type,
+                    "example": example,
+                    "clerk_user_id": clerk_user_id,
+                    "session_type": "exercise",
+                },
+            )
+            resp.raise_for_status()
+            return resp.json().get("translated")
+    except Exception as exc:
+        logger.warning(
+            "AGT-11 explanation unavailable error_type=%s user=%s: %s",
+            error_type, clerk_user_id, exc,
+        )
+        return None
+
+
 async def analyze_speaking_turn(
     transcript: str,
     session_id: str,
@@ -101,6 +134,23 @@ async def analyze_speaking_turn(
         stm_failures = [r for r in results if isinstance(r, Exception)]
         if stm_failures:
             raise stm_failures[0]
+
+    # Fetch bilingual explanations concurrently from AGT-11 (best-effort).
+    # explanation=None means AGT-11 was unavailable or user is en_only zone.
+    if grammar_errors:
+        explanations = await asyncio.gather(
+            *[
+                _get_bilingual_explanation(
+                    err.get("errorType", "grammar"),
+                    transcript[:100],
+                    clerk_user_id,
+                )
+                for err in grammar_errors
+            ],
+            return_exceptions=True,
+        )
+        for err, expl in zip(grammar_errors, explanations):
+            err["explanation"] = expl if isinstance(expl, str) else None
 
     return {
         "grammar_errors": grammar_errors if not throttled else [

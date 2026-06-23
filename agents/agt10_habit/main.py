@@ -1,15 +1,20 @@
+import asyncio
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from agents.shared.db.redis_client import get_redis, close_redis
 from agents.agt10_habit.exercise_library import get_exercise_library
-from agents.agt10_habit.service import record_session_complete, check_re_engagement
+from agents.agt10_habit.service import record_session_complete, check_re_engagement, get_streak
 from agents.agt10_habit.models import RecordSessionRequest, ReEngagementRequest
+from agents.agt10_habit.consumers import start_consumers
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await get_redis()
+    tasks = await start_consumers()
     yield
+    for t in tasks:
+        t.cancel()
     await close_redis()
 
 
@@ -44,12 +49,10 @@ async def record_streak(clerk_user_id: str, body: RecordSessionRequest):
 
 
 @app.get("/streak/{clerk_user_id}")
-async def get_streak(clerk_user_id: str):
-    """
-    Return current streak state.
-    TODO Phase 5+: read from persistent streak table.
-    """
-    return {"clerk_user_id": clerk_user_id, "streak": 0, "stub": True}
+async def streak(clerk_user_id: str):
+    """Return current streak from Redis."""
+    current = await get_streak(clerk_user_id)
+    return {"clerk_user_id": clerk_user_id, "streak": current}
 
 
 @app.post("/re-engagement")

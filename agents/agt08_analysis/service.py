@@ -6,6 +6,7 @@ All analysis algorithms are stubs — see individual files for TODO specs.
 
 import httpx
 import logging
+from datetime import datetime, timezone
 from agents.agt08_analysis.cusum import detect_persistent_errors
 from agents.agt08_analysis.changepoint import detect_plateau
 from agents.agt08_analysis.risk_model import compute_risk_score
@@ -51,7 +52,14 @@ async def run_analysis(clerk_user_id: str) -> dict:
 
     # Behavioural risk
     behavioral = profile.get("behavioral_profile", {})
-    days_since = 0  # TODO Phase 8+: compute from sessions
+    days_since = 0
+    if sessions:
+        try:
+            last_str = str(sessions[0].get("start_time", ""))
+            last_dt = datetime.fromisoformat(last_str.replace("Z", "+00:00"))
+            days_since = (datetime.now(timezone.utc) - last_dt).days
+        except Exception:
+            days_since = 0
     risk = compute_risk_score(behavioral, days_since)
 
     # Emit events for detected patterns

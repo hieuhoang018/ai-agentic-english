@@ -1,3 +1,4 @@
+import asyncio
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
@@ -7,6 +8,7 @@ from agents.shared.db.redis_client import get_redis, close_redis
 from agents.shared.events.producer import get_producer, close_producer
 from agents.agt02_learning_path import service
 from agents.agt02_learning_path.models import GeneratePlanRequest
+from agents.agt02_learning_path.consumers import start_consumers
 
 
 @asynccontextmanager
@@ -14,7 +16,10 @@ async def lifespan(app: FastAPI):
     await get_pool()
     await get_redis()
     await get_producer()
+    tasks = await start_consumers()
     yield
+    for t in tasks:
+        t.cancel()
     await close_pool()
     await close_redis()
     await close_producer()
