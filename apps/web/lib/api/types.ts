@@ -1,0 +1,17 @@
+export type {
+  AssessmentQuestionDto,
+  AssessmentResultDto,
+  CefrLevel,
+  Difficulty,
+  ExerciseDto,
+  ExerciseType,
+  LearningPathDto,
+  LearningPathStatus,
+  LessonDto,
+  ModuleDto,
+  PathDefinition,
+  Skill,
+  UpdateUserSettingsDto,
+  UserDto,
+  UserSettingsDto,
+} from '@ai-agentic-english/shared';

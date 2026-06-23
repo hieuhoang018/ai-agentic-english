@@ -31,6 +31,27 @@ consumers:
           wQIDAQAB
           -----END PUBLIC KEY-----
 
+# The web app calls Kong directly from the browser during local development.
+# Handle browser preflight requests before the JWT plugin and allow the headers
+# used by the typed API client.
+plugins:
+  - name: cors
+    config:
+      origins:
+        - http://localhost:3000
+      methods:
+        - GET
+        - HEAD
+        - POST
+        - PATCH
+        - PUT
+        - DELETE
+        - OPTIONS
+      headers:
+        - Authorization
+        - Content-Type
+      preflight_continue: false
+
 services:
   - name: user-service
     url: http://user-service:4001/health
@@ -147,6 +168,7 @@ services:
         strip_path: true
         methods:
           - POST
+          - OPTIONS
         plugins:
           - name: jwt
             config:
@@ -162,6 +184,7 @@ services:
         strip_path: true
         methods:
           - POST
+          - OPTIONS
         plugins:
           - name: jwt
             config:

@@ -236,13 +236,13 @@ ignored).
 These need a quick sync between backend dev and frontend dev, not solo guessing:
 
 1. Exact `currentLevel` and `goals` value mapping from onboarding UI choices to the orchestrator
-   request shape (see Stage B).
+   request shape (see Stage B). (Map the level on the scale from 0 to 10 to the corresponding CEFR level, 0 = A1, 1-2 = A2, 3-4 = B1, 5-6 = B2, 7-8 = C1, 9-10 = C2; use goalid in the frontend)
 2. Error/loading UX convention across the whole app for backend calls (toast? inline banner?
    retry button?) — pick one pattern in Stage A's smoke test and reuse it everywhere rather than
-   inventing a new one per page.
+   inventing a new one per page. (Use toast wherever possible)
 3. Whether `apps/web` should add `@ai-agentic-english/shared` as a real workspace dependency (to
    import DTOs directly) instead of hand-copying types — worth a 5-minute discussion since it
-   changes how Stage A's `types.ts` gets built and how future DTO changes propagate.
+   changes how Stage A's `types.ts` gets built and how future DTO changes propagate. (Yes)
 
 ## 4. Explicit non-goals for this pass
 
