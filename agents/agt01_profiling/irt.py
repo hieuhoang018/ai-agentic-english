@@ -12,6 +12,8 @@ TODO Phase 8+: implement full 3PL IRT EAP estimation.
   Prior: standard normal N(0, 1)
 """
 
+from agents.shared.cefr import theta_to_cefr  # re-exported: single source in shared/cefr.py
+
 
 def update_theta(theta_old: float, score: float) -> float:
     """
@@ -22,19 +24,3 @@ def update_theta(theta_old: float, score: float) -> float:
     # TODO Phase 8+: replace with full 3PL EAP estimation
     delta = 0.1 * (score - 0.5)
     return round(theta_old + delta, 4)
-
-
-def theta_to_cefr(theta: float) -> str:
-    """Map IRT theta estimate to CEFR band. Approximate linear mapping."""
-    if theta < -1.5:
-        return "A1"
-    elif theta < -0.5:
-        return "A2"
-    elif theta < 0.5:
-        return "B1"
-    elif theta < 1.5:
-        return "B2"
-    elif theta < 2.5:
-        return "C1"
-    else:
-        return "C2"

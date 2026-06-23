@@ -7,8 +7,6 @@ COPY shared /app/agents/shared
 
 # Copy this agent's code
 COPY agt05_assessment /app/agents/agt05_assessment
-# agt05 imports theta_to_cefr from agt01_profiling
-COPY agt01_profiling /app/agents/agt01_profiling
 
 # Copy base requirements and agent requirements
 COPY requirements-base.txt /app/requirements-base.txt

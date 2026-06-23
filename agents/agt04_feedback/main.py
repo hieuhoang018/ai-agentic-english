@@ -5,11 +5,13 @@ from agents.agt04_feedback.models import (
     SpeakingFeedbackRequest, WritingFeedbackRequest,
     ComprehensionFeedbackRequest, SessionEndRequest,
 )
+from agents.shared.events.producer import close_producer
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     yield
+    await close_producer()
 
 
 app = FastAPI(
@@ -60,11 +62,11 @@ async def comprehension_feedback(body: ComprehensionFeedbackRequest):
     """
     Score listening/reading comprehension responses.
     TODO Phase 4: implement full comprehension scoring with barrier-type detection.
+    Returns 0.5 (neutral) until Phase 4 — callers must not use this score to
+    drive difficulty adaptation before Phase 4 is implemented.
     """
-    # Stub: score all responses as correct for now
-    score = 1.0
     return {
-        "score": score,
+        "score": 0.5,
         "skill_domain": body.skill_domain,
         "feedback": "[STUB] Comprehension feedback not yet implemented",
         "barrier_type": None,
