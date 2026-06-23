@@ -166,6 +166,28 @@ vocab + grammar + passage primitives from Phases 0/A/B.
 - Human review via git diff (CEFR-accuracy, answer-key correctness) before merge.
 - Loader: a script parallel to `prisma/seed.ts` that upserts the reviewed JSONL's
   `Module`/`Lesson`/`Exercise` rows.
+
+**Already prepped (2026-06-23), independent of the LLM backend decision**: the actual
+generation step (the `AgentID`/`OPENROUTER_MODELS` registration and the Python script that calls
+`call_llm`) is on hold — team wants to settle Groq/OpenRouter-key vs. local-Ollama vs.
+build-now-generate-later first — but everything generation will need on the read/write side
+doesn't depend on that choice and is already built and verified:
+- Three new internal `GET` routes on `learning-materials-service` for the generation script to
+  pull grounding primitives: `/internal/vocab` (with senses + pronunciations,
+  filterable by `cefrLevel`/`domainTag`), `/internal/grammar` (with examples, filterable by
+  `cefrLevel`/`category`), `/internal/passages` (with `audioKey` resolved from the linked
+  `MediaAsset`, filterable by `cefrLevel`/`topicTag`) — all paginated via a shared `limit` param
+  (default 50, capped at 200). `src/lib/mappers.ts` gained matching internal-only DTOs (plain
+  inline shapes, not added to `@ai-agentic-english/shared` since no TS client consumes them).
+  5 new tests, 38/38 passing; manually curled against the real seeded data through a live
+  `npx tsx src/index.ts` to confirm shape and filtering.
+- `prisma/seedGeneratedContent.ts` (`npm run seed:generated`): the loader side, ready for
+  whatever JSONL the generation script eventually produces. Upserts `Module`/`Lesson`/`Exercise`
+  by the generation script's own deterministic `id`s (same slug-id convention `prisma/seed.ts`'s
+  hand-written fixture rows already use — not a title/level natural key like the other three
+  loaders, since the generation script controls ids directly and nothing else needs to derive
+  them). Verified against real Docker Postgres with a throwaway fixture JSONL (not committed —
+  there's no real generated content yet): loaded correctly, idempotent on re-run, then cleaned up.
 - Deliberately out of scope: a formal join table tracking which `VocabEntry`/`GrammarPoint` an
   exercise drew on — keep that traceability in the generation script's prompt/JSONL metadata;
   only add a real join table if something downstream (e.g. spaced-repetition linking) needs to

@@ -13,6 +13,7 @@
     "seed:vocab": "tsx prisma/seedVocab.ts",
     "seed:grammar": "tsx prisma/seedGrammar.ts",
     "seed:passages": "tsx prisma/seedPassages.ts",
+    "seed:generated": "tsx prisma/seedGeneratedContent.ts",
     "postinstall": "prisma generate"
   },
   "dependencies": {
