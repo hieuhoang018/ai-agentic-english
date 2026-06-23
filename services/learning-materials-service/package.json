@@ -10,6 +10,9 @@
     "lint": "eslint .",
     "test": "vitest run",
     "seed": "tsx prisma/seed.ts",
+    "seed:vocab": "tsx prisma/seedVocab.ts",
+    "seed:grammar": "tsx prisma/seedGrammar.ts",
+    "seed:passages": "tsx prisma/seedPassages.ts",
     "postinstall": "prisma generate"
   },
   "dependencies": {
