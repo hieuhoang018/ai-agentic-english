@@ -32,7 +32,7 @@ async def _fetch_lms_items(skill_domain: str) -> list[dict]:
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
             r = await client.get(
-                f"{LMS_BASE}/assessment/questions",
+                f"{LMS_BASE}/assessment/item-bank",
                 params={"skill": skill_domain},
             )
             r.raise_for_status()
