@@ -13,7 +13,7 @@ from agents.agt05_assessment.cat_engine import (
     estimate_theta_stub, select_next_item_stub, should_terminate
 )
 from agents.shared.db.postgres import execute
-from agents.agt01_profiling.irt import theta_to_cefr
+from agents.shared.cefr import theta_to_cefr
 
 logger = logging.getLogger(__name__)
 
