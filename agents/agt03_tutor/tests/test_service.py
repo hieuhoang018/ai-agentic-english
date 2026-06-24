@@ -297,6 +297,7 @@ async def test_process_turn_system_prompt_includes_profile_data(monkeypatch):
             "cold_start_flag": False,
         },
         "skill_focus": "SPEAKING",
+        "clerk_user_id": "user_live",
     }
 
     captured_messages = []
@@ -316,3 +317,220 @@ async def test_process_turn_system_prompt_includes_profile_data(monkeypatch):
     assert "verb_tense" in system_content or "SPEAKING" in system_content, (
         "System prompt must mention dominant error types from the profile"
     )
+
+
+# ---------------------------------------------------------------------------
+# AGT-04 grammar feedback integration
+# ---------------------------------------------------------------------------
+
+@respx.mock
+async def test_process_turn_includes_grammar_feedback_from_agt04():
+    """process_turn must call AGT-04 and include its response in grammar_feedback."""
+    respx.post(f"{service.AGT06_BASE_URL}/sessions/abc/context").mock(return_value=httpx.Response(204))
+    respx.get(f"{service.AGT06_BASE_URL}/sessions/abc/context").mock(
+        return_value=httpx.Response(200, json=[])
+    )
+
+    agt04_response = {
+        "grammar_errors": [{"errorType": "verb_tense", "severity": 2}],
+        "fluency": {"wpm": 120},
+        "throttled": False,
+        "total_errors_detected": 1,
+        "surfaced_error_count": 1,
+    }
+    respx.post(f"{service.AGT04_BASE_URL}/feedback/speaking").mock(
+        return_value=httpx.Response(200, json=agt04_response)
+    )
+    respx.post(f"{service.AGT11_BASE_URL}/translate").mock(
+        return_value=httpx.Response(200, json={
+            "original": "test", "translated": "test", "zone": "en_only",
+            "zone_label": "English only (above B2)", "theta_r": 2.0, "cached": False,
+        })
+    )
+
+    service._SESSION_START_TIMES["abc"] = service.time.monotonic()
+    service._SESSION_PROFILES["abc"] = {
+        "profile": {},
+        "skill_focus": "SPEAKING",
+        "clerk_user_id": "user_fb",
+    }
+
+    result = await service.process_turn("abc", "I go there yesterday.", None)
+
+    assert result["grammar_feedback"] is not None
+    assert result["grammar_feedback"]["total_errors_detected"] == 1
+    assert result["grammar_feedback"]["grammar_errors"][0]["errorType"] == "verb_tense"
+
+
+@respx.mock
+async def test_process_turn_grammar_feedback_none_when_agt04_fails():
+    """If AGT-04 is unreachable, process_turn must complete with grammar_feedback=None."""
+    respx.post(f"{service.AGT06_BASE_URL}/sessions/abc/context").mock(return_value=httpx.Response(204))
+    respx.get(f"{service.AGT06_BASE_URL}/sessions/abc/context").mock(
+        return_value=httpx.Response(200, json=[])
+    )
+    respx.post(f"{service.AGT04_BASE_URL}/feedback/speaking").mock(
+        side_effect=httpx.ConnectError("AGT-04 down")
+    )
+    respx.post(f"{service.AGT11_BASE_URL}/translate").mock(
+        side_effect=httpx.ConnectError("AGT-11 down")
+    )
+
+    service._SESSION_START_TIMES["abc"] = service.time.monotonic()
+    service._SESSION_PROFILES["abc"] = {
+        "profile": {},
+        "skill_focus": "SPEAKING",
+        "clerk_user_id": "user_fb",
+    }
+
+    result = await service.process_turn("abc", "I go there yesterday.", None)
+
+    assert result["grammar_feedback"] is None
+    assert result["assistant_message"].startswith("[MOCK LLM AGT03]")
+
+
+@respx.mock
+async def test_process_turn_reading_skill_skips_agt04():
+    """READING sessions must return grammar_feedback=None (comprehension path, not grammar)."""
+    respx.post(f"{service.AGT06_BASE_URL}/sessions/abc/context").mock(return_value=httpx.Response(204))
+    respx.get(f"{service.AGT06_BASE_URL}/sessions/abc/context").mock(
+        return_value=httpx.Response(200, json=[])
+    )
+    respx.post(f"{service.AGT11_BASE_URL}/translate").mock(
+        return_value=httpx.Response(200, json={
+            "original": "test", "translated": "[VI] test", "zone": "vi_primary",
+            "zone_label": "Vietnamese primary (below B1)", "theta_r": -1.0, "cached": False,
+        })
+    )
+
+    service._SESSION_START_TIMES["abc"] = service.time.monotonic()
+    service._SESSION_PROFILES["abc"] = {
+        "profile": {},
+        "skill_focus": "READING",
+        "clerk_user_id": "user_read",
+    }
+
+    result = await service.process_turn("abc", "I understood the text.", None)
+
+    assert result["grammar_feedback"] is None
+
+
+# ---------------------------------------------------------------------------
+# AGT-11 translation integration
+# ---------------------------------------------------------------------------
+
+@respx.mock
+async def test_process_turn_includes_translation_for_vi_primary_user():
+    """For vi_primary zone, translated_message must contain the AGT-11 translation."""
+    respx.post(f"{service.AGT06_BASE_URL}/sessions/abc/context").mock(return_value=httpx.Response(204))
+    respx.get(f"{service.AGT06_BASE_URL}/sessions/abc/context").mock(
+        return_value=httpx.Response(200, json=[])
+    )
+    respx.post(f"{service.AGT04_BASE_URL}/feedback/writing").mock(
+        return_value=httpx.Response(200, json={"grammar_errors": [], "total_errors": 0})
+    )
+    respx.post(f"{service.AGT11_BASE_URL}/translate").mock(
+        return_value=httpx.Response(200, json={
+            "original": "[MOCK LLM AGT03] Got it",
+            "translated": "[VI] Được rồi!",
+            "zone": "vi_primary",
+            "zone_label": "Vietnamese primary (below B1)",
+            "theta_r": -1.0,
+            "cached": False,
+        })
+    )
+
+    service._SESSION_START_TIMES["abc"] = service.time.monotonic()
+    service._SESSION_PROFILES["abc"] = {
+        "profile": {},
+        "skill_focus": "WRITING",
+        "clerk_user_id": "user_vi",
+    }
+
+    result = await service.process_turn("abc", "Dear manager, I writing to...", None)
+
+    assert result["translated_message"] == "[VI] Được rồi!"
+    assert result["translation_zone"] == "vi_primary"
+
+
+@respx.mock
+async def test_process_turn_speaking_session_returns_en_only_zone():
+    """SPEAKING sessions use session_type=conversation → AGT-11 returns en_only → no translation."""
+    respx.post(f"{service.AGT06_BASE_URL}/sessions/abc/context").mock(return_value=httpx.Response(204))
+    respx.get(f"{service.AGT06_BASE_URL}/sessions/abc/context").mock(
+        return_value=httpx.Response(200, json=[])
+    )
+    respx.post(f"{service.AGT04_BASE_URL}/feedback/speaking").mock(
+        return_value=httpx.Response(200, json={"grammar_errors": [], "total_errors_detected": 0, "surfaced_error_count": 0, "throttled": False, "fluency": {}})
+    )
+    respx.post(f"{service.AGT11_BASE_URL}/translate").mock(
+        return_value=httpx.Response(200, json={
+            "original": "Good!", "translated": "Good!", "zone": "en_only",
+            "zone_label": "English only (above B2)", "theta_r": 2.0, "cached": False,
+        })
+    )
+
+    service._SESSION_START_TIMES["abc"] = service.time.monotonic()
+    service._SESSION_PROFILES["abc"] = {
+        "profile": {},
+        "skill_focus": "SPEAKING",
+        "clerk_user_id": "user_speak",
+    }
+
+    result = await service.process_turn("abc", "I work in marketing.", None)
+
+    assert result["translated_message"] is None
+    assert result["translation_zone"] == "en_only"
+
+
+@respx.mock
+async def test_process_turn_translation_none_when_agt11_fails():
+    """If AGT-11 is unreachable, translated_message and translation_zone must both be None."""
+    respx.post(f"{service.AGT06_BASE_URL}/sessions/abc/context").mock(return_value=httpx.Response(204))
+    respx.get(f"{service.AGT06_BASE_URL}/sessions/abc/context").mock(
+        return_value=httpx.Response(200, json=[])
+    )
+    respx.post(f"{service.AGT04_BASE_URL}/feedback/speaking").mock(
+        side_effect=httpx.ConnectError("AGT-04 down")
+    )
+    respx.post(f"{service.AGT11_BASE_URL}/translate").mock(
+        side_effect=httpx.ConnectError("AGT-11 down")
+    )
+
+    service._SESSION_START_TIMES["abc"] = service.time.monotonic()
+    service._SESSION_PROFILES["abc"] = {
+        "profile": {},
+        "skill_focus": "SPEAKING",
+        "clerk_user_id": "user_fail",
+    }
+
+    result = await service.process_turn("abc", "Hello there.", None)
+
+    assert result["translated_message"] is None
+    assert result["translation_zone"] is None
+
+
+# ---------------------------------------------------------------------------
+# start_session stores clerk_user_id in session profiles
+# ---------------------------------------------------------------------------
+
+@respx.mock
+async def test_start_session_stores_clerk_user_id(monkeypatch):
+    """clerk_user_id must be stored in _SESSION_PROFILES so process_turn can use it."""
+    respx.get(f"{service.AGT01_BASE_URL}/profile/user_ck").mock(
+        return_value=httpx.Response(200, json={"cold_start_flag": False})
+    )
+    respx.get(f"{service.AGT02_BASE_URL}/plans/user_ck/active").mock(
+        return_value=httpx.Response(404)
+    )
+    respx.post(f"{service.AGT06_BASE_URL}/sessions/ck_sess/state").mock(return_value=httpx.Response(204))
+    respx.post(f"{service.AGT06_BASE_URL}/sessions/ck_sess/context").mock(return_value=httpx.Response(204))
+
+    async def fake_emit(topic, payload, agent_id, key=None):
+        pass
+
+    monkeypatch.setattr(service, "emit", fake_emit)
+
+    await service.start_session("user_ck", "SPEAKING", "ck_sess")
+
+    assert service._SESSION_PROFILES["ck_sess"]["clerk_user_id"] == "user_ck"

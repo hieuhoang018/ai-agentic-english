@@ -1,20 +1,16 @@
-import httpx
 import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Header, HTTPException
 from pydantic import BaseModel
-from agents.agt07_review.service import get_due_items, rate_item, build_daily_test, AGT06_BASE
+from agents.agt07_review.service import get_due_items, rate_item, build_daily_test, pick_vocab_of_the_day
 from agents.shared.config import settings
-from agents.shared.db.postgres import get_pool, close_pool
 
 logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    await get_pool()
     yield
-    await close_pool()
 
 
 app = FastAPI(
@@ -61,35 +57,6 @@ async def daily_test(clerk_user_id: str, size: int = 10):
     return await build_daily_test(clerk_user_id, size)
 
 
-async def _pick_vocab_of_the_day(clerk_user_id: str) -> dict | None:
-    """
-    Fetch vocabulary from AGT-06 and return the least-familiar item.
-    Returns None if the user has no vocab or AGT-06 is unreachable.
-    """
-    try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            r = await client.get(
-                f"{AGT06_BASE}/ltm/{clerk_user_id}/vocabulary",
-                params={"limit": 50},
-            )
-            r.raise_for_status()
-            vocab = r.json()
-    except Exception as exc:
-        logger.warning("Could not fetch vocab for vocab-of-the-day %s: %s", clerk_user_id, exc)
-        return None
-
-    if not vocab:
-        return None
-
-    item = min(vocab, key=lambda v: v.get("encounter_count", 0))
-    return {
-        "vocabItemId": item["vocab_id"],
-        "term": item["word"],
-        "meaning": "",
-        "exampleSentence": item["context_sentences"][0] if item.get("context_sentences") else None,
-    }
-
-
 @app.get("/internal/reminders/{clerk_user_id}/context")
 async def reminder_context(
     clerk_user_id: str,
@@ -104,7 +71,7 @@ async def reminder_context(
         raise HTTPException(status_code=403, detail="Forbidden")
 
     due = await get_due_items(clerk_user_id)
-    vocab_of_the_day = await _pick_vocab_of_the_day(clerk_user_id)
+    vocab_of_the_day = await pick_vocab_of_the_day(clerk_user_id)
 
     return {
         "userId": clerk_user_id,

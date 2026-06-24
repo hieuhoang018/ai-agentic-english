@@ -97,3 +97,32 @@ async def build_daily_test(clerk_user_id: str, size: int = 10) -> list[dict]:
         return []
 
     return compose_test_stub(vocab, errors, size)
+
+
+async def pick_vocab_of_the_day(clerk_user_id: str) -> dict | None:
+    """
+    Fetch vocabulary from AGT-06 and return the least-familiar item.
+    Returns None if the user has no vocab or AGT-06 is unreachable.
+    """
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            r = await client.get(
+                f"{AGT06_BASE}/ltm/{clerk_user_id}/vocabulary",
+                params={"limit": 50},
+            )
+            r.raise_for_status()
+            vocab = r.json()
+    except Exception as exc:
+        logger.warning("Could not fetch vocab for vocab-of-the-day %s: %s", clerk_user_id, exc)
+        return None
+
+    if not vocab:
+        return None
+
+    item = min(vocab, key=lambda v: v.get("encounter_count", 0))
+    return {
+        "vocabItemId": item["vocab_id"],
+        "term": item["word"],
+        "meaning": "",
+        "exampleSentence": item["context_sentences"][0] if item.get("context_sentences") else None,
+    }

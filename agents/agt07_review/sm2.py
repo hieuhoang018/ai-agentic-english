@@ -42,8 +42,11 @@ def update_stability_stub(quality: int, current_stability: float) -> float:
 def compute_retrievability(stability: float, days_since_review: float) -> float:
     """
     R = e^(-t/S).  Always computed correctly — used for scheduling priority.
+    Negative days_since (future last_encounter) clamps to 1.0 — item is fully retained.
     """
     import math
     if stability <= 0:
         return 0.0
+    if days_since_review <= 0:
+        return 1.0
     return round(math.exp(-days_since_review / stability), 4)

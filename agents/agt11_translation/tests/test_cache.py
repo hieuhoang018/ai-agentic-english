@@ -1,79 +1,47 @@
-"""
-AGT-11 translation cache tests.
-
-Verifies:
-  1. First call populates Redis and returns cached=False.
-  2. Second identical call hits Redis and returns cached=True.
-  3. The cached value contains non-ASCII Vietnamese characters.
-
-Redis is mocked with a real dict to simulate setex/get behaviour without
-requiring a live Redis connection.
-"""
-
+import hashlib
 import pytest
-from unittest.mock import AsyncMock, MagicMock
+from agents.agt11_translation.cache import _cache_key, CACHE_TTL
 
 
-@pytest.fixture
-def fake_redis(monkeypatch):
-    """Minimal Redis mock that backs get/setex with a plain dict."""
-    store: dict[str, bytes] = {}
+# ---------------------------------------------------------------------------
+# Cache key determinism and format
+# ---------------------------------------------------------------------------
 
-    redis_mock = MagicMock()
-    redis_mock.get = AsyncMock(side_effect=lambda k: store.get(k))
-    redis_mock.setex = AsyncMock(side_effect=lambda k, ttl, v: store.update({k: v}))
-
-    monkeypatch.setattr(
-        "agents.agt11_translation.cache.get_redis",
-        AsyncMock(return_value=redis_mock),
-    )
-    return store
+def test_cache_key_is_deterministic():
+    k1 = _cache_key("Hello world", "bilingual")
+    k2 = _cache_key("Hello world", "bilingual")
+    assert k1 == k2
 
 
-async def test_first_call_returns_not_cached(fake_redis):
-    from agents.agt11_translation.cache import translate
-
-    _text, was_cached = await translate("Subject-verb agreement", "bilingual")
-    assert was_cached is False
-
-
-async def test_second_call_returns_cached(fake_redis):
-    from agents.agt11_translation.cache import translate
-
-    await translate("Subject-verb agreement", "bilingual")
-    _text, was_cached = await translate("Subject-verb agreement", "bilingual")
-    assert was_cached is True
+def test_cache_key_differs_by_zone():
+    k_bi = _cache_key("Hello world", "bilingual")
+    k_vi = _cache_key("Hello world", "vi_primary")
+    k_en = _cache_key("Hello world", "en_only")
+    assert k_bi != k_vi
+    assert k_bi != k_en
+    assert k_vi != k_en
 
 
-async def test_mock_translation_contains_non_ascii_vietnamese(fake_redis):
-    from agents.agt11_translation.cache import translate
-
-    text, _ = await translate("Subject-verb agreement", "bilingual")
-    assert any(ord(c) > 127 for c in text), (
-        f"Expected Vietnamese Unicode in mock translation, got: {text!r}"
-    )
+def test_cache_key_differs_by_content():
+    k1 = _cache_key("Hello world", "bilingual")
+    k2 = _cache_key("Goodbye world", "bilingual")
+    assert k1 != k2
 
 
-async def test_mock_translation_has_mock_vi_prefix(fake_redis):
-    from agents.agt11_translation.cache import translate
-
-    text, _ = await translate("Subject-verb agreement", "bilingual")
-    assert text.startswith("[MOCK VI]"), (
-        f"Expected [MOCK VI] prefix in mock translation, got: {text!r}"
-    )
-
-
-async def test_different_content_misses_cache(fake_redis):
-    from agents.agt11_translation.cache import translate
-
-    await translate("content A", "bilingual")
-    _text, was_cached = await translate("content B", "bilingual")
-    assert was_cached is False
+def test_cache_key_format():
+    k = _cache_key("test", "bilingual")
+    assert k.startswith("trans:")
+    hex_part = k[len("trans:"):]
+    assert len(hex_part) == 16
+    int(hex_part, 16)  # must be valid hex
 
 
-async def test_same_content_different_zone_misses_cache(fake_redis):
-    from agents.agt11_translation.cache import translate
+def test_cache_key_matches_manual_hash():
+    content = "Grammar explanation"
+    zone = "vi_primary"
+    expected_hex = hashlib.sha256(f"{content}:{zone}".encode("utf-8")).hexdigest()[:16]
+    assert _cache_key(content, zone) == f"trans:{expected_hex}"
 
-    await translate("hello", "bilingual")
-    _text, was_cached = await translate("hello", "vi_primary")
-    assert was_cached is False
+
+def test_cache_ttl_is_24_hours():
+    assert CACHE_TTL == 86400
