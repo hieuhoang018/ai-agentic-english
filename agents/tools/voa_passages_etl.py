@@ -58,6 +58,28 @@ ARTICLES = [
     "the-story-of-jack-frost-/7932530.html",
     "kicking-off-a-new-year/7922042.html",
     "expressions-for-new-year-s-resolution/6896754.html",
+    # Second batch (2026-06-24) — each hand-verified to have a real `class="wsw"`
+    # transcript section and a downloadable mp3 before being added here. Found via
+    # web search for individual episode permalinks rather than the site's own
+    # listing pages: the live /z/987 index and /z/987/episodes pagination only
+    # ever surface a rotating set of ~12 recent items, and the podcast RSS feed's
+    # <link> values point at a separate "syndication" id per episode that 404s on
+    # transcript content (no `wsw` div at all) even though a real, fully-transcribed
+    # permalink exists at a different id for the same episode.
+    "an-eye-for-an-eye/7764503.html",
+    "words-and-their-stories-dont-look-a-gift-horse-in-the-mouth/4168731.html",
+    "words-and-their-stories-from-monkeys-to-potatoes/4141925.html",
+    "keep-your-nose-to-the-grindstone/7796985.html",
+    "partners-in-crime/7684146.html",
+    "exploring-the-butterfly-effect-/7835956.html",
+    "reaching-the-tipping-point-/7750319.html",
+    "many-handy-hand-expressions-/7621434.html",
+    "when-in-rome-/7816325.html",
+    "be-careful-what-you-bank-on-/7703514.html",
+    "one-person-s-trash-is-another-person-s-treasure-/7733886.html",
+    "are-you-windshield-or-bug-/7575872.html",
+    "what-is-your-north-star-/7782072.html",
+    "is-pie-in-the-sky-just-a-dream-/7806461.html",
 ]
 
 OUT = "passage_seed.jsonl"

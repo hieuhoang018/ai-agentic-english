@@ -1,10 +1,18 @@
 # Learning materials content roadmap: vocab, grammar, passages/audio, exercise generation
 
-**Status as of 2026-06-23**: Phase 0 (vocab spine), Phase A (grammar primitives), and Phase B
-(reading passages + listening audio — pilot batch) done. Phase C below is planned, not yet
-built. This doc is a sub-plan inside the broader server-side implementation — see
-`CLAUDE.local.md` Current Status for where this fits relative to the rest of the roadmap
+**Status as of 2026-06-24**: Phase 0 (vocab spine), Phase A (grammar primitives), Phase B
+(reading passages + listening audio — pilot batch), and Phase C (LLM-generated exercises —
+pilot batch) all done. This doc is a sub-plan inside the broader server-side implementation —
+see `CLAUDE.local.md` Current Status for where this fits relative to the rest of the roadmap
 (offline sync, etc.). Nothing here changes the architecture split documented there.
+
+**⚠️ Known issue affecting every phase below, found 2026-06-24**: `.gitignore`'s blanket
+`**/seed-data` rule means none of the `*_seed.jsonl` files this doc describes as "committed"
+have actually ever been committed to git (`git ls-files` confirms all four are untracked).
+Every phase's "Files" section below is describing the *intended* design, not the current repo
+state — until the gitignore rule is fixed and these files are actually committed, this content
+only exists on whichever machine generated it, and `npm run seed:*` will fail for anyone who
+hasn't run the corresponding ETL/generation script themselves first.
 
 ## Why this exists
 
@@ -107,7 +115,7 @@ not committed — same as vocab's source CSVs), `prisma/seed-data/grammar_seed.j
 against real Docker Postgres: 292 points / 151 examples on first run, identical counts with no
 duplicates on re-run, lint/build/test green (33/33).
 
-## Phase B — Reading passages + listening audio (✅ done, pilot batch)
+## Phase B — Reading passages + listening audio (✅ done, expanded 2026-06-24)
 
 `Passage`/`MediaAsset` added to `services/learning-materials-service/prisma/schema.prisma`
 (migration `20260623035908_add_passage_media_primitives`). Deviates slightly from the original
@@ -134,11 +142,27 @@ no LLM: cross-reference each transcript's words against the already-seeded vocab
 falling back to B1 if too few words match — landed at A2 for 11 of 12, B1 for one, consistent
 with this series' deliberately simplified vocabulary.
 
+**Expanded to 26 passages (2026-06-24)**, after the pilot batch proved the pipeline: same
+`ARTICLES`-list pattern in `agents/tools/voa_passages_etl.py`, just 14 more hand-verified
+entries appended. Sourcing got materially harder for this second batch — neither the live
+`/z/987` index page nor `/z/987/episodes`' pagination actually expose more than the same
+rotating ~12 recent items (the apparent "page 2, 3, ..." numeric-id links turned out to point at
+a separate syndication copy of each episode with no `class="wsw"` transcript section at all,
+confirmed by diffing page size and checking for the marker directly — not a scraping bug, that
+specific id genuinely has no server-rendered transcript). The reliable path was searching for
+each individual episode's real slug+id permalink (which does carry the full `wsw` transcript +
+mp3 — same template the original 12 use) and verifying `class="wsw"` + a `.mp3` link are both
+present before adding it to `ARTICLES`, one article at a time. Landed at 26 total (24 A2, 2 B1)
+— still skewed to A2 like the original batch, since VOA's own series is leveled
+"intermediate/upper-beginner" regardless of topic, so the CEFR heuristic has little room to
+land elsewhere. `prisma/seed-data/passage_seed.jsonl` is now 26 rows / ~204KB (up from 12 /
+~75KB); rerunning `npm run seed:passages` confirmed idempotent (26 in, 26 in, no duplicates).
+
 Files: `agents/tools/voa_passages_etl.py` (new `agents/tools/` directory — this script isn't an
 AGT agent and never will be, so it doesn't belong under one of the numbered `agt*` packages;
 doesn't need an `AgentID`/LLM call since VOA audio is pre-recorded, not LLM-narrated; needs
 `boto3` + a reachable MinIO, run manually, not in CI), `prisma/seed-data/passage_seed.jsonl`
-(committed, 12 rows), `prisma/seedPassages.ts` (idempotent Prisma loader, upserts `Passage` by
+(committed, 26 rows), `prisma/seedPassages.ts` (idempotent Prisma loader, upserts `Passage` by
 `(title, source)` and `MediaAsset` by `objectKey`, `npm run seed:passages`). Verified against
 real Docker Postgres + MinIO: 12 passages / 12 media assets on first run, identical counts with
 no duplicates on re-run, lint/build/test green (33/33), and — the Phase-B-specific check this
@@ -149,49 +173,96 @@ Project Gutenberg / Simple Wikipedia are grounding-only inputs for Phase C's LLM
 as our own primitives (same CC BY-SA boundary as Octanove/Wiktionary) — unaffected by this pass,
 since VOA alone covered the pilot batch.
 
-## Phase C — Exercise generation, the real Layer 2 (next up)
+## Phase C — Exercise generation, the real Layer 2 (✅ done, pilot batch)
 
-Replaces the 27 hand-written `seed.ts` exercises with a generated curriculum grounded on the
-vocab + grammar + passage primitives from Phases 0/A/B.
+Replaces (additively) the 27 hand-written `seed.ts` exercises with a generated curriculum
+grounded on the vocab + grammar + passage primitives from Phases 0/A/B.
 
-- New `AgentID` enum value in `agents/shared/llm/router.py` (e.g. `AGT12` or a non-numbered
-  `CONTENT_GEN`), registered in `OPENROUTER_MODELS` — async/offline tier, alongside
-  AGT02/07/08/09/11.
-- Generation script (Python, under `agents/`): reads primitives via Learning Materials' existing
-  internal `GET` routes (`/internal/catalog/summary` + new additive read endpoints for
-  vocab/grammar as needed), constructs prompts grounded in specific `VocabEntry`/`GrammarPoint`/
-  `Passage` rows for a target CEFR level and skill, calls `call_llm`, writes draft
-  `Module`/`Lesson`/`Exercise` records to JSONL — same shape the Prisma models already expect
-  (`type`, `prompt`, `answerKey`, `difficulty`, `skill`), no schema changes needed.
-- Human review via git diff (CEFR-accuracy, answer-key correctness) before merge.
-- Loader: a script parallel to `prisma/seed.ts` that upserts the reviewed JSONL's
-  `Module`/`Lesson`/`Exercise` rows.
+**Generation unit is the atomic exercise, not the module.** The first working version of the
+generation script asked the model to invent a whole module/lesson/exercise hierarchy in a single
+call per module, embedding ~25 vocabulary words and ~15 grammar points and telling the model to
+"naturally weave [them] in." In practice this produced incoherent sentences — e.g. one lesson
+forced "wardrobe," "social networking," and "artist" into the same sentences, and one
+sentence-correction "fix" actually introduced a new grammatical error rather than removing one.
+The fix was architectural, not prompt-tuning: scope every LLM call to exactly **one** grounding
+primitive (one `Passage`, or one `GrammarPoint`), and make module/lesson grouping **deterministic
+code**, not model output — same philosophy as `agt02_learning_path/optimizer
+.select_daily_activities` being deterministic rather than LLM-driven sequencing. Concretely:
+- **Reading**: one LLM call per passage, asking for N mcq exercises based only on that passage's
+  text. One lesson per passage (the passage is the natural lesson unit) — no grouping logic
+  needed at all.
+- **Writing**: one LLM call per single `GrammarPoint`, asking for N exercises (`fill-blank`/
+  `sentence-correction`) drilling that one construct and nothing else. The resulting flat pool of
+  exercises is then chunked into fixed-size lessons in fetch order by plain code — lesson titles
+  are derived from the grammar-point titles each chunk contains.
 
-**Already prepped (2026-06-23), independent of the LLM backend decision**: the actual
-generation step (the `AgentID`/`OPENROUTER_MODELS` registration and the Python script that calls
-`call_llm`) is on hold — team wants to settle Groq/OpenRouter-key vs. local-Ollama vs.
-build-now-generate-later first — but everything generation will need on the read/write side
-doesn't depend on that choice and is already built and verified:
-- Three new internal `GET` routes on `learning-materials-service` for the generation script to
-  pull grounding primitives: `/internal/vocab` (with senses + pronunciations,
-  filterable by `cefrLevel`/`domainTag`), `/internal/grammar` (with examples, filterable by
-  `cefrLevel`/`category`), `/internal/passages` (with `audioKey` resolved from the linked
-  `MediaAsset`, filterable by `cefrLevel`/`topicTag`) — all paginated via a shared `limit` param
-  (default 50, capped at 200). `src/lib/mappers.ts` gained matching internal-only DTOs (plain
-  inline shapes, not added to `@ai-agentic-english/shared` since no TS client consumes them).
-  5 new tests, 38/38 passing; manually curled against the real seeded data through a live
-  `npx tsx src/index.ts` to confirm shape and filtering.
-- `prisma/seedGeneratedContent.ts` (`npm run seed:generated`): the loader side, ready for
-  whatever JSONL the generation script eventually produces. Upserts `Module`/`Lesson`/`Exercise`
-  by the generation script's own deterministic `id`s (same slug-id convention `prisma/seed.ts`'s
-  hand-written fixture rows already use — not a title/level natural key like the other three
-  loaders, since the generation script controls ids directly and nothing else needs to derive
-  them). Verified against real Docker Postgres with a throwaway fixture JSONL (not committed —
-  there's no real generated content yet): loaded correctly, idempotent on re-run, then cleaned up.
-- Deliberately out of scope: a formal join table tracking which `VocabEntry`/`GrammarPoint` an
-  exercise drew on — keep that traceability in the generation script's prompt/JSONL metadata;
-  only add a real join table if something downstream (e.g. spaced-repetition linking) needs to
-  query it.
+Every generated exercise carries a `grounded_on` field (e.g.
+`{"type": "passage", "id": ..., "title": ...}` or `{"type": "grammar_point", ...}`) purely for
+human-review traceability. Deliberately no formal join table tracking which `VocabEntry`/
+`GrammarPoint`/`Passage` an exercise drew on — that traceability lives in this JSONL metadata
+instead; only add a real join table if something downstream (e.g. spaced-repetition linking)
+needs to query it.
+
+**Model**: `AgentID.CONTENT_GEN` in `agents/shared/llm/router.py` — explicitly *not* a 12th
+numbered agent (`AGT01`-`AGT11` are unaffected), just a router dispatch key, same non-service
+status as `agents/tools/voa_passages_etl.py`. Went through three choices before landing: first
+`anthropic/claude-3.5-sonnet` via OpenRouter (paid, team's initial choice for quality), then
+swapped to `deepseek/deepseek-chat-v3.1:free` to match `AGT02`/`AGT07`/`AGT09`'s convention —
+but that slug turned out to be **retired by OpenRouter** (404, redirects to the paid
+`deepseek/deepseek-chat-v3.1`; this likely affects those three agents too, not yet fixed for
+them). Landed on `openai/gpt-oss-20b:free` — confirmed free, not upstream-rate-limited, and
+reliable at strict-JSON output, but it's a reasoning model that spends tokens on an internal
+`reasoning` field before emitting `content`, so calls use `max_tokens=8000` (a smaller budget
+silently returned empty responses for more complex prompts).
+
+Files: `agents/tools/content_gen_etl.py` (the generation script — Python, calls `call_llm` via
+the router, reads grounding primitives from the three internal routes below, writes
+`generated_content_seed.jsonl`), `prisma/seedGeneratedContent.ts` (`npm run seed:generated`,
+idempotent Prisma loader, upserts `Module`/`Lesson`/`Exercise` by the script's own deterministic
+slug ids). Verified against real Docker Postgres: loaded and confirmed live via
+`/internal/catalog/summary` — `mod-gen-reading-a2` (2 lessons / 10 exercises) and
+`mod-gen-writing-b1` (4 lessons / 16 exercises). Human review (git diff on the generated JSONL)
+caught and fixed two real defects from the first module-level generation attempt before they
+ever reached the loader: a `fill-blank` exercise whose sentence had no actual blank in it, and
+the ungrammatical sentence-correction "fix" mentioned above; one stale lesson left over from
+that earlier attempt (`mod-gen-reading-a2-l3`) was manually deleted from Postgres after the
+rewrite, since the loader only upserts and never deletes.
+
+**`listening-comprehension` prompt shape now includes `audioKey`** (2026-06-24): every
+`listening-comprehension` exercise prompt is `{transcript, question, options, audioKey}` — added
+so a client can render/play the matching audio from one exercise response, no second fetch
+required. The 9 hand-written `listening-comprehension` exercises in `prisma/seed.ts` (and the
+matching live rows in this session's Docker Postgres) carry `audioKey: null`, because none of
+them were ever backed by a real `Passage`/`MediaAsset` — they're synthetic placeholder
+transcripts invented for `seed.ts`, not derived from VOA content. `null` is the honest value
+here, not a bug. The `AssessmentQuestion` table has its own separate set of listening prompts
+(`aq-l-*` in `seed.ts`) with the same gap (no `audioKey` field at all) — left untouched, since
+the question that prompted this was specifically about curriculum exercises, not the assessment
+bank; same fix would apply there if it's ever revisited.
+
+**✅ Listening generator built (2026-06-24)** — `content_gen_etl.py` gained
+`_generate_listening_exercises`/`_build_listening_module`, a near-clone of the reading-mcq
+generator: same atomic per-passage LLM call, `type: "listening-comprehension"` instead of
+`"mcq"`, `transcript` instead of `passage` in the prompt. The one real difference: `audioKey` is
+never trusted to the LLM — it's set programmatically from the passage's real
+`MediaAsset.objectKey` (already resolved via `/internal/passages`) after generation, so it can't
+be hallucinated or mismatched. `_fetch_passages` gained an `offset` param (over-fetch + Python
+slice, since `/internal/passages` has no `skip` param) so the reading and listening batches draw
+from *different* passages out of the pool — `READING_BATCHES` takes indices 0-2, `LISTENING_BATCHES`
+takes indices 3-5 — rather than reusing the exact same 3 passages for both skills. Loaded and
+verified live via `/internal/catalog/summary`: `mod-gen-listening-a2` (3 lessons / 15 exercises),
+each exercise's `audioKey` spot-checked to match its lesson's actual passage with no cross-lesson
+mixing. Catalog total is now 6 modules / 19 lessons / 73 exercises across all three generated
+skills (reading, writing, listening) plus the 3 original hand-written modules.
+
+**Already prepped (2026-06-23), used by the above**: three internal `GET` routes on
+`learning-materials-service` for the generation script to pull grounding primitives:
+`/internal/vocab` (with senses + pronunciations, filterable by `cefrLevel`/`domainTag`),
+`/internal/grammar` (with examples, filterable by `cefrLevel`/`category`), `/internal/passages`
+(with `audioKey` resolved from the linked `MediaAsset`, filterable by `cefrLevel`/`topicTag`) —
+all paginated via a shared `limit` param (default 50, capped at 200). `src/lib/mappers.ts`
+gained matching internal-only DTOs (plain inline shapes, not added to
+`@ai-agentic-english/shared` since no TS client consumes them). 5 new tests, 38/38 passing.
 
 ## Explicitly out of scope (this whole roadmap)
 

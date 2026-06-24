@@ -257,49 +257,49 @@ async function main() {
     // Listening lesson 1
     {
       id: 'ex-l1-1', lessonId: lesL1.id, type: 'listening-comprehension', skill: 'listening', difficulty: 'easy',
-      prompt: { transcript: 'Good morning. This is a reminder that the office will be closed on Monday for the public holiday. Normal hours resume on Tuesday.', question: 'What is the main purpose of this message?', options: ['To announce a new schedule', 'To remind about a holiday closure', 'To cancel a meeting', 'To change office hours'] },
+      prompt: { transcript: 'Good morning. This is a reminder that the office will be closed on Monday for the public holiday. Normal hours resume on Tuesday.', question: 'What is the main purpose of this message?', options: ['To announce a new schedule', 'To remind about a holiday closure', 'To cancel a meeting', 'To change office hours'], audioKey: null },
       answerKey: { answer: 'To remind about a holiday closure' },
     },
     {
       id: 'ex-l1-2', lessonId: lesL1.id, type: 'listening-comprehension', skill: 'listening', difficulty: 'easy',
-      prompt: { transcript: 'Hi Anna, it\'s Ben. I just wanted to check if we\'re still on for dinner tonight at 7. Let me know!', question: 'What is Ben calling about?', options: ['To cancel dinner', 'To confirm dinner plans', 'To change the time', 'To invite a new guest'] },
+      prompt: { transcript: 'Hi Anna, it\'s Ben. I just wanted to check if we\'re still on for dinner tonight at 7. Let me know!', question: 'What is Ben calling about?', options: ['To cancel dinner', 'To confirm dinner plans', 'To change the time', 'To invite a new guest'], audioKey: null },
       answerKey: { answer: 'To confirm dinner plans' },
     },
     {
       id: 'ex-l1-3', lessonId: lesL1.id, type: 'listening-comprehension', skill: 'listening', difficulty: 'easy',
-      prompt: { transcript: 'The train to London departs at 14:30 from platform 3. Please ensure you have your ticket ready for inspection.', question: 'What is the general topic of this announcement?', options: ['A flight departure', 'A train departure', 'A bus schedule', 'A platform change'] },
+      prompt: { transcript: 'The train to London departs at 14:30 from platform 3. Please ensure you have your ticket ready for inspection.', question: 'What is the general topic of this announcement?', options: ['A flight departure', 'A train departure', 'A bus schedule', 'A platform change'], audioKey: null },
       answerKey: { answer: 'A train departure' },
     },
     // Listening lesson 2
     {
       id: 'ex-l2-1', lessonId: lesL2.id, type: 'listening-comprehension', skill: 'listening', difficulty: 'medium',
-      prompt: { transcript: 'The train arrives at 3 PM. The station is located downtown, next to the central park.', question: 'When does the train arrive?', options: ['2 PM', '3 PM', '4 PM', '5 PM'] },
+      prompt: { transcript: 'The train arrives at 3 PM. The station is located downtown, next to the central park.', question: 'When does the train arrive?', options: ['2 PM', '3 PM', '4 PM', '5 PM'], audioKey: null },
       answerKey: { answer: '3 PM' },
     },
     {
       id: 'ex-l2-2', lessonId: lesL2.id, type: 'listening-comprehension', skill: 'listening', difficulty: 'medium',
-      prompt: { transcript: 'Your order number is 4521. It will be delivered between 2 PM and 4 PM tomorrow.', question: 'What is the order number?', options: ['2154', '4521', '5124', '1254'] },
+      prompt: { transcript: 'Your order number is 4521. It will be delivered between 2 PM and 4 PM tomorrow.', question: 'What is the order number?', options: ['2154', '4521', '5124', '1254'], audioKey: null },
       answerKey: { answer: '4521' },
     },
     {
       id: 'ex-l2-3', lessonId: lesL2.id, type: 'listening-comprehension', skill: 'listening', difficulty: 'medium',
-      prompt: { transcript: 'The meeting has been moved from Room 5 to Room 12 on the third floor due to maintenance work.', question: 'Where will the meeting now take place?', options: ['Room 5, second floor', 'Room 12, third floor', 'Room 5, third floor', 'Room 12, second floor'] },
+      prompt: { transcript: 'The meeting has been moved from Room 5 to Room 12 on the third floor due to maintenance work.', question: 'Where will the meeting now take place?', options: ['Room 5, second floor', 'Room 12, third floor', 'Room 5, third floor', 'Room 12, second floor'], audioKey: null },
       answerKey: { answer: 'Room 12, third floor' },
     },
     // Listening lesson 3
     {
       id: 'ex-l3-1', lessonId: lesL3.id, type: 'listening-comprehension', skill: 'listening', difficulty: 'medium',
-      prompt: { transcript: 'A: Excuse me, do you know where the nearest pharmacy is? B: Sure, go straight down this street, turn left at the traffic lights, and it\'s on your right.', question: 'Where is the pharmacy?', options: ['Turn right, then left', 'Straight, turn left, on the right', 'Straight, turn right, on the left', 'Second street on the left'] },
+      prompt: { transcript: 'A: Excuse me, do you know where the nearest pharmacy is? B: Sure, go straight down this street, turn left at the traffic lights, and it\'s on your right.', question: 'Where is the pharmacy?', options: ['Turn right, then left', 'Straight, turn left, on the right', 'Straight, turn right, on the left', 'Second street on the left'], audioKey: null },
       answerKey: { answer: 'Straight, turn left, on the right' },
     },
     {
       id: 'ex-l3-2', lessonId: lesL3.id, type: 'listening-comprehension', skill: 'listening', difficulty: 'medium',
-      prompt: { transcript: 'A: What would you like to order? B: I\'ll have the chicken pasta, please. And a glass of water. A: Of course. Anything for dessert? B: No, thank you.', question: 'What did the customer order to drink?', options: ['Coffee', 'Juice', 'Water', 'Tea'] },
+      prompt: { transcript: 'A: What would you like to order? B: I\'ll have the chicken pasta, please. And a glass of water. A: Of course. Anything for dessert? B: No, thank you.', question: 'What did the customer order to drink?', options: ['Coffee', 'Juice', 'Water', 'Tea'], audioKey: null },
       answerKey: { answer: 'Water' },
     },
     {
       id: 'ex-l3-3', lessonId: lesL3.id, type: 'listening-comprehension', skill: 'listening', difficulty: 'hard',
-      prompt: { transcript: 'A: I\'m thinking of taking a gap year before university. B: That sounds interesting. What would you do? A: Travel through Southeast Asia, maybe volunteer at a school. B: Have you told your parents? A: Not yet. I\'m a bit nervous about their reaction.', question: 'Why is the speaker nervous?', options: ["They haven't planned their trip", "They haven't told their parents yet", 'They are afraid of travelling', 'They cannot afford the trip'] },
+      prompt: { transcript: 'A: I\'m thinking of taking a gap year before university. B: That sounds interesting. What would you do? A: Travel through Southeast Asia, maybe volunteer at a school. B: Have you told your parents? A: Not yet. I\'m a bit nervous about their reaction.', question: 'Why is the speaker nervous?', options: ["They haven't planned their trip", "They haven't told their parents yet", 'They are afraid of travelling', 'They cannot afford the trip'], audioKey: null },
       answerKey: { answer: "They haven't told their parents yet" },
     },
   ];
