@@ -282,3 +282,7 @@ gained matching internal-only DTOs (plain inline shapes, not added to
 4. `npm run lint`, `npm run build`, `npm run test` stay green for `learning-materials-service`.
 5. Phase B only: confirm the MinIO object actually resolves (presigned URL or direct bucket read)
    before trusting a stored `audioKey`.
+
+**Fresh machine / fresh `docker compose up`?** Postgres rows and MinIO are populated separately —
+see `infra/README.md`'s "MinIO-backed audio content" section for the per-machine audio re-fetch
+step required before `audioKey`s on a new machine point at anything real.
