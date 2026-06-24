@@ -1,10 +1,11 @@
 """
 Habit Building Agent service.
 Manages streak tracking and milestone notifications via Kafka.
-Re-engagement notifications are handled by notification-service's cron scheduler — not here.
+Re-engagement escalation logic lives here; the cron that calls it lives in notification-service.
 """
 
 import logging
+from agents.shared.db.redis_client import get_redis
 from agents.shared.events.producer import emit_ts_event
 
 logger = logging.getLogger(__name__)
@@ -26,10 +27,18 @@ async def check_re_engagement(
     review_due_count: int = 0,
 ) -> str | None:
     """
-    No-op. Re-engagement notifications (daily-reminder, re-engagement-nudge,
-    weekly-progress-summary) are sent by notification-service's cron scheduler,
-    which fetches context from AGT-07. AGT-10 must not duplicate those calls.
+    Return the Novu notification template key appropriate for the absence duration.
+    Returns None when the user is active (days_since_last_session < 1).
+    Callers (notification-service cron) use the returned key to trigger Novu.
     """
+    if risk_score > 0.7:
+        return "proactive-intervention"
+    if days_since_last_session >= 7:
+        return "weekly-progress-summary"
+    if days_since_last_session >= 3:
+        return "re-engagement-nudge"
+    if days_since_last_session >= 1:
+        return "daily-reminder"
     return None
 
 
@@ -51,6 +60,17 @@ async def send_milestone(clerk_user_id: str, milestone_name: str) -> None:
     )
 
 
+def _streak_key(clerk_user_id: str) -> str:
+    return f"streak:{clerk_user_id}"
+
+
+async def get_streak(clerk_user_id: str) -> int:
+    """Return the current persisted streak for a user (0 if never set)."""
+    r = await get_redis()
+    val = await r.get(_streak_key(clerk_user_id))
+    return int(val) if val else 0
+
+
 async def record_session_complete(
     clerk_user_id: str,
     current_streak: int,
@@ -58,9 +78,15 @@ async def record_session_complete(
 ) -> dict:
     """
     Process a completed session for streak and goal tracking.
-    TODO Phase 8+: persist streak state to LTM, check daily goal completion.
+    Reads from Redis to get authoritative streak, increments, persists back.
+    The `current_streak` parameter is used as a fallback when Redis has no record.
     """
-    new_streak = current_streak + 1
+    r = await get_redis()
+    key = _streak_key(clerk_user_id)
+    stored = await r.get(key)
+    base = int(stored) if stored else current_streak
+    new_streak = base + 1
+    await r.set(key, new_streak)
 
     if new_streak in (7, 30, 100):
         await send_milestone(clerk_user_id, f"{new_streak}-day streak")

@@ -166,3 +166,49 @@ async def test_record_error_does_not_raise_on_kafka_failure(monkeypatch):
     from agents.agt04_feedback.service import record_error
     # Must NOT raise — Kafka is best-effort
     await record_error("sess-1", "user-1", {"error_type": "grammar"})
+
+
+# ── AGT-11 bilingual explanation ─────────────────────────────────────────────
+
+async def test_speaking_turn_populates_explanation_field(monkeypatch):
+    """
+    grammar_errors must contain an 'explanation' key after analyze_speaking_turn.
+    When AGT-11 returns a Vietnamese string, it must be non-ASCII (Sprint A Check 5).
+    """
+    monkeypatch.setattr(
+        "agents.agt04_feedback.service.grammar.analyze_grammar",
+        AsyncMock(return_value=[{"errorType": "grammar", "severity": 1}]),
+    )
+    monkeypatch.setattr("agents.agt04_feedback.service.record_error", AsyncMock())
+    monkeypatch.setattr(
+        "agents.agt04_feedback.service._get_bilingual_explanation",
+        AsyncMock(return_value="Lỗi ngữ pháp: thiếu động từ"),
+    )
+
+    from agents.agt04_feedback.service import analyze_speaking_turn
+    result = await analyze_speaking_turn("I go school", "sess-1", "user-1", 5.0)
+
+    assert len(result["grammar_errors"]) == 1
+    expl = result["grammar_errors"][0]["explanation"]
+    assert expl is not None
+    assert any(ord(c) > 127 for c in expl), (
+        f"Expected Vietnamese Unicode in explanation, got: {expl!r}"
+    )
+
+
+async def test_speaking_turn_explanation_none_when_agt11_fails(monkeypatch):
+    """AGT-11 failure must not raise — explanation is None."""
+    monkeypatch.setattr(
+        "agents.agt04_feedback.service.grammar.analyze_grammar",
+        AsyncMock(return_value=[{"errorType": "grammar", "severity": 1}]),
+    )
+    monkeypatch.setattr("agents.agt04_feedback.service.record_error", AsyncMock())
+    monkeypatch.setattr(
+        "agents.agt04_feedback.service._get_bilingual_explanation",
+        AsyncMock(return_value=None),
+    )
+
+    from agents.agt04_feedback.service import analyze_speaking_turn
+    result = await analyze_speaking_turn("I go school", "sess-1", "user-1", 5.0)
+
+    assert result["grammar_errors"][0]["explanation"] is None

@@ -48,7 +48,7 @@ async def _fetch_item_bank(skill_domain: str) -> list[dict]:
     Cache miss: call LMS and store result (only if non-empty).
     Cache hit: deserialize and return without calling LMS.
     """
-    redis = get_redis()
+    redis = await get_redis()
     key = _ITEM_BANK_KEY.format(skill_domain)
     try:
         cached = await redis.get(key)

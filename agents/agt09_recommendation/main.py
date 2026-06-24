@@ -1,13 +1,18 @@
+import asyncio
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from agents.shared.db.redis_client import get_redis, close_redis
 from agents.agt09_recommendation.service import get_recommendations, invalidate_cache
+from agents.agt09_recommendation.consumers import start_consumers
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await get_redis()
+    tasks = await start_consumers()
     yield
+    for t in tasks:
+        t.cancel()
     await close_redis()
 
 

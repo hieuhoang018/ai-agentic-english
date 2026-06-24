@@ -306,9 +306,18 @@ services:
       MINIO_ACCESS_KEY: minioadmin
       MINIO_SECRET_KEY: minioadmin
       INFERENCE_MODE: mock
+      AGT04_BASE_URL: http://agt04-feedback:8104
+      AGT07_BASE_URL: http://agt07-review:8107
+      AGT11_BASE_URL: http://agt11-translation:8111
     depends_on:
       postgres-agents:
         condition: service_healthy
+      agt04-feedback:
+        condition: service_started
+      agt07-review:
+        condition: service_started
+      agt11-translation:
+        condition: service_started
 
   agt04-feedback:
     build:
@@ -323,6 +332,7 @@ services:
       KAFKA_BROKERS: kafka:9092
       LANGUAGETOOL_URL: http://languagetool:8010/v2
       AGT06_BASE_URL: http://agt06-memory:8106
+      AGT11_BASE_URL: http://agt11-translation:8111
       INFERENCE_MODE: mock
     depends_on:
       postgres-agents:
@@ -330,6 +340,8 @@ services:
       languagetool:
         condition: service_started
       agt06-memory:
+        condition: service_started
+      agt11-translation:
         condition: service_started
 
   agt05-assessment:

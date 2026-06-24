@@ -21,10 +21,30 @@ def detect_persistent_errors(
     min_sessions: int = 5,
 ) -> list[dict]:
     """
-    Stub: suppress all alerts if fewer than min_sessions recorded.
-    TODO Phase 8+: implement CUSUM chart per error category per skill.
+    Returns error types that appear >= 3 times across all recorded sessions.
+    Suppresses all results if fewer than min_sessions sessions exist.
+
+    This is a frequency-threshold approximation of CUSUM persistent detection,
+    used until full CUSUM (control-limit chart per skill domain) is implemented
+    in Phase 8+.
     """
     if len(error_history) < min_sessions:
         return []
-    # Stub: return empty list (no false positives during scaffold)
-    return []
+
+    from collections import Counter
+    counts = Counter(
+        e.get("error_type") for e in error_history if e.get("error_type")
+    )
+    return [
+        {
+            "error_type": etype,
+            "count": count,
+            "skill_domain": next(
+                (e.get("skill_domain") for e in error_history
+                 if e.get("error_type") == etype),
+                "UNKNOWN",
+            ),
+        }
+        for etype, count in counts.items()
+        if count >= 3
+    ]
