@@ -25,7 +25,11 @@ SAMPLE_ITEMS = [
 def fake_redis(monkeypatch):
     """Inject an in-memory fakeredis instance instead of the real Redis pool."""
     server = fakeredis.aioredis.FakeRedis()
-    monkeypatch.setattr(svc, "get_redis", lambda: server)
+
+    async def _get_redis():
+        return server
+
+    monkeypatch.setattr(svc, "get_redis", _get_redis)
     return server
 
 

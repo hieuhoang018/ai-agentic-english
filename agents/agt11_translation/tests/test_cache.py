@@ -54,6 +54,15 @@ async def test_mock_translation_contains_non_ascii_vietnamese(fake_redis):
     )
 
 
+async def test_mock_translation_has_mock_vi_prefix(fake_redis):
+    from agents.agt11_translation.cache import translate
+
+    text, _ = await translate("Subject-verb agreement", "bilingual")
+    assert text.startswith("[MOCK VI]"), (
+        f"Expected [MOCK VI] prefix in mock translation, got: {text!r}"
+    )
+
+
 async def test_different_content_misses_cache(fake_redis):
     from agents.agt11_translation.cache import translate
 

@@ -31,6 +31,8 @@ async def check_re_engagement(
     Returns None when the user is active (days_since_last_session < 1).
     Callers (notification-service cron) use the returned key to trigger Novu.
     """
+    if risk_score > 0.7:
+        return "proactive-intervention"
     if days_since_last_session >= 7:
         return "weekly-progress-summary"
     if days_since_last_session >= 3:

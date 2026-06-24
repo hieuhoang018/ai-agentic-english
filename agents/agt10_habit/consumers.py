@@ -48,7 +48,7 @@ async def start_consumers() -> list[asyncio.Task]:
     return [
         asyncio.create_task(
             consume(
-                ["agent.session.end"],
+                ["session.end"],
                 "agt10-session-end",
                 handle_session_end,
             )

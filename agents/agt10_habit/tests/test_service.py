@@ -86,6 +86,30 @@ async def test_check_re_engagement_returns_none_when_active():
     assert result is None
 
 
+async def test_check_re_engagement_risk_score_overrides_active():
+    """risk_score > 0.7 triggers proactive-intervention even when days_since=0."""
+    from agents.agt10_habit.service import check_re_engagement
+
+    result = await check_re_engagement("user_abc", days_since_last_session=0, risk_score=0.8)
+    assert result == "proactive-intervention"
+
+
+async def test_check_re_engagement_risk_score_overrides_day_based():
+    """risk_score > 0.7 takes priority over day-based escalation."""
+    from agents.agt10_habit.service import check_re_engagement
+
+    result = await check_re_engagement("user_abc", days_since_last_session=3, risk_score=0.9)
+    assert result == "proactive-intervention"
+
+
+async def test_check_re_engagement_low_risk_score_does_not_override():
+    """risk_score <= 0.7 does not trigger proactive-intervention."""
+    from agents.agt10_habit.service import check_re_engagement
+
+    result = await check_re_engagement("user_abc", days_since_last_session=0, risk_score=0.5)
+    assert result is None
+
+
 # ── record_session_complete + Redis streak ────────────────────────────────────
 
 async def test_record_session_complete_increments_from_zero_when_no_redis_state(fake_redis, patch_emit_ts_event):

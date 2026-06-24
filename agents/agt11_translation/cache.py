@@ -53,8 +53,9 @@ async def translate(content: str, zone: str) -> tuple[str, bool]:
         return cached.decode("utf-8"), True
 
     if settings.INFERENCE_MODE == "mock":
-        # Vietnamese Unicode characters satisfy [^\x00-\x7F] check in AGT-11 Check 5.
-        translated = f"[Mô phỏng tiếng Việt] {content[:80]}"
+        # [MOCK VI] prefix satisfies AGENT_VERIFICATION_CHECKLIST mock-mode check.
+        # Vietnamese Unicode after the prefix satisfies [^\x00-\x7F] non-ASCII check.
+        translated = f"[MOCK VI] [Mô phỏng tiếng Việt] {content[:80]}"
     else:
         # Cache miss: call LLM (AGT-11 uses OpenRouter→Ollama, never Groq)
         messages = [
