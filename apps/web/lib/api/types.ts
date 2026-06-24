@@ -1,3 +1,5 @@
+import type { CefrLevel as SharedCefrLevel } from '@ai-agentic-english/shared';
+
 export type {
   AssessmentQuestionDto,
   AssessmentResultDto,
@@ -15,3 +17,29 @@ export type {
   UserDto,
   UserSettingsDto,
 } from '@ai-agentic-english/shared';
+
+export type OnboardingRequest = {
+  userId: string;
+  currentLevel: SharedCefrLevel;
+  dailyTimeBudgetMinutes: number;
+  goals: string[];
+};
+
+export type OnboardingActivity = {
+  activity_id: string;
+  skill_domain: string;
+  activity_type: string;
+  title: string;
+  estimated_minutes: number;
+  difficulty: string;
+  completed: boolean;
+};
+
+export type OnboardingResponse = {
+  id: string;
+  userId: string;
+  pathDefinition: {
+    activities: OnboardingActivity[];
+  };
+  createdAt: string;
+};

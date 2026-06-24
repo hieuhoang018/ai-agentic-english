@@ -91,6 +91,8 @@ describe('assessment routes', () => {
 
       expect(res.status).toBe(200);
       expect(res.body.levels.reading).toBe('A2');
+      expect(res.body.correctAnswers).toBe(6);
+      expect(res.body.totalQuestions).toBe(6);
     });
 
     it('scores below threshold at A2 → falls back to A1', async () => {
@@ -110,6 +112,8 @@ describe('assessment routes', () => {
 
       expect(res.status).toBe(200);
       expect(res.body.levels.reading).toBe('A1');
+      expect(res.body.correctAnswers).toBe(3);
+      expect(res.body.totalQuestions).toBe(6);
     });
 
     it('is deterministic — same answers always produce the same result', async () => {
@@ -145,6 +149,8 @@ describe('assessment routes', () => {
 
       expect(res.status).toBe(200);
       expect(res.body.levels.reading).toBe('A1');
+      expect(res.body.correctAnswers).toBe(2);
+      expect(res.body.totalQuestions).toBe(3);
     });
 
     it('returns empty levels when no answers provided', async () => {
@@ -157,6 +163,8 @@ describe('assessment routes', () => {
 
       expect(res.status).toBe(200);
       expect(res.body.levels).toEqual({});
+      expect(res.body.correctAnswers).toBe(0);
+      expect(res.body.totalQuestions).toBe(0);
     });
   });
 });

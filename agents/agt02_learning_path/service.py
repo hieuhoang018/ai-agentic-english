@@ -112,6 +112,44 @@ async def _fetch_catalog_summary() -> dict:
     return catalog
 
 
+async def _sync_learning_path(clerk_user_id: str, activities: list[dict]) -> str:
+    """Persist the generated activities in Learning Materials without blocking plan creation."""
+    fallback_path_id = str(uuid.uuid4())
+
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            response = await client.post(
+                f"{LM_SERVICE_BASE_URL}/internal/learning-paths",
+                headers={"x-internal-secret": LM_INTERNAL_SECRET},
+                json={
+                    "userId": clerk_user_id,
+                    "pathDefinition": {"modules": [], "activities": activities},
+                },
+            )
+    except httpx.HTTPError as exc:
+        logger.warning("generate_plan: Learning Materials sync failed for %s: %s", clerk_user_id, exc)
+        return fallback_path_id
+
+    if not response.is_success:
+        logger.warning(
+            "generate_plan: Learning Materials sync returned status %s for %s",
+            response.status_code,
+            clerk_user_id,
+        )
+        return fallback_path_id
+
+    try:
+        path_id = response.json().get("id")
+    except ValueError:
+        path_id = None
+
+    if isinstance(path_id, str) and path_id:
+        return path_id
+
+    logger.warning("generate_plan: Learning Materials sync returned no path id for %s", clerk_user_id)
+    return fallback_path_id
+
+
 def _build_prompt(profile: dict, allocation: dict, goals: list[str]) -> list[dict]:
     theta = profile.get("irt_theta") or {}
     system = (
@@ -159,6 +197,7 @@ async def generate_plan(clerk_user_id: str, request: dict) -> dict:
         {**activity, "activity_id": str(uuid.uuid4()), "completed": False}
         for activity in raw_activities
     ]
+    lm_plan_id = await _sync_learning_path(clerk_user_id, activities)
 
     pool = await get_pool()
     async with pool.acquire() as conn:
@@ -179,7 +218,6 @@ async def generate_plan(clerk_user_id: str, request: dict) -> dict:
                     existing["plan_id"],
                 )
 
-            lm_plan_id = str(uuid.uuid4())
             row = await conn.fetchrow(
                 """
                 INSERT INTO agent_learning_plans

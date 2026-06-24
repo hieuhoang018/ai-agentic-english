@@ -1,11 +1,20 @@
-"use client"
+'use client'
 
 import Link from 'next/link'
-import { Suspense } from 'react'
-import { useSearchParams } from 'next/navigation'
+
+import type { SkillId } from '../../_types/onboarding'
 import OnboardingShell from '../../_components/OnboardingShell'
-import { assessmentQuestions } from '../../_data/onboarding-content'
+import { useOnboarding } from '../../_components/OnboardingProvider'
 import { onboardingRoutes } from '../../_utils/onboarding-routes'
+
+const skillDetails: Record<SkillId, { label: string; icon: string }> = {
+  reading: { label: 'Reading', icon: 'menu_book' },
+  listening: { label: 'Listening', icon: 'headphones' },
+  writing: { label: 'Writing', icon: 'edit_note' },
+  speaking: { label: 'Speaking', icon: 'record_voice_over' },
+}
+
+const skillOrder: SkillId[] = ['reading', 'listening', 'writing', 'speaking']
 
 function getEvaluation(score: number) {
   if (score >= 8) {
@@ -32,29 +41,44 @@ function getEvaluation(score: number) {
 }
 
 export default function AssessmentResultsPage() {
-  return (
-    <Suspense fallback={<div className="py-16 text-center text-on-surface-variant">Đang phân tích kết quả...</div>}>
-      <AssessmentResultsContent />
-    </Suspense>
-  )
-}
+  const { isReady, profile } = useOnboarding()
 
-function AssessmentResultsContent() {
-  const searchParams = useSearchParams()
-  const rawScore = Number(searchParams.get('score'))
-  const score = Number.isFinite(rawScore) && rawScore >= 0 && rawScore <= 10 ? rawScore : 5
-  const rawCorrectAnswers = Number(searchParams.get('correct'))
-  const correctAnswers = Number.isInteger(rawCorrectAnswers) && rawCorrectAnswers >= 0 && rawCorrectAnswers <= assessmentQuestions.length
-    ? rawCorrectAnswers
-    : Math.round((score / 10) * assessmentQuestions.length)
-  const skillResults = (searchParams.get('skills') ?? '').split(',').map((value) => value === '1')
+  if (!isReady) {
+    return <div className="py-16 text-center text-on-surface-variant">Đang phân tích kết quả...</div>
+  }
+
+  const assessmentLevels = profile.assessmentLevels ?? {}
+  const assessedSkills = skillOrder.flatMap((skill) => {
+    const level = assessmentLevels[skill]
+    return level ? [{ skill, level }] : []
+  })
+  const questionCount = profile.assessmentQuestionCount ?? 0
+  const correctAnswerCount = profile.assessmentCorrectAnswerCount ?? 0
+  const score = profile.levelScore ?? 0
   const evaluation = getEvaluation(score)
+
+  if (questionCount === 0) {
+    return (
+      <OnboardingShell
+        step={2}
+        title="Chưa có kết quả đánh giá"
+        description="Hãy hoàn thành bài đánh giá từ kho học liệu trước khi tiếp tục."
+        backHref={onboardingRoutes.assessment}
+        wide
+      >
+        <Link href={onboardingRoutes.assessment} className="inline-flex h-12 items-center gap-2 rounded-full bg-primary px-7 font-bold text-white">
+          Làm bài đánh giá
+          <span className="material-symbols-outlined">arrow_forward</span>
+        </Link>
+      </OnboardingShell>
+    )
+  }
 
   return (
     <OnboardingShell
       step={2}
       title="Kết quả đánh giá"
-      description="Wise Mentor đã phân tích câu trả lời để xác định điểm xuất phát phù hợp cho lộ trình của bạn."
+      description="Learning Materials đã chấm các câu trả lời và xác định mức CEFR cho từng kỹ năng đạt ngưỡng."
       wide
     >
       <section className="mx-auto max-w-3xl">
@@ -66,16 +90,16 @@ function AssessmentResultsContent() {
 
         <div className="mt-6 grid gap-4 sm:grid-cols-2">
           <article className="rounded-lg border border-outline-variant bg-white p-5">
-            <span className="material-symbols-outlined text-primary">task_alt</span>
+            <span className="material-symbols-outlined text-primary">quiz</span>
             <h2 className="mt-3 font-bold text-on-surface">Câu trả lời đúng</h2>
-            <p className="mt-1 text-2xl font-bold text-primary">{correctAnswers} / {assessmentQuestions.length}</p>
-            <p className="mt-1 text-sm text-on-surface-variant">câu trả lời chính xác</p>
+            <p className="mt-1 text-2xl font-bold text-primary">{correctAnswerCount} / {questionCount}</p>
+            <p className="mt-1 text-sm text-on-surface-variant">câu hỏi từ kho học liệu</p>
           </article>
           <article className="rounded-lg border border-outline-variant bg-white p-5">
-            <span className="material-symbols-outlined text-primary">speed</span>
-            <h2 className="mt-3 font-bold text-on-surface">Mức đánh giá</h2>
-            <p className="mt-1 text-2xl font-bold text-primary">{evaluation.level}</p>
-            <p className="mt-1 text-sm text-on-surface-variant">trên thang năng lực 0–10</p>
+            <span className="material-symbols-outlined text-primary">verified</span>
+            <h2 className="mt-3 font-bold text-on-surface">Kỹ năng đạt ngưỡng</h2>
+            <p className="mt-1 text-2xl font-bold text-primary">{assessedSkills.length}</p>
+            <p className="mt-1 text-sm text-on-surface-variant">kỹ năng có mức CEFR được xác định</p>
           </article>
         </div>
 
@@ -83,7 +107,7 @@ function AssessmentResultsContent() {
           <div className="flex flex-wrap items-end justify-between gap-2">
             <div>
               <h2 className="font-bold text-on-surface">Thang năng lực</h2>
-              <p className="mt-1 text-sm text-on-surface-variant">Beginner · Intermediate · Advanced</p>
+              <p className="mt-1 text-sm text-on-surface-variant">A1 · A2 · B1 · B2 · C1 · C2</p>
             </div>
             <span className="font-bold text-primary">Mức {score}/10</span>
           </div>
@@ -103,28 +127,26 @@ function AssessmentResultsContent() {
 
         <section className="mt-6">
           <h2 className="text-xl font-bold text-on-surface">Tóm tắt theo kỹ năng</h2>
-          <div className="mt-4 grid gap-4 sm:grid-cols-2">
-            {assessmentQuestions.map((question, index) => {
-              const isCorrect = skillResults[index] ?? false
-              const skillIcon = ({
-                Reading: 'menu_book',
-                Listening: 'headphones',
-                Writing: 'edit_note',
-                Speaking: 'record_voice_over',
-              } as Record<string, string>)[question.skill]
+          {assessedSkills.length === 0 ? (
+            <p className="mt-4 rounded-lg border border-outline-variant bg-white p-5 text-on-surface-variant">Bạn chưa đạt ngưỡng chấm điểm cho một kỹ năng nào. Lộ trình sẽ bắt đầu ở mức A1 và điều chỉnh theo tiến độ của bạn.</p>
+          ) : (
+            <div className="mt-4 grid gap-4 sm:grid-cols-2">
+              {assessedSkills.map(({ skill, level }) => {
+                const detail = skillDetails[skill]
 
-              return (
-                <article key={question.skill} className="rounded-lg border border-outline-variant bg-white p-5">
-                  <div className="flex items-start justify-between gap-3">
-                    <span className="material-symbols-outlined text-primary">{skillIcon}</span>
-                    <span className={`rounded-full px-3 py-1 text-xs font-bold ${isCorrect ? 'bg-emerald-50 text-emerald-800' : 'bg-orange-50 text-orange-800'}`}>{isCorrect ? 'Đúng 1/1' : 'Cần luyện thêm'}</span>
-                  </div>
-                  <h3 className="mt-4 font-bold text-on-surface">{question.skill}</h3>
-                  <p className="mt-1 text-sm text-on-surface-variant">{isCorrect ? 'Bạn đã nắm được nền tảng của kỹ năng này.' : 'Lộ trình sẽ ưu tiên những bài luyện phù hợp để củng cố kỹ năng này.'}</p>
-                </article>
-              )
-            })}
-          </div>
+                return (
+                  <article key={skill} className="rounded-lg border border-outline-variant bg-white p-5">
+                    <div className="flex items-start justify-between gap-3">
+                      <span className="material-symbols-outlined text-primary">{detail.icon}</span>
+                      <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-800">CEFR {level}</span>
+                    </div>
+                    <h3 className="mt-4 font-bold text-on-surface">{detail.label}</h3>
+                    <p className="mt-1 text-sm text-on-surface-variant">Mức này được chấm từ các câu hỏi trong kho học liệu.</p>
+                  </article>
+                )
+              })}
+            </div>
+          )}
         </section>
 
         <div className={`mt-6 rounded-lg p-6 ${evaluation.tone}`}>
