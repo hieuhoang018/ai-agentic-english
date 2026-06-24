@@ -2,7 +2,22 @@ import { NotFoundError, PathDefinition, ValidationError, asyncHandler } from '@a
 import { Router } from 'express';
 import { Prisma } from '../../prisma/generated/client';
 import { AppPrismaClient } from '../lib/prisma';
-import { toExerciseInternalDto, toLearningPathDto } from '../lib/mappers';
+import {
+  toExerciseInternalDto,
+  toGrammarPointInternalDto,
+  toLearningPathDto,
+  toPassageInternalDto,
+  toVocabEntryInternalDto,
+} from '../lib/mappers';
+
+const MAX_LIMIT = 200;
+const DEFAULT_LIMIT = 50;
+
+function parseLimit(raw: unknown): number {
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n <= 0) return DEFAULT_LIMIT;
+  return Math.min(n, MAX_LIMIT);
+}
 
 export function createInternalRouter(prisma: AppPrismaClient): Router {
   const router = Router();
@@ -95,6 +110,54 @@ export function createInternalRouter(prisma: AppPrismaClient): Router {
         totalLessons,
         totalExercises,
       });
+    }),
+  );
+
+  router.get(
+    '/vocab',
+    asyncHandler(async (req, res) => {
+      const { cefrLevel, domainTag } = req.query as { cefrLevel?: string; domainTag?: string };
+      const entries = await prisma.vocabEntry.findMany({
+        where: {
+          ...(cefrLevel ? { cefrLevel } : {}),
+          ...(domainTag ? { domainTag } : {}),
+        },
+        include: { senses: true, pronunciations: true },
+        take: parseLimit(req.query.limit),
+      });
+      res.json(entries.map(toVocabEntryInternalDto));
+    }),
+  );
+
+  router.get(
+    '/grammar',
+    asyncHandler(async (req, res) => {
+      const { cefrLevel, category } = req.query as { cefrLevel?: string; category?: string };
+      const points = await prisma.grammarPoint.findMany({
+        where: {
+          ...(cefrLevel ? { cefrLevel } : {}),
+          ...(category ? { category } : {}),
+        },
+        include: { examples: true },
+        take: parseLimit(req.query.limit),
+      });
+      res.json(points.map(toGrammarPointInternalDto));
+    }),
+  );
+
+  router.get(
+    '/passages',
+    asyncHandler(async (req, res) => {
+      const { cefrLevel, topicTag } = req.query as { cefrLevel?: string; topicTag?: string };
+      const passages = await prisma.passage.findMany({
+        where: {
+          ...(cefrLevel ? { cefrLevel } : {}),
+          ...(topicTag ? { topicTags: { has: topicTag } } : {}),
+        },
+        include: { mediaAsset: true },
+        take: parseLimit(req.query.limit),
+      });
+      res.json(passages.map(toPassageInternalDto));
     }),
   );
 

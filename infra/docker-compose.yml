@@ -247,6 +247,8 @@ services:
       mc mb -p local/pronunciation-audio &&
       mc mb -p local/exercise-audio &&
       mc mb -p local/writing-samples &&
+      mc mb -p local/passage-audio &&
+      mc mb -p local/assessment-audio &&
       exit 0
       "
 

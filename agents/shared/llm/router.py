@@ -37,13 +37,26 @@ class AgentID(str, Enum):
     AGT09 = "AGT09"
     AGT10 = "AGT10"
     AGT11 = "AGT11"
+    # Not a numbered agent in the 11-agent architecture — a dispatch key for the
+    # one-off/on-demand Phase C content-generation batch script
+    # (agents/tools/content_gen_etl.py), same non-service status as AGT-03's
+    # tooling-only sibling (agents/tools/voa_passages_etl.py, which has no
+    # AgentID at all since it makes no LLM calls).
+    CONTENT_GEN = "CONTENT_GEN"
 
 
 # Real-time agents — Groq Tier 1 first (preserve 1,000 RPD budget for these only)
 REALTIME_AGENTS = {AgentID.AGT03, AgentID.AGT04, AgentID.AGT05}
 
 # Async agents — skip Groq entirely, OpenRouter -> Ollama
-ASYNC_AGENTS = {AgentID.AGT02, AgentID.AGT07, AgentID.AGT08, AgentID.AGT09, AgentID.AGT11}
+ASYNC_AGENTS = {
+    AgentID.AGT02,
+    AgentID.AGT07,
+    AgentID.AGT08,
+    AgentID.AGT09,
+    AgentID.AGT11,
+    AgentID.CONTENT_GEN,
+}
 
 GROQ_MODELS: dict[AgentID, str] = {
     AgentID.AGT03: "llama-3.3-70b-versatile",  # conversation — best quality on Groq
@@ -58,6 +71,10 @@ OPENROUTER_MODELS: dict[AgentID, str] = {
     AgentID.AGT08: "deepseek/deepseek-r1:free",         # analysis (chain-of-thought)
     AgentID.AGT09: "deepseek/deepseek-chat-v3.1:free",  # recommendation rationale
     AgentID.AGT11: "qwen/qwen3-235b-a22b:free",         # EN-VI translation (best Vietnamese)
+    # deepseek/deepseek-chat-v3.1:free (originally chosen to match AGT02/07/09) was
+    # retired by OpenRouter (404, paid-only now) as of this writing — openai/gpt-oss-20b:free
+    # is free, not upstream-rate-limited, and confirmed to follow strict-JSON instructions.
+    AgentID.CONTENT_GEN: "openai/gpt-oss-20b:free",
 }
 
 OLLAMA_MODELS: dict[AgentID, str] = {
@@ -68,6 +85,7 @@ OLLAMA_MODELS: dict[AgentID, str] = {
     AgentID.AGT08: "llama3.1:8b",   # analysis backstop
     AgentID.AGT09: "gemma3:4b",     # recommendation backstop
     AgentID.AGT11: "qwen2.5:7b",    # translation backstop (multilingual)
+    AgentID.CONTENT_GEN: "gemma3:4b",  # content-gen backstop, same as AGT02/07/09's gemma3:4b
 }
 
 
