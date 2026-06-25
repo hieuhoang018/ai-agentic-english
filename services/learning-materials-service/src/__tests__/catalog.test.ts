@@ -148,6 +148,32 @@ describe('catalog routes', () => {
     });
   });
 
+  describe('GET /lessons/:id/exercises', () => {
+    it('returns 404 when lesson not found', async () => {
+      prisma.lesson.findUnique.mockResolvedValue(null);
+
+      const res = await request(createApp(prisma))
+        .get('/lessons/missing/exercises')
+        .set('Authorization', `Bearer ${token}`);
+
+      expect(res.status).toBe(404);
+    });
+
+    it('returns exercises for the lesson without answer keys', async () => {
+      prisma.lesson.findUnique.mockResolvedValue(lessonRow);
+      prisma.exercise.findMany.mockResolvedValue([exerciseRow]);
+
+      const res = await request(createApp(prisma))
+        .get('/lessons/les-1/exercises')
+        .set('Authorization', `Bearer ${token}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body).toHaveLength(1);
+      expect(res.body[0]).toMatchObject({ id: 'ex-1', lessonId: 'les-1' });
+      expect(res.body[0]).not.toHaveProperty('answerKey');
+    });
+  });
+
   describe('GET /exercises/:id', () => {
     it('returns exercise without answerKey', async () => {
       prisma.exercise.findUnique.mockResolvedValue(exerciseRow);

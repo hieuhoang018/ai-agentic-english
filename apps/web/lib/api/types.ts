@@ -43,3 +43,16 @@ export type OnboardingResponse = {
   };
   createdAt: string;
 };
+
+export type GradingRequest = {
+  exerciseId: string;
+  attemptedAnswer: string;
+  userId: string;
+};
+
+export type GradingResponse = {
+  exerciseId: string;
+  correct: boolean;
+  score: number;
+  feedback: string;
+};

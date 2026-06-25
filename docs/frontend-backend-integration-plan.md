@@ -27,7 +27,7 @@ repeat the same pattern everywhere else.
 | `/api/users` → `/me` | GET | user-service | — | `UserDto` incl. `settings` |
 | `/api/users` → `/me/settings` | PATCH | user-service | partial `UserSettingsDto` | `UserSettingsDto` |
 | `/api/modules` → `/`, `/:id`, `/:id/lessons` | GET | learning-materials-service | — | `ModuleDto[]` / `ModuleDto` / `LessonDto[]` |
-| `/api/lessons/:id` | GET | learning-materials-service | — | `LessonDto` |
+| `/api/lessons/:id` → `/:id/exercises` | GET | learning-materials-service | — | `LessonDto` / `ExerciseDto[]` |
 | `/api/exercises/:id` | GET | learning-materials-service | — | `ExerciseDto` (no answer key) |
 | `/api/assessment/questions?skill=` | GET | learning-materials-service | — | `AssessmentQuestionDto[]` |
 | `/api/assessment/score` | POST | learning-materials-service | `{answers:[{questionId,answer}]}` | scored result |
@@ -178,7 +178,7 @@ answer calls the real grading orchestrator route instead of local mock-feedback 
 
 - [ ] **(Frontend dev)** Replace `practice-center/_data/practice-content.ts` module/lesson/
   exercise listings with `GET /api/modules`, `GET /api/modules/:id/lessons`,
-  `GET /api/lessons/:id`, `GET /api/exercises/:id` calls. Suggest doing this as Server Components
+  `GET /api/lessons/:id`, `GET /api/lessons/:id/exercises`, and `GET /api/exercises/:id` calls. Suggest doing this as Server Components
   where the page is just a list/detail view (no client interactivity needed for fetching) —
   matches the existing App Router pattern in the rest of the app.
 - [ ] **(Frontend dev)** Wire the exercise runner's answer-check action to
