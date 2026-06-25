@@ -1,14 +1,15 @@
 "use client"
 
-import { useState } from 'react'
 import ChoiceCard from '../_components/ChoiceCard'
 import OnboardingShell from '../_components/OnboardingShell'
+import { useOnboarding } from '../_components/OnboardingProvider'
 import { goals } from '../_data/onboarding-content'
 import type { LearningGoalId } from '../_types/onboarding'
 import { onboardingRoutes } from '../_utils/onboarding-routes'
 
 export default function GoalsPage() {
-  const [selectedGoalId, setSelectedGoalId] = useState<LearningGoalId>(goals[0].id)
+  const { profile, updateProfile } = useOnboarding()
+  const selectedGoalId: LearningGoalId = profile.goalId ?? goals[0].id
 
   return (
     <OnboardingShell step={1} title="Chọn mục tiêu của bạn" description="Wise Mentor sẽ cá nhân hóa lộ trình học dựa trên mục tiêu chính của bạn." nextHref={onboardingRoutes.level}>
@@ -21,7 +22,7 @@ export default function GoalsPage() {
             icon={goal.icon}
             tone={goal.tone}
             selected={goal.id === selectedGoalId}
-            onSelect={() => setSelectedGoalId(goal.id)}
+            onSelect={() => updateProfile({ goalId: goal.id })}
           />
         ))}
       </div>

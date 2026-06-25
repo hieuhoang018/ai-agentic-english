@@ -5,7 +5,7 @@ export type MockPrismaClient = {
   $queryRaw: ReturnType<typeof vi.fn>;
   module: { findMany: ReturnType<typeof vi.fn>; findUnique: ReturnType<typeof vi.fn> };
   lesson: { findMany: ReturnType<typeof vi.fn>; findUnique: ReturnType<typeof vi.fn> };
-  exercise: { findUnique: ReturnType<typeof vi.fn> };
+  exercise: { findMany: ReturnType<typeof vi.fn>; findUnique: ReturnType<typeof vi.fn> };
   learningPath: {
     findFirst: ReturnType<typeof vi.fn>;
     findMany: ReturnType<typeof vi.fn>;
@@ -26,7 +26,7 @@ export function createMockPrisma(): MockPrismaClient {
     $queryRaw: vi.fn(async () => [{ '?column?': 1 }]),
     module: { findMany: vi.fn(), findUnique: vi.fn() },
     lesson: { findMany: vi.fn(), findUnique: vi.fn() },
-    exercise: { findUnique: vi.fn() },
+    exercise: { findMany: vi.fn(), findUnique: vi.fn() },
     learningPath: {
       findFirst: vi.fn(),
       findMany: vi.fn(),

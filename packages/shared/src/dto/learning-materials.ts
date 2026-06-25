@@ -48,6 +48,15 @@ export interface PathDefinition {
       exerciseIds: string[];
     }>;
   }>;
+  activities?: Array<{
+    activity_id: string;
+    skill_domain: string;
+    activity_type: string;
+    title: string;
+    estimated_minutes: number;
+    difficulty: string;
+    completed: boolean;
+  }>;
 }
 
 export interface LearningPathDto {
@@ -69,6 +78,8 @@ export interface AssessmentQuestionDto {
 
 export interface AssessmentResultDto {
   levels: Partial<Record<Skill, CefrLevel>>;
+  correctAnswers: number;
+  totalQuestions: number;
 }
 
 export interface CatalogSummaryDto {

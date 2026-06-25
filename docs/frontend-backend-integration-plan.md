@@ -27,7 +27,7 @@ repeat the same pattern everywhere else.
 | `/api/users` → `/me` | GET | user-service | — | `UserDto` incl. `settings` |
 | `/api/users` → `/me/settings` | PATCH | user-service | partial `UserSettingsDto` | `UserSettingsDto` |
 | `/api/modules` → `/`, `/:id`, `/:id/lessons` | GET | learning-materials-service | — | `ModuleDto[]` / `ModuleDto` / `LessonDto[]` |
-| `/api/lessons/:id` | GET | learning-materials-service | — | `LessonDto` |
+| `/api/lessons/:id` → `/:id/exercises` | GET | learning-materials-service | — | `LessonDto` / `ExerciseDto[]` |
 | `/api/exercises/:id` | GET | learning-materials-service | — | `ExerciseDto` (no answer key) |
 | `/api/assessment/questions?skill=` | GET | learning-materials-service | — | `AssessmentQuestionDto[]` |
 | `/api/assessment/score` | POST | learning-materials-service | `{answers:[{questionId,answer}]}` | scored result |
@@ -178,7 +178,7 @@ answer calls the real grading orchestrator route instead of local mock-feedback 
 
 - [ ] **(Frontend dev)** Replace `practice-center/_data/practice-content.ts` module/lesson/
   exercise listings with `GET /api/modules`, `GET /api/modules/:id/lessons`,
-  `GET /api/lessons/:id`, `GET /api/exercises/:id` calls. Suggest doing this as Server Components
+  `GET /api/lessons/:id`, `GET /api/lessons/:id/exercises`, and `GET /api/exercises/:id` calls. Suggest doing this as Server Components
   where the page is just a list/detail view (no client interactivity needed for fetching) —
   matches the existing App Router pattern in the rest of the app.
 - [ ] **(Frontend dev)** Wire the exercise runner's answer-check action to
@@ -236,13 +236,13 @@ ignored).
 These need a quick sync between backend dev and frontend dev, not solo guessing:
 
 1. Exact `currentLevel` and `goals` value mapping from onboarding UI choices to the orchestrator
-   request shape (see Stage B).
+   request shape (see Stage B). (Map the level on the scale from 0 to 10 to the corresponding CEFR level, 0 = A1, 1-2 = A2, 3-4 = B1, 5-6 = B2, 7-8 = C1, 9-10 = C2; use goalid in the frontend)
 2. Error/loading UX convention across the whole app for backend calls (toast? inline banner?
    retry button?) — pick one pattern in Stage A's smoke test and reuse it everywhere rather than
-   inventing a new one per page.
+   inventing a new one per page. (Use toast wherever possible)
 3. Whether `apps/web` should add `@ai-agentic-english/shared` as a real workspace dependency (to
    import DTOs directly) instead of hand-copying types — worth a 5-minute discussion since it
-   changes how Stage A's `types.ts` gets built and how future DTO changes propagate.
+   changes how Stage A's `types.ts` gets built and how future DTO changes propagate. (Yes)
 
 ## 4. Explicit non-goals for this pass
 

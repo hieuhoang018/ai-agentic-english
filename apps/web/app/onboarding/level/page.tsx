@@ -1,5 +1,8 @@
+'use client'
+
 import Link from 'next/link'
 import OnboardingShell from '../_components/OnboardingShell'
+import { useOnboarding } from '../_components/OnboardingProvider'
 import { onboardingRoutes } from '../_utils/onboarding-routes'
 
 const assessmentMethods = [
@@ -24,6 +27,8 @@ const assessmentMethods = [
 ]
 
 export default function LevelPage() {
+  const { updateProfile } = useOnboarding()
+
   return (
     <OnboardingShell step={2} title="Xác định trình độ của bạn" description="Chọn phương pháp đánh giá trình độ hiện tại để Wise Mentor xây dựng lộ trình tối ưu." backHref={onboardingRoutes.goals}>
       <div className="grid max-w-3xl gap-5 md:grid-cols-2">
@@ -31,6 +36,7 @@ export default function LevelPage() {
           <Link
             key={method.href}
             href={method.href}
+            onClick={() => updateProfile({ assessmentMethod: method.href === onboardingRoutes.assessment ? 'test' : 'selfAssessment' })}
             className="flex min-h-80 flex-col rounded-lg border border-outline-variant bg-white p-6 transition-colors hover:border-primary hover:bg-blue-50/30"
           >
             <span className={`flex h-12 w-12 items-center justify-center rounded-full ${method.tone}`}>

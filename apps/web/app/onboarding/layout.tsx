@@ -2,6 +2,7 @@ import { auth } from '@clerk/nextjs/server'
 import { redirect } from 'next/navigation'
 import { Suspense } from 'react'
 import OnboardingAccessGate from './_components/OnboardingAccessGate'
+import OnboardingProvider from './_components/OnboardingProvider'
 
 export default async function OnboardingLayout({ children }: { children: React.ReactNode }) {
   const { userId } = await auth()
@@ -13,7 +14,9 @@ export default async function OnboardingLayout({ children }: { children: React.R
   return (
     <div className="min-h-screen bg-background px-4 py-3 font-sans text-on-background">
       <Suspense fallback={<div className="flex min-h-screen items-center justify-center text-sm font-semibold text-on-surface-variant">Đang kiểm tra trạng thái onboarding...</div>}>
-        <OnboardingAccessGate>{children}</OnboardingAccessGate>
+        <OnboardingProvider>
+          <OnboardingAccessGate>{children}</OnboardingAccessGate>
+        </OnboardingProvider>
       </Suspense>
     </div>
   )

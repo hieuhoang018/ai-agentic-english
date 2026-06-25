@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import uuid
 from unittest.mock import AsyncMock, MagicMock, patch as mock_patch
 
@@ -194,8 +195,8 @@ async def test_generate_plan_creates_active_plan_with_activities(monkeypatch):
     respx.get(f"{service.LM_SERVICE_BASE_URL}/internal/catalog/summary").mock(
         return_value=httpx.Response(404)
     )
-    respx.post(f"{service.LM_SERVICE_BASE_URL}/internal/learning-paths").mock(
-        return_value=httpx.Response(200)
+    learning_path_route = respx.post(f"{service.LM_SERVICE_BASE_URL}/internal/learning-paths").mock(
+        return_value=httpx.Response(201, json={"id": "lm-path-1"})
     )
 
     emitted = []
@@ -213,6 +214,11 @@ async def test_generate_plan_creates_active_plan_with_activities(monkeypatch):
     assert plan["skill_allocation"]["S"] > plan["skill_allocation"]["L"]
     assert len(plan["activities"]) > 0
     assert all("activity_id" in a for a in plan["activities"])
+    assert plan["lm_plan_id"] == "lm-path-1"
+    assert learning_path_route.called
+    request_body = json.loads(learning_path_route.calls[0].request.content)
+    assert request_body["userId"] == clerk_id
+    assert request_body["pathDefinition"]["activities"] == plan["activities"]
     assert emitted == [("agent.plan.events", {"planId": plan["plan_id"], "clerkUserId": clerk_id, "version": 1}, "AGT02")]
 
 

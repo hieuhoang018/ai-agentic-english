@@ -1,8 +1,20 @@
+'use client'
+
+import { useEffect } from 'react'
 import LevelScale from '../_components/LevelScale'
 import OnboardingShell from '../_components/OnboardingShell'
+import { useOnboarding } from '../_components/OnboardingProvider'
 import { onboardingRoutes } from '../_utils/onboarding-routes'
 
 export default function SelfAssessmentPage() {
+  const { profile, updateProfile } = useOnboarding()
+
+  useEffect(() => {
+    if (profile.assessmentMethod !== 'selfAssessment') {
+      updateProfile({ assessmentMethod: 'selfAssessment' })
+    }
+  }, [profile.assessmentMethod, updateProfile])
+
   return (
     <OnboardingShell
       step={2}

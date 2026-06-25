@@ -21,6 +21,9 @@ export function scoreAssessment(
   answers: SubmittedAnswer[],
 ): AssessmentResultDto {
   const answerMap = new Map(answers.map((a) => [a.questionId, a.answer]));
+  const correctAnswers = questions.filter((question) => (
+    JSON.stringify(answerMap.get(question.id)) === JSON.stringify(question.correctAnswer)
+  )).length;
 
   const bySkillLevel: Record<string, Record<string, ScoredQuestion[]>> = {};
   for (const q of questions) {
@@ -55,5 +58,5 @@ export function scoreAssessment(
     }
   }
 
-  return { levels };
+  return { levels, correctAnswers, totalQuestions: questions.length };
 }

@@ -1,28 +1,85 @@
-import { notFound } from 'next/navigation'
-import ExerciseWorkspace from '../../../_components/ExerciseWorkspace'
-import { getAllModuleParams, getPracticeLesson, isPracticeSkillId } from '../../../_data/practice-content'
+import { notFound } from 'next/navigation';
+
+import { isApiError } from '@/lib/api/client';
+import { serverApiFetch } from '@/lib/api/server';
+import type { ExerciseDto, LessonDto, ModuleDto } from '@/lib/api/types';
+
+import ExerciseWorkspace from '../../../_components/ExerciseWorkspace';
+import { isPracticeSkillId } from '../../../_lib/practice-catalog';
 
 type ModuleExercisePageProps = {
   params: Promise<{
-    skill: string
-    moduleId: string
-  }>
+    skill: string;
+    moduleId: string;
+  }>;
+  searchParams: Promise<{
+    lesson?: string;
+    exercise?: string;
+  }>;
+};
+
+export const dynamic = 'force-dynamic';
+
+async function getRequired<TResponse>(path: string): Promise<TResponse> {
+  try {
+    return await serverApiFetch<TResponse>(path);
+  } catch (error) {
+    if (isApiError(error) && error.status === 404) notFound();
+    throw error;
+  }
 }
 
-export function generateStaticParams() {
-  return getAllModuleParams()
-}
+export default async function ModuleExercisePage({
+  params,
+  searchParams,
+}: ModuleExercisePageProps) {
+  const { skill, moduleId } = await params;
+  if (!isPracticeSkillId(skill)) notFound();
 
-export default async function ModuleExercisePage({ params }: ModuleExercisePageProps) {
-  const { skill, moduleId } = await params
-  if (!isPracticeSkillId(skill)) {
-    notFound()
+  const module = await getRequired<ModuleDto>(`/modules/${moduleId}`);
+  if (module.skillFocus !== skill) notFound();
+
+  const lessons = await getRequired<LessonDto[]>(`/modules/${moduleId}/lessons`);
+  const requestedSelection = await searchParams;
+  const lessonId = lessons.some((lesson) => lesson.id === requestedSelection.lesson)
+    ? requestedSelection.lesson!
+    : lessons[0]?.id;
+
+  if (!lessonId) {
+    return (
+      <section className="rounded-lg border border-dashed border-outline-variant bg-surface-container-lowest p-8 text-center text-on-surface-variant">
+        This module does not have any lessons yet.
+      </section>
+    );
   }
 
-  const lesson = await getPracticeLesson(skill, moduleId)
-  if (!lesson) {
-    notFound()
+  const lesson = await getRequired<LessonDto>(`/lessons/${lessonId}`);
+  if (lesson.moduleId !== module.id) notFound();
+
+  const exercises = await getRequired<ExerciseDto[]>(`/lessons/${lesson.id}/exercises`);
+  const exerciseId = exercises.some((exercise) => exercise.id === requestedSelection.exercise)
+    ? requestedSelection.exercise!
+    : exercises[0]?.id;
+
+  if (!exerciseId) {
+    return (
+      <section className="rounded-lg border border-dashed border-outline-variant bg-surface-container-lowest p-8 text-center text-on-surface-variant">
+        This lesson does not have any exercises yet.
+      </section>
+    );
   }
 
-  return <ExerciseWorkspace lesson={lesson} />
+  const exercise = await getRequired<ExerciseDto>(`/exercises/${exerciseId}`);
+  if (exercise.lessonId !== lesson.id) notFound();
+
+  return (
+    <ExerciseWorkspace
+      skill={skill}
+      module={module}
+      lessons={lessons}
+      lesson={lesson}
+      exercises={exercises}
+      exercise={exercise}
+    />
+  );
 }

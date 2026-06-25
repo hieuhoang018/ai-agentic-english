@@ -1,8 +1,11 @@
-"use client"
+'use client'
 
-import { useRouter } from 'next/navigation'
 import { useUser } from '@clerk/nextjs'
+import { useRouter } from 'next/navigation'
+import { useState } from 'react'
+
 import { markOnboardingComplete } from './OnboardingAccessGate'
+import { useOnboarding } from './OnboardingProvider'
 
 type CompleteOnboardingLinkProps = {
   href: string
@@ -13,28 +16,38 @@ type CompleteOnboardingLinkProps = {
 export default function CompleteOnboardingLink({ href, children, className }: CompleteOnboardingLinkProps) {
   const router = useRouter()
   const { user } = useUser()
+  const { clearProfile } = useOnboarding()
+  const [isCompleting, setIsCompleting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const completeOnboarding = async () => {
+    if (!user?.id || isCompleting) return
+
+    setIsCompleting(true)
+    setError(null)
+
+    try {
+      await user.update({
+        unsafeMetadata: {
+          ...user.unsafeMetadata,
+          onboardingComplete: true,
+        },
+      })
+      markOnboardingComplete(user.id)
+      clearProfile()
+      router.push(href)
+    } catch {
+      setError('Không thể hoàn tất onboarding. Vui lòng thử lại.')
+      setIsCompleting(false)
+    }
+  }
 
   return (
-    <button
-      type="button"
-      className={className}
-      onClick={async () => {
-        try {
-          if (user?.id) {
-            markOnboardingComplete(user.id)
-            await user.update({
-              unsafeMetadata: {
-                ...user.unsafeMetadata,
-                onboardingComplete: true,
-              },
-            })
-          }
-        } finally {
-          router.push(href)
-        }
-      }}
-    >
-      {children}
-    </button>
+    <div className="text-center">
+      <button type="button" className={className} disabled={isCompleting} onClick={() => void completeOnboarding()}>
+        {isCompleting ? 'Đang hoàn tất...' : children}
+      </button>
+      {error ? <p className="mt-3 text-sm text-error" role="alert">{error}</p> : null}
+    </div>
   )
 }

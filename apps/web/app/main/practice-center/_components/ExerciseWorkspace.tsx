@@ -1,33 +1,99 @@
-import type { PracticeLesson } from '../_types/practice'
-import ExerciseNavigation from './ExerciseNavigation'
-import ProgressBar from './ProgressBar'
-import QuestionPanel from './QuestionPanel'
-import TheoryPanel from './TheoryPanel'
+import Link from 'next/link';
+
+import type { ExerciseDto, LessonDto, ModuleDto } from '@/lib/api/types';
+
+import type { PracticeSkillId } from '../_types/practice';
+import { toPracticeQuestion, toTheoryBlocks } from '../_lib/practice-catalog';
+import { modulePath } from '../_utils/routes';
+import ExerciseNavigation from './ExerciseNavigation';
+import QuestionPanel from './QuestionPanel';
+import TheoryPanel from './TheoryPanel';
 
 type ExerciseWorkspaceProps = {
-  lesson: PracticeLesson
-}
+  skill: PracticeSkillId;
+  module: ModuleDto;
+  lessons: LessonDto[];
+  lesson: LessonDto;
+  exercises: ExerciseDto[];
+  exercise: ExerciseDto;
+};
 
-export default function ExerciseWorkspace({ lesson }: ExerciseWorkspaceProps) {
+export default function ExerciseWorkspace({
+  skill,
+  module,
+  lessons,
+  lesson,
+  exercises,
+  exercise,
+}: ExerciseWorkspaceProps) {
+  const question = toPracticeQuestion(exercise);
+  const exerciseIndex = exercises.findIndex((item) => item.id === exercise.id);
+  const previousExercise = exercises[exerciseIndex - 1];
+  const nextExercise = exercises[exerciseIndex + 1];
+
   return (
     <div>
       <div className="mb-7 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div>
-          <h1 className="text-4xl font-bold text-on-surface">{lesson.moduleTitle}</h1>
-          <p className="mt-2 text-lg text-on-surface-variant">{lesson.moduleSubtitle}</p>
-        </div>
-        <div className="flex w-full items-center gap-3 md:w-64">
-          <span className="text-sm font-semibold text-[#007a4d]">Tiến độ:</span>
-          <ProgressBar value={lesson.progressPercent} tone="success" />
+          <h1 className="text-4xl font-bold text-on-surface">{module.title}</h1>
+          <p className="mt-2 text-lg text-on-surface-variant">{lesson.title}</p>
         </div>
       </div>
+
+      <section className="mb-6 rounded-lg border border-outline-variant/50 bg-surface-container-lowest p-4">
+        <h2 className="text-sm font-bold uppercase tracking-wide text-on-surface-variant">
+          Lessons
+        </h2>
+        <div className="mt-3 flex flex-wrap gap-2">
+          {lessons.map((item) => (
+            <Link
+              key={item.id}
+              href={modulePath(skill, module.id, { lessonId: item.id })}
+              className={`rounded-full px-3 py-2 text-sm font-semibold transition-colors ${item.id === lesson.id ? 'bg-primary text-white' : 'bg-surface-container text-on-surface hover:bg-surface-container-high'}`}
+            >
+              {item.order}. {item.title}
+            </Link>
+          ))}
+        </div>
+      </section>
 
       <div className="grid gap-6 lg:grid-cols-[310px_minmax(0,1fr)]">
-        <TheoryPanel theory={lesson.theory} tip={lesson.tip} />
-        <QuestionPanel question={lesson.question} feedback={lesson.feedback} />
+        <TheoryPanel
+          theory={toTheoryBlocks(lesson)}
+          tip="Read the lesson material carefully before submitting your answer."
+        />
+        <div>
+          {exercises.length > 1 ? (
+            <nav aria-label="Exercises" className="mb-4 flex flex-wrap gap-2">
+              {exercises.map((item, index) => (
+                <Link
+                  key={item.id}
+                  href={modulePath(skill, module.id, { lessonId: lesson.id, exerciseId: item.id })}
+                  className={`flex h-9 min-w-9 items-center justify-center rounded-full px-3 text-sm font-semibold transition-colors ${item.id === exercise.id ? 'bg-primary text-white' : 'bg-surface-container text-on-surface hover:bg-surface-container-high'}`}
+                >
+                  {index + 1}
+                </Link>
+              ))}
+            </nav>
+          ) : null}
+          <QuestionPanel key={exercise.id} question={question} />
+        </div>
       </div>
 
-      <ExerciseNavigation initialQuestion={lesson.questionNumber} totalQuestions={lesson.totalQuestions} />
+      <ExerciseNavigation
+        currentQuestion={exerciseIndex + 1}
+        totalQuestions={exercises.length}
+        previousHref={
+          previousExercise
+            ? modulePath(skill, module.id, { lessonId: lesson.id, exerciseId: previousExercise.id })
+            : undefined
+        }
+        nextHref={
+          nextExercise
+            ? modulePath(skill, module.id, { lessonId: lesson.id, exerciseId: nextExercise.id })
+            : undefined
+        }
+      />
     </div>
-  )
+  );
 }

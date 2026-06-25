@@ -1,68 +1,256 @@
-"use client"
+'use client'
 
-import { useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { assessmentQuestions } from '../_data/onboarding-content'
+
+import { isApiError } from '@/lib/api/client'
+import type { AssessmentQuestionDto, AssessmentResultDto, CefrLevel, Skill } from '@/lib/api/types'
+import { useApi } from '@/lib/api/useApi'
+
+import type { SkillId } from '../_types/onboarding'
+import { assessmentLevelsToScore } from '../_utils/onboarding-request'
 import { onboardingRoutes } from '../_utils/onboarding-routes'
+import { useOnboarding } from './OnboardingProvider'
+
+type AssessmentState =
+  | { status: 'loading' }
+  | { status: 'success'; questions: AssessmentQuestionDto[] }
+  | { status: 'error'; message: string }
+
+type AssessmentPrompt = {
+  passage?: string
+  transcript?: string
+  sentence?: string
+  question?: string
+  instruction?: string
+  options: string[]
+}
+
+const skillLabels: Record<SkillId, string> = {
+  reading: 'Reading',
+  writing: 'Writing',
+  listening: 'Listening',
+  speaking: 'Speaking',
+}
+
+const assessmentSkills: Skill[] = ['reading', 'writing', 'listening', 'speaking']
+const questionsPerSkill = 4
+
+function shuffle<T>(items: T[]): T[] {
+  const shuffled = [...items]
+
+  for (let index = shuffled.length - 1; index > 0; index -= 1) {
+    const randomIndex = Math.floor(Math.random() * (index + 1))
+    ;[shuffled[index], shuffled[randomIndex]] = [shuffled[randomIndex], shuffled[index]]
+  }
+
+  return shuffled
+}
+
+function selectAssessmentQuestions(questions: AssessmentQuestionDto[]) {
+  const selectedQuestions = assessmentSkills.flatMap((skill) => {
+    const skillQuestions = questions.filter((question) => question.skill === skill)
+    return shuffle(skillQuestions).slice(0, questionsPerSkill)
+  })
+
+  if (selectedQuestions.length !== assessmentSkills.length * questionsPerSkill) {
+    throw new Error('The assessment question bank does not contain enough questions for every skill.')
+  }
+
+  return shuffle(selectedQuestions)
+}
+
+function parsePrompt(prompt: unknown): AssessmentPrompt {
+  if (typeof prompt !== 'object' || prompt === null || Array.isArray(prompt)) {
+    return { options: [] }
+  }
+
+  const value = prompt as Record<string, unknown>
+  const getText = (key: string) => (typeof value[key] === 'string' ? value[key] : undefined)
+  const options = Array.isArray(value.options) ? value.options.filter((option): option is string => typeof option === 'string') : []
+
+  return {
+    passage: getText('passage'),
+    transcript: getText('transcript'),
+    sentence: getText('sentence'),
+    question: getText('question'),
+    instruction: getText('instruction'),
+    options,
+  }
+}
 
 export default function AssessmentQuestion() {
+  const api = useApi()
   const router = useRouter()
+  const { updateProfile } = useOnboarding()
+  const [state, setState] = useState<AssessmentState>({ status: 'loading' })
   const [currentIndex, setCurrentIndex] = useState(0)
-  const [answers, setAnswers] = useState<Record<number, string>>({})
-  const question = assessmentQuestions[currentIndex]
-  const answer = answers[currentIndex]
-  const isFirstQuestion = currentIndex === 0
-  const isLastQuestion = currentIndex === assessmentQuestions.length - 1
+  const [answers, setAnswers] = useState<Record<string, string>>({})
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [submissionError, setSubmissionError] = useState<string | null>(null)
+  const hasLoadedQuestions = useRef(false)
 
-  const selectAnswer = (option: string) => {
-    setAnswers((currentAnswers) => ({ ...currentAnswers, [currentIndex]: option }))
+  const loadQuestions = useCallback(async () => {
+    setState({ status: 'loading' })
+
+    try {
+      const questions = await api<AssessmentQuestionDto[]>('/assessment/questions')
+      if (questions.length === 0) {
+        setState({ status: 'error', message: 'Chưa có câu hỏi đánh giá. Vui lòng thử lại sau.' })
+        return
+      }
+
+      setCurrentIndex(0)
+      setAnswers({})
+      setSubmissionError(null)
+      setState({ status: 'success', questions: selectAssessmentQuestions(questions) })
+    } catch (error) {
+      setState({
+        status: 'error',
+        message: isApiError(error) ? error.message : 'Không thể tải bài đánh giá. Vui lòng thử lại.',
+      })
+    }
+  }, [api])
+
+  useEffect(() => {
+    updateProfile({ assessmentMethod: 'test' })
+  }, [updateProfile])
+
+  useEffect(() => {
+    if (hasLoadedQuestions.current) return
+    hasLoadedQuestions.current = true
+    void loadQuestions()
+  }, [loadQuestions])
+
+  const retryLoadingQuestions = () => {
+    hasLoadedQuestions.current = true
+    void loadQuestions()
+  }
+
+  if (state.status === 'loading') {
+    return (
+      <div className="flex min-h-72 flex-col items-center justify-center text-center">
+        <span className="material-symbols-outlined animate-spin text-4xl text-primary">progress_activity</span>
+        <p className="mt-4 font-semibold text-on-surface">Đang tải câu hỏi đánh giá...</p>
+      </div>
+    )
+  }
+
+  if (state.status === 'error') {
+    return (
+      <section className="rounded-lg border border-error/30 bg-white p-6 text-center" role="alert">
+        <span className="material-symbols-outlined text-4xl text-error">error</span>
+        <p className="mt-3 text-on-surface-variant">{state.message}</p>
+        <button type="button" onClick={retryLoadingQuestions} className="mt-5 inline-flex h-11 items-center gap-2 rounded-full bg-primary px-6 font-bold text-white">
+          <span className="material-symbols-outlined">refresh</span>
+          Thử lại
+        </button>
+      </section>
+    )
+  }
+
+  const { questions } = state
+  const question = questions[currentIndex]
+  const prompt = parsePrompt(question.prompt)
+  const answer = answers[question.id] ?? ''
+  const isFirstQuestion = currentIndex === 0
+  const isLastQuestion = currentIndex === questions.length - 1
+  const questionText = prompt.question ?? prompt.instruction ?? 'Chọn hoặc nhập câu trả lời phù hợp nhất.'
+
+  const selectAnswer = (nextAnswer: string) => {
+    setAnswers((currentAnswers) => ({ ...currentAnswers, [question.id]: nextAnswer }))
+  }
+
+  const submitAssessment = async () => {
+    if (!answer.trim() || isSubmitting) return
+
+    setIsSubmitting(true)
+    setSubmissionError(null)
+
+    try {
+      const result = await api<AssessmentResultDto>('/assessment/score', {
+        method: 'POST',
+        body: {
+          answers: questions.map((assessmentQuestion) => ({
+            questionId: assessmentQuestion.id,
+            answer: { answer: answers[assessmentQuestion.id].trim() },
+          })),
+        },
+      })
+      const assessmentLevels = result.levels as Partial<Record<SkillId, CefrLevel>>
+
+      updateProfile({
+        assessmentMethod: 'test',
+        assessmentLevels,
+        assessmentCorrectAnswerCount: result.correctAnswers,
+        assessmentQuestionCount: questions.length,
+        levelScore: assessmentLevelsToScore(assessmentLevels),
+      })
+      router.push(onboardingRoutes.assessmentResults)
+    } catch (error) {
+      setSubmissionError(isApiError(error) ? error.message : 'Không thể chấm bài đánh giá. Vui lòng thử lại.')
+      setIsSubmitting(false)
+    }
   }
 
   const goNext = () => {
-    if (!answer) return
+    if (!answer.trim()) return
 
-    if (!isLastQuestion) {
-      setCurrentIndex((index) => index + 1)
+    if (isLastQuestion) {
+      void submitAssessment()
       return
     }
 
-    const correctAnswers = assessmentQuestions.filter((item, index) => answers[index] === item.correctAnswer).length
-    const score = Math.round((correctAnswers / assessmentQuestions.length) * 10)
-    const skillResults = assessmentQuestions.map((item, index) => (answers[index] === item.correctAnswer ? '1' : '0')).join(',')
-    router.push(`${onboardingRoutes.assessmentResults}?score=${score}&correct=${correctAnswers}&skills=${skillResults}`)
+    setCurrentIndex((index) => index + 1)
   }
 
   return (
     <div>
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-        <span className="rounded-lg border border-primary/20 bg-blue-50 px-4 py-2 text-2xl font-bold text-primary">{question.skill}</span>
-        <span className="rounded-full bg-blue-50 px-4 py-2 font-bold text-primary">Câu {currentIndex + 1} / {assessmentQuestions.length}</span>
+        <span className="rounded-lg border border-primary/20 bg-blue-50 px-4 py-2 text-2xl font-bold text-primary">{skillLabels[question.skill]}</span>
+        <span className="rounded-full bg-blue-50 px-4 py-2 font-bold text-primary">Câu {currentIndex + 1} / {questions.length} · {question.cefrLevelTarget}</span>
       </div>
-      <h2 className="text-2xl font-bold leading-9 text-on-surface">{question.prompt}</h2>
-      <div className="my-6 rounded-lg border-l-4 border-primary bg-surface p-4 text-on-surface-variant">Context: {question.context}</div>
-      <div className="space-y-4">
-        {question.options.map((option, index) => (
-          <button
-            key={option}
-            type="button"
-            onClick={() => selectAnswer(option)}
-            aria-pressed={answer === option}
-            className={`flex min-h-16 w-full items-center gap-4 rounded-lg border px-5 py-3 text-left transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ${answer === option ? 'border-primary bg-primary-container/25' : 'border-outline-variant bg-white hover:border-primary hover:bg-blue-50/30'}`}
-          >
-            <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full border ${answer === option ? 'border-primary bg-primary text-white' : 'border-outline'}`}>{String.fromCharCode(65 + index)}</span>
-            {option}
-          </button>
-        ))}
-      </div>
+      {prompt.passage ? <div className="mb-5 rounded-lg border-l-4 border-primary bg-surface p-4 leading-7 text-on-surface-variant">{prompt.passage}</div> : null}
+      {prompt.transcript ? <div className="mb-5 rounded-lg border-l-4 border-primary bg-surface p-4 leading-7 text-on-surface-variant">Transcript: {prompt.transcript}</div> : null}
+      {prompt.sentence ? <div className="mb-5 rounded-lg border-l-4 border-primary bg-surface p-4 leading-7 text-on-surface-variant">{prompt.sentence}</div> : null}
+      <h2 className="text-2xl font-bold leading-9 text-on-surface">{questionText}</h2>
+      {prompt.options.length > 0 ? (
+        <div className="my-6 space-y-4">
+          {prompt.options.map((option, index) => (
+            <button
+              key={option}
+              type="button"
+              onClick={() => selectAnswer(option)}
+              aria-pressed={answer === option}
+              className={`flex min-h-16 w-full items-center gap-4 rounded-lg border px-5 py-3 text-left transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ${answer === option ? 'border-primary bg-primary-container/25' : 'border-outline-variant bg-white hover:border-primary hover:bg-blue-50/30'}`}
+            >
+              <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full border ${answer === option ? 'border-primary bg-primary text-white' : 'border-outline'}`}>{String.fromCharCode(65 + index)}</span>
+              {option}
+            </button>
+          ))}
+        </div>
+      ) : (
+        <label className="my-6 block">
+          <span className="sr-only">Câu trả lời</span>
+          <input
+            type="text"
+            value={answer}
+            onChange={(event) => selectAnswer(event.target.value)}
+            placeholder="Nhập câu trả lời của bạn"
+            className="h-14 w-full rounded-lg border border-outline-variant bg-white px-4 text-on-surface outline-none transition-colors placeholder:text-on-surface-variant focus:border-primary focus:ring-2 focus:ring-primary/20"
+          />
+        </label>
+      )}
       <aside className="mt-6 rounded-lg bg-violet-100 p-5 text-violet-950">
-        <p className="font-bold">Mentor Insight</p>
-        <p className="mt-1">{question.insight}</p>
+        <p className="font-bold">Mẹo làm bài</p>
+        <p className="mt-1">Đọc kỹ ngữ cảnh và chọn hoặc nhập câu trả lời phù hợp nhất.</p>
       </aside>
+      {submissionError ? <p className="mt-4 text-sm text-error" role="alert">{submissionError}</p> : null}
       <div className="mt-8 flex flex-wrap items-center justify-between gap-4 border-t border-outline-variant/60 pt-6">
         <button
           type="button"
           onClick={() => setCurrentIndex((index) => index - 1)}
-          disabled={isFirstQuestion}
+          disabled={isFirstQuestion || isSubmitting}
           className="flex h-12 items-center gap-2 rounded-full border border-outline px-6 font-semibold text-on-surface disabled:cursor-not-allowed disabled:opacity-40"
         >
           <span className="material-symbols-outlined">arrow_back</span>
@@ -71,10 +259,10 @@ export default function AssessmentQuestion() {
         <button
           type="button"
           onClick={goNext}
-          disabled={!answer}
+          disabled={!answer.trim() || isSubmitting}
           className="flex h-12 items-center gap-2 rounded-full bg-primary px-7 font-bold text-white disabled:cursor-not-allowed disabled:opacity-40"
         >
-          {isLastQuestion ? 'Đánh giá' : 'Câu sau'}
+          {isLastQuestion ? (isSubmitting ? 'Đang chấm bài...' : 'Đánh giá') : 'Câu sau'}
           <span className="material-symbols-outlined">arrow_forward</span>
         </button>
       </div>

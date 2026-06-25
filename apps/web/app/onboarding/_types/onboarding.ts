@@ -1,3 +1,5 @@
+import type { CefrLevel } from '@/lib/api/types'
+
 export type LearningGoalId = 'conversation' | 'ielts' | 'business' | 'travel' | 'personal'
 export type AssessmentMethod = 'test' | 'selfAssessment'
 export type SkillId = 'listening' | 'speaking' | 'reading' | 'writing'
@@ -6,6 +8,9 @@ export interface OnboardingProfile {
   goalId: LearningGoalId
   assessmentMethod: AssessmentMethod
   levelScore: number
+  assessmentLevels: Partial<Record<SkillId, CefrLevel>>
+  assessmentCorrectAnswerCount: number
+  assessmentQuestionCount: number
   dailyMinutes: number
   prioritySkills: SkillId[]
 }

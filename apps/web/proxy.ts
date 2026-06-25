@@ -1,8 +1,13 @@
-import { clerkMiddleware } from '@clerk/nextjs/server';
+import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server';
+
+const isProtectedRoute = createRouteMatcher(['/main(.*)', '/onboarding(.*)']);
 
 export const config = {
-  matcher: ['/onboarding/:path*', '/(api|trpc)(.*)', '/__clerk/:path*'],
+  matcher: ['/main/:path*', '/onboarding/:path*', '/(api|trpc)(.*)', '/__clerk/:path*'],
 };
 
-// Export the clerk middleware as the proxy handler so `auth()` detects it at runtime
-export default clerkMiddleware();
+// Export the clerk middleware as the proxy handler so `auth()` detects it at runtime.
+// Protect app routes before Server Components call backend services that require a bearer token.
+export default clerkMiddleware(async (auth, req) => {
+  if (isProtectedRoute(req)) await auth.protect();
+});
