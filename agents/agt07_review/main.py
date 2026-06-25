@@ -5,13 +5,16 @@ from fastapi import FastAPI, Header, HTTPException
 from pydantic import BaseModel
 from agents.agt07_review.service import get_due_items, rate_item, build_daily_test, AGT06_BASE
 from agents.shared.config import settings
+from agents.shared.db.postgres import get_pool, close_pool
 
 logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    await get_pool()
     yield
+    await close_pool()
 
 
 app = FastAPI(

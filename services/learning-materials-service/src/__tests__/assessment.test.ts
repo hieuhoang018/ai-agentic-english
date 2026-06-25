@@ -19,6 +19,12 @@ const readingA2Questions = [
   { id: 'aq-r-a2-3', skill: 'reading', cefrLevelTarget: 'A2', prompt: { question: 'Q6' }, correctAnswer: { answer: 'F' }, order: 6, createdAt: now },
 ];
 
+const readingB1Questions = [
+  { id: 'aq-r-b1-1', skill: 'reading', cefrLevelTarget: 'B1', prompt: { question: 'Q7' }, correctAnswer: { answer: 'G' }, order: 7, createdAt: now },
+  { id: 'aq-r-b1-2', skill: 'reading', cefrLevelTarget: 'B1', prompt: { question: 'Q8' }, correctAnswer: { answer: 'H' }, order: 8, createdAt: now },
+  { id: 'aq-r-b1-3', skill: 'reading', cefrLevelTarget: 'B1', prompt: { question: 'Q9' }, correctAnswer: { answer: 'I' }, order: 9, createdAt: now },
+];
+
 describe('assessment routes', () => {
   let prisma: MockPrismaClient;
   let token: string;
@@ -26,6 +32,59 @@ describe('assessment routes', () => {
   beforeEach(async () => {
     prisma = createMockPrisma();
     token = await signTestToken({ sub: 'user_123' });
+  });
+
+  describe('GET /assessment/item-bank', () => {
+    it('returns 200 without a token', async () => {
+      prisma.assessmentQuestion.findMany.mockResolvedValue([]);
+      const res = await request(createApp(prisma)).get('/assessment/item-bank');
+      expect(res.status).toBe(200);
+    });
+
+    it('returns items with item_id and difficulty_param', async () => {
+      prisma.assessmentQuestion.findMany.mockResolvedValue(readingA1Questions);
+      const res = await request(createApp(prisma)).get('/assessment/item-bank');
+      expect(res.status).toBe(200);
+      expect(res.body).toHaveLength(3);
+      for (const item of res.body) {
+        expect(item).toHaveProperty('item_id');
+        expect(item).toHaveProperty('difficulty_param');
+        expect(typeof item.difficulty_param).toBe('number');
+      }
+    });
+
+    it('maps A1 cefrLevelTarget to difficulty_param -2.0', async () => {
+      prisma.assessmentQuestion.findMany.mockResolvedValue([readingA1Questions[0]]);
+      const res = await request(createApp(prisma)).get('/assessment/item-bank');
+      expect(res.body[0].difficulty_param).toBe(-2.0);
+    });
+
+    it('maps A2 cefrLevelTarget to difficulty_param -1.0', async () => {
+      prisma.assessmentQuestion.findMany.mockResolvedValue([readingA2Questions[0]]);
+      const res = await request(createApp(prisma)).get('/assessment/item-bank');
+      expect(res.body[0].difficulty_param).toBe(-1.0);
+    });
+
+    it('maps id to item_id', async () => {
+      prisma.assessmentQuestion.findMany.mockResolvedValue([readingA1Questions[0]]);
+      const res = await request(createApp(prisma)).get('/assessment/item-bank');
+      expect(res.body[0].item_id).toBe('aq-r-a1-1');
+    });
+
+    it('passes skill filter to the query', async () => {
+      prisma.assessmentQuestion.findMany.mockResolvedValue([]);
+      await request(createApp(prisma)).get('/assessment/item-bank?skill=READING');
+      expect(prisma.assessmentQuestion.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { skill: 'READING' } }),
+      );
+    });
+
+    it('does not expose prompt or correctAnswer', async () => {
+      prisma.assessmentQuestion.findMany.mockResolvedValue([readingA1Questions[0]]);
+      const res = await request(createApp(prisma)).get('/assessment/item-bank');
+      expect(res.body[0]).not.toHaveProperty('prompt');
+      expect(res.body[0]).not.toHaveProperty('correctAnswer');
+    });
   });
 
   describe('GET /assessment/questions', () => {
@@ -151,6 +210,25 @@ describe('assessment routes', () => {
       expect(res.body.levels.reading).toBe('A1');
       expect(res.body.correctAnswers).toBe(2);
       expect(res.body.totalQuestions).toBe(3);
+    });
+
+    it('uses sequential gating — failing A2 caps the result at A1 even if B1 passes', async () => {
+      const allQuestions = [...readingA1Questions, ...readingA2Questions, ...readingB1Questions];
+      prisma.assessmentQuestion.findMany.mockResolvedValue(allQuestions);
+
+      const answers = [
+        ...readingA1Questions.map((q) => ({ questionId: q.id, answer: q.correctAnswer })), // A1: 3/3 pass
+        ...readingA2Questions.map((q) => ({ questionId: q.id, answer: { answer: 'wrong' } })), // A2: 0/3 fail
+        ...readingB1Questions.map((q) => ({ questionId: q.id, answer: q.correctAnswer })), // B1: 3/3 pass
+      ];
+
+      const res = await request(createApp(prisma))
+        .post('/assessment/score')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ answers });
+
+      expect(res.status).toBe(200);
+      expect(res.body.levels.reading).toBe('A1');
     });
 
     it('returns empty levels when no answers provided', async () => {

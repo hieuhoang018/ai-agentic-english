@@ -12,7 +12,7 @@ Feedback throttling:
 
 from enum import Enum
 
-FILLER_WORDS = {"um", "uh", "like", "you know", "basically", "literally", "actually", "so"}
+FILLER_WORDS = {"um", "uh", "like", "basically", "literally", "actually", "so"}
 
 # Severity order for throttling (higher = more important to surface)
 ERROR_SEVERITY = {

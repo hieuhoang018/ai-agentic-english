@@ -8,6 +8,7 @@ import logging
 from datetime import datetime, timezone
 from agents.agt07_review.sm2 import compute_retrievability, next_review_date_stub, update_stability_stub
 from agents.agt07_review.test_builder import compose_test_stub
+from agents.shared.db.postgres import fetchrow, execute
 
 logger = logging.getLogger(__name__)
 
@@ -51,15 +52,33 @@ async def get_due_items(clerk_user_id: str) -> list[dict]:
 
 async def rate_item(clerk_user_id: str, item_id: str, quality: int) -> dict:
     """
-    Record a review rating for a vocabulary item. Updates SM-2 state.
-    quality: 0-5 (0-2 = forgotten, 3+ = recalled)
+    Record a review rating for a vocabulary item.
+    Reads current sm_stability from DB, computes updated stability and next
+    review date via SM-2 stubs, and writes both back to vocabulary_mastery.
+    quality: 0-5 (0-2 = forgotten, 3+ = recalled).
     """
-    # TODO Phase 8+: read current SM-2 state from LTM, apply full update
+    row = await fetchrow(
+        "SELECT sm_stability FROM vocabulary_mastery "
+        "WHERE vocab_id = $1::uuid AND clerk_user_id = $2",
+        item_id, clerk_user_id,
+    )
+    current_stability = float(row["sm_stability"]) if row else 1.0
+
+    new_stability = update_stability_stub(quality, current_stability)
+    next_review = next_review_date_stub(quality, new_stability)
+
+    await execute(
+        "UPDATE vocabulary_mastery "
+        "SET sm_stability = $1, next_review_at = $2 "
+        "WHERE vocab_id = $3::uuid AND clerk_user_id = $4",
+        new_stability, next_review, item_id, clerk_user_id,
+    )
+
     return {
         "item_id": item_id,
         "quality": quality,
-        "next_review": next_review_date_stub(quality, 1.0).isoformat(),
-        "stub": True,
+        "new_stability": round(new_stability, 4),
+        "next_review": next_review.isoformat(),
     }
 
 

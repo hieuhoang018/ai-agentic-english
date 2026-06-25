@@ -82,7 +82,7 @@ async def _get_stm_errors(session_id: str) -> list[dict]:
 async def _get_base_profile(clerk_user_id: str) -> dict:
     """Read from Redis cache, falling back to PostgreSQL on cache miss."""
     r = await get_redis()
-    cache_key = f"agt01:profile:{clerk_user_id}"
+    cache_key = f"profile:{clerk_user_id}"
     cached = await r.get(cache_key)
     if cached:
         return json.loads(cached)
@@ -116,7 +116,7 @@ async def create_profile(clerk_user_id: str) -> dict:
     profile = _row_to_dict(row)
     # Invalidate cache
     r = await get_redis()
-    await r.delete(f"agt01:profile:{clerk_user_id}")
+    await r.delete(f"profile:{clerk_user_id}")
     return profile
 
 
@@ -195,7 +195,7 @@ async def update_profile(clerk_user_id: str, updates: dict) -> dict:
 
     # Invalidate cache — next read will re-populate from DB
     r = await get_redis()
-    await r.delete(f"agt01:profile:{clerk_user_id}")
+    await r.delete(f"profile:{clerk_user_id}")
     return await _get_base_profile(clerk_user_id)
 
 

@@ -247,6 +247,8 @@ services:
       mc mb -p local/pronunciation-audio &&
       mc mb -p local/exercise-audio &&
       mc mb -p local/writing-samples &&
+      mc mb -p local/passage-audio &&
+      mc mb -p local/assessment-audio &&
       exit 0
       "
 
@@ -306,9 +308,18 @@ services:
       MINIO_ACCESS_KEY: minioadmin
       MINIO_SECRET_KEY: minioadmin
       INFERENCE_MODE: mock
+      AGT04_BASE_URL: http://agt04-feedback:8104
+      AGT07_BASE_URL: http://agt07-review:8107
+      AGT11_BASE_URL: http://agt11-translation:8111
     depends_on:
       postgres-agents:
         condition: service_healthy
+      agt04-feedback:
+        condition: service_started
+      agt07-review:
+        condition: service_started
+      agt11-translation:
+        condition: service_started
 
   agt04-feedback:
     build:
@@ -322,11 +333,17 @@ services:
       REDIS_URL: redis://redis:6379
       KAFKA_BROKERS: kafka:9092
       LANGUAGETOOL_URL: http://languagetool:8010/v2
+      AGT06_BASE_URL: http://agt06-memory:8106
+      AGT11_BASE_URL: http://agt11-translation:8111
       INFERENCE_MODE: mock
     depends_on:
       postgres-agents:
         condition: service_healthy
       languagetool:
+        condition: service_started
+      agt06-memory:
+        condition: service_started
+      agt11-translation:
         condition: service_started
 
   agt05-assessment:
@@ -340,10 +357,13 @@ services:
       AGENT_DATABASE_URL: postgresql://postgres:postgres@postgres-agents:5432/agent_ltm
       REDIS_URL: redis://redis:6379
       KAFKA_BROKERS: kafka:9092
+      LMS_BASE_URL: http://learning-materials-service:4002
       INFERENCE_MODE: mock
     depends_on:
       postgres-agents:
         condition: service_healthy
+      learning-materials-service:
+        condition: service_started
 
   agt06-memory:
     build:

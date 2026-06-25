@@ -7,4 +7,7 @@ export interface AppPrismaClient {
   exercise: PrismaClient['exercise'];
   learningPath: PrismaClient['learningPath'];
   assessmentQuestion: PrismaClient['assessmentQuestion'];
+  vocabEntry: PrismaClient['vocabEntry'];
+  grammarPoint: PrismaClient['grammarPoint'];
+  passage: PrismaClient['passage'];
 }

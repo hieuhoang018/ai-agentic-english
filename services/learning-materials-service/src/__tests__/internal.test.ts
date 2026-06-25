@@ -186,4 +186,125 @@ describe('internal routes', () => {
       );
     });
   });
+
+  describe('GET /internal/vocab', () => {
+    const vocabRow = {
+      id: 'vocab-1',
+      lemma: 'run',
+      pos: 'verb',
+      cefrLevel: 'A1',
+      domainTag: 'general',
+      senses: [{ senseRank: 0, definition: 'to move fast on foot', example: 'I run every day.', synonyms: ['jog'] }],
+      pronunciations: [{ ipa: 'rʌn', variant: 'us', isPrimary: true }],
+    };
+
+    it('returns vocab entries with senses and pronunciations', async () => {
+      prisma.vocabEntry.findMany.mockResolvedValue([vocabRow]);
+
+      const res = await request(createApp(prisma))
+        .get('/internal/vocab')
+        .set(INTERNAL_HEADER, INTERNAL_SECRET);
+
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual([
+        {
+          id: 'vocab-1',
+          lemma: 'run',
+          pos: 'verb',
+          cefrLevel: 'A1',
+          domainTag: 'general',
+          senses: [{ definition: 'to move fast on foot', example: 'I run every day.', synonyms: ['jog'] }],
+          pronunciations: [{ ipa: 'rʌn', variant: 'us', isPrimary: true }],
+        },
+      ]);
+    });
+
+    it('filters by cefrLevel query param', async () => {
+      prisma.vocabEntry.findMany.mockResolvedValue([]);
+
+      await request(createApp(prisma))
+        .get('/internal/vocab?cefrLevel=B1')
+        .set(INTERNAL_HEADER, INTERNAL_SECRET);
+
+      expect(prisma.vocabEntry.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { cefrLevel: 'B1' } }),
+      );
+    });
+  });
+
+  describe('GET /internal/grammar', () => {
+    it('returns grammar points with examples', async () => {
+      prisma.grammarPoint.findMany.mockResolvedValue([
+        {
+          id: 'gp-1',
+          title: 'I am not',
+          category: 'pronoun',
+          cefrLevel: 'A1',
+          explanation: 'Negative declarative form: "I am not"',
+          examples: [{ sentence: 'I am not', note: 'negative declarative' }],
+        },
+      ]);
+
+      const res = await request(createApp(prisma))
+        .get('/internal/grammar')
+        .set(INTERNAL_HEADER, INTERNAL_SECRET);
+
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual([
+        {
+          id: 'gp-1',
+          title: 'I am not',
+          category: 'pronoun',
+          cefrLevel: 'A1',
+          explanation: 'Negative declarative form: "I am not"',
+          examples: [{ sentence: 'I am not', note: 'negative declarative' }],
+        },
+      ]);
+    });
+  });
+
+  describe('GET /internal/passages', () => {
+    it('returns passages with audioKey resolved from the linked media asset', async () => {
+      prisma.passage.findMany.mockResolvedValue([
+        {
+          id: 'pass-1',
+          title: "'Watching the Grass Grow' Is Not Fun",
+          body: 'Springtime is a time of renewal...',
+          cefrLevel: 'A2',
+          topicTags: ['idioms-and-expressions'],
+          isGenerated: false,
+          mediaAsset: { objectKey: 'voa/words-and-their-stories/watching-the-grass-grow-is-not-fun.mp3' },
+        },
+      ]);
+
+      const res = await request(createApp(prisma))
+        .get('/internal/passages')
+        .set(INTERNAL_HEADER, INTERNAL_SECRET);
+
+      expect(res.status).toBe(200);
+      expect(res.body[0].audioKey).toBe(
+        'voa/words-and-their-stories/watching-the-grass-grow-is-not-fun.mp3',
+      );
+    });
+
+    it('returns null audioKey when there is no linked media asset', async () => {
+      prisma.passage.findMany.mockResolvedValue([
+        {
+          id: 'pass-2',
+          title: 'Generated Passage',
+          body: 'Some generated text.',
+          cefrLevel: 'B1',
+          topicTags: [],
+          isGenerated: true,
+          mediaAsset: null,
+        },
+      ]);
+
+      const res = await request(createApp(prisma))
+        .get('/internal/passages')
+        .set(INTERNAL_HEADER, INTERNAL_SECRET);
+
+      expect(res.body[0].audioKey).toBeNull();
+    });
+  });
 });

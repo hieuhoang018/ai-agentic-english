@@ -26,13 +26,20 @@ async def analyze_grammar(text: str, skill_domain: str = "WRITING") -> list[dict
     lt_errors = await _languagetool_check(text)
     llm_errors = await _llm_contextual_check(text, skill_domain)
 
-    # Merge and deduplicate: prefer LT errors when offsets overlap
+    # Merge and deduplicate: prefer LT errors when character positions overlap.
+    # Doc-level errors (offset < 0) are never keyed — always include them.
     merged = lt_errors[:]
-    lt_offsets = {(e.get("offset", -1), e.get("length", 0)) for e in lt_errors}
+    lt_offsets = {
+        (e["offset"], e.get("length", 0))
+        for e in lt_errors
+        if e.get("offset", -1) >= 0
+    }
 
     for err in llm_errors:
-        key = (err.get("offset", -1), err.get("length", 0))
-        if key not in lt_offsets:
+        offset = err.get("offset", -1)
+        if offset < 0:
+            merged.append(err)  # doc-level: no position to dedup against
+        elif (offset, err.get("length", 0)) not in lt_offsets:
             merged.append(err)
 
     return merged

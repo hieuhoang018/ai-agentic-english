@@ -73,3 +73,110 @@ model AssessmentQuestion {
 
   @@map("assessment_questions")
 }
+
+model VocabEntry {
+  id             String       @id @default(uuid())
+  lemma          String
+  pos            String
+  cefrLevel      String
+  freqRank       Int?
+  domainTag      String?
+  source         String
+  license        String
+  senses         VocabSense[]
+  pronunciations VocabPron[]
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([lemma, pos])
+  @@map("vocab_entries")
+}
+
+model VocabSense {
+  id           String     @id @default(uuid())
+  vocabEntryId String
+  vocabEntry   VocabEntry @relation(fields: [vocabEntryId], references: [id])
+  senseRank    Int
+  definition   String
+  example      String?
+  synonyms     String[]
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@map("vocab_senses")
+}
+
+model VocabPron {
+  id           String     @id @default(uuid())
+  vocabEntryId String
+  vocabEntry   VocabEntry @relation(fields: [vocabEntryId], references: [id])
+  ipa          String
+  variant      String?
+  isPrimary    Boolean    @default(false)
+  audioKey     String?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@map("vocab_pronunciations")
+}
+
+model GrammarPoint {
+  id          String           @id @default(uuid())
+  title       String
+  category    String
+  cefrLevel   String
+  explanation String
+  source      String
+  license     String
+  examples    GrammarExample[]
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  @@unique([title, cefrLevel])
+  @@map("grammar_points")
+}
+
+model GrammarExample {
+  id             String       @id @default(uuid())
+  grammarPointId String
+  grammarPoint   GrammarPoint @relation(fields: [grammarPointId], references: [id])
+  sentence       String
+  note           String?
+  createdAt      DateTime     @default(now())
+
+  @@map("grammar_examples")
+}
+
+model Passage {
+  id           String      @id @default(uuid())
+  title        String
+  body         String
+  cefrLevel    String
+  topicTags    String[]
+  isGenerated  Boolean     @default(false)
+  source       String
+  license      String
+  mediaAssetId String?     @unique
+  mediaAsset   MediaAsset? @relation(fields: [mediaAssetId], references: [id])
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  @@unique([title, source])
+  @@map("passages")
+}
+
+model MediaAsset {
+  id         String   @id @default(uuid())
+  objectKey  String   @unique
+  mime       String
+  durationMs Int?
+  transcript String?
+  alignment  Json?
+  source     String
+  license    String
+  passage    Passage?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@map("media_assets")
+}
