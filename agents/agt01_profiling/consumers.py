@@ -36,9 +36,6 @@ logger = logging.getLogger(__name__)
 
 AGT06_BASE_URL = os.environ.get("AGT06_BASE_URL", "http://agt06-memory:8106")
 
-# First character of skill_focus string → IRT theta dict key
-_SKILL_TO_THETA_KEY: dict[str, str] = {"S": "S", "L": "L", "R": "R", "W": "W"}
-
 
 async def _get_session_error_count(session_id: str) -> int:
     """
@@ -93,27 +90,33 @@ async def handle_session_end(topic: str, event: dict) -> None:
         profile.get("behavioral_profile") or {}, float(duration)
     )
 
-    updates: dict = {
-        "behavioral_profile": updated_behavioral,
-        "cold_start_flag": False,
-    }
+    # Extract theta before try/except so cold_start_flag can be evaluated even on IRT failure
+    theta = dict(profile.get("irt_theta") or {"L": 0.0, "S": None, "R": 0.0, "W": 0.0})
+
+    updates: dict = {"behavioral_profile": updated_behavioral}
 
     # IRT theta update: score derived from session error count, MAP approximation applied.
     # Best-effort — failure here must not block the behavioral update above.
     skill_focus = str(event.get("skillFocus") or "SPEAKING").upper()
-    skill_key = _SKILL_TO_THETA_KEY.get(skill_focus[0], "S")
     try:
         num_errors = await _get_session_error_count(session_id) if session_id else 0
         score = _session_score(num_errors)
-        theta = dict(
-            profile.get("irt_theta") or {"L": 0.0, "S": 0.0, "R": 0.0, "W": 0.0}
-        )
-        theta[skill_key] = irt.update_theta(float(theta.get(skill_key, 0.0)), score)
+        if skill_focus == "SPEAKING":
+            current_s = theta.get("S") if theta.get("S") is not None else 0.0
+            theta["S"] = irt.update_theta(current_s, score)
+        elif skill_focus in ("LISTENING", "READING", "WRITING"):
+            key = skill_focus[0]
+            current = theta.get(key, 0.0) or 0.0
+            theta[key] = irt.update_theta(current, score)
         updates["irt_theta"] = theta
     except Exception as exc:
         logger.warning(
             "handle_session_end: IRT theta update failed user=%s err=%s", clerk_user_id, exc
         )
+
+    # cold_start_flag: flip to false once L, R, W are all non-null (S=null does not block this)
+    if all(theta.get(k) is not None for k in ("L", "R", "W")):
+        updates["cold_start_flag"] = False
 
     await update_profile(clerk_user_id, updates)
 

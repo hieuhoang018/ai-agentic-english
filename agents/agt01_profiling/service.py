@@ -203,7 +203,7 @@ def _cold_start_profile(clerk_user_id: str) -> dict:
     """Return a safe cold-start profile for new users with no data."""
     return {
         "clerk_user_id": clerk_user_id,
-        "irt_theta": {"L": 0.0, "S": 0.0, "R": 0.0, "W": 0.0},
+        "irt_theta": {"L": 0.0, "S": None, "R": 0.0, "W": 0.0},
         "vocabulary_beta": {},
         "grammar_error_map": {},
         "behavioral_profile": {},

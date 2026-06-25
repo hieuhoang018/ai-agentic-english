@@ -1,4 +1,4 @@
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -47,9 +47,7 @@ class Settings(BaseSettings):
     AGT06_BASE_URL: str = "http://localhost:8106"
     LMS_BASE_URL: str = "http://localhost:4002"
 
-    class Config:
-        env_file = ".env"
-        extra = "ignore"
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 
 settings = Settings()

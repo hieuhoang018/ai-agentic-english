@@ -2,7 +2,7 @@
 CREATE TABLE IF NOT EXISTS learner_profiles (
     user_id           UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     clerk_user_id     TEXT UNIQUE NOT NULL,
-    irt_theta         JSONB NOT NULL DEFAULT '{"L":0.0,"S":0.0,"R":0.0,"W":0.0}',
+    irt_theta         JSONB NOT NULL DEFAULT '{"L":0.0,"S":null,"R":0.0,"W":0.0}',
     vocabulary_beta   JSONB NOT NULL DEFAULT '{}',
     grammar_error_map JSONB NOT NULL DEFAULT '{}',
     behavioral_profile JSONB NOT NULL DEFAULT '{}',

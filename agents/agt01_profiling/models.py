@@ -8,7 +8,7 @@ class CreateProfileRequest(BaseModel):
 
 
 class UpdateProfileRequest(BaseModel):
-    irt_theta: dict[str, float] | None = None
+    irt_theta: dict[str, float | None] | None = None
     grammar_error_map: dict[str, Any] | None = None
     behavioral_profile: dict[str, Any] | None = None
     goal_profile: dict[str, Any] | None = None

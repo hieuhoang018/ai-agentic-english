@@ -183,6 +183,55 @@ async def test_handle_session_end_dedup_key_is_written_atomically(monkeypatch, f
     assert mock_update.await_count == 1, "update_profile must not be called a second time"
 
 
+async def test_handle_session_end_speaking_seeds_s_from_null_theta(monkeypatch, fake_redis):
+    """S=None in profile → SPEAKING session seeds S at 0.0 before applying IRT update."""
+    mock_get_base = AsyncMock(return_value={
+        "clerk_user_id": "user1",
+        "behavioral_profile": {},
+        "irt_theta": {"L": 0.0, "S": None, "R": 0.0, "W": 0.0},
+    })
+    mock_update = AsyncMock(return_value={})
+    monkeypatch.setattr(consumers, "_get_base_profile", mock_get_base)
+    monkeypatch.setattr(consumers, "update_profile", mock_update)
+    monkeypatch.setattr(consumers, "_get_session_error_count", AsyncMock(return_value=0))
+
+    await consumers.handle_session_end("session.end", {
+        "clerkUserId": "user1",
+        "durationMinutes": 15,
+        "sessionId": "sess-null-s",
+        "skillFocus": "SPEAKING",
+    })
+
+    _, updates = mock_update.call_args.args
+    assert "irt_theta" in updates
+    # S seeded at 0.0, then updated: irt.update_theta(0.0, 1.0) = 0.05
+    assert updates["irt_theta"]["S"] == pytest.approx(0.05, abs=1e-9)
+    # Siblings untouched
+    assert updates["irt_theta"]["L"] == 0.0
+    assert updates["irt_theta"]["R"] == 0.0
+    assert updates["irt_theta"]["W"] == 0.0
+
+
+async def test_handle_session_end_cold_start_not_blocked_by_null_s(monkeypatch):
+    """cold_start_flag flips to False even when S=null (S does not gate the flag)."""
+    mock_get_base = AsyncMock(return_value={
+        "clerk_user_id": "user1",
+        "behavioral_profile": {},
+        "irt_theta": {"L": 0.0, "S": None, "R": 0.0, "W": 0.0},
+    })
+    mock_update = AsyncMock(return_value={})
+    monkeypatch.setattr(consumers, "_get_base_profile", mock_get_base)
+    monkeypatch.setattr(consumers, "update_profile", mock_update)
+
+    await consumers.handle_session_end("session.end", {
+        "clerkUserId": "user1",
+        "durationMinutes": 10,
+    })
+
+    _, updates = mock_update.call_args.args
+    assert updates["cold_start_flag"] is False
+
+
 async def test_start_consumers_returns_cancellable_tasks(monkeypatch):
     async def fake_consume(topics, group_id, handler):
         await asyncio.sleep(3600)

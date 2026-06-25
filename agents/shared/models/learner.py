@@ -5,10 +5,10 @@ from datetime import datetime
 
 
 class IrtTheta(BaseModel):
-    L: float = 0.0  # Listening ability estimate
-    S: float = 0.0  # Speaking ability estimate
-    R: float = 0.0  # Reading ability estimate
-    W: float = 0.0  # Writing ability estimate
+    L: float = 0.0
+    S: float | None = None  # None until speaking sessions provide data; never set by CAT
+    R: float = 0.0
+    W: float = 0.0
 
 
 class LearnerProfile(BaseModel):

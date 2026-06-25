@@ -25,6 +25,7 @@ this module directly over plain HTTP endpoints. AGT-04 (feedback) and AGT-11
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import logging
 import os
@@ -43,6 +44,8 @@ logger = logging.getLogger(__name__)
 AGT06_BASE_URL = os.environ.get("AGT06_BASE_URL", "http://agt06-memory:8106")
 AGT01_BASE_URL = os.environ.get("AGT01_BASE_URL", "http://agt01-profiling:8101")
 AGT02_BASE_URL = os.environ.get("AGT02_BASE_URL", "http://agt02-learning-path:8102")
+AGT04_BASE_URL = os.environ.get("AGT04_BASE_URL", "http://agt04-feedback:8104")
+AGT11_BASE_URL = os.environ.get("AGT11_BASE_URL", "http://agt11-translation:8111")
 
 _OPENING_MESSAGES: dict[str, str] = {
     "LISTENING": "Hi! Today we'll practice listening. I'll describe a short workplace scenario - let me know if you'd like me to repeat anything.",
@@ -55,7 +58,7 @@ _OPENING_MESSAGES: dict[str, str] = {
 # deployment; a future phase will move these into AGT-06 STM state.
 _SESSION_START_TIMES: dict[str, float] = {}
 _SESSION_TURN_COUNTS: dict[str, int] = {}
-# Keyed by session_id. Value: {"profile": dict, "skill_focus": str}
+# Keyed by session_id. Value: {"profile": dict, "skill_focus": str, "clerk_user_id": str}
 _SESSION_PROFILES: dict[str, dict] = {}
 
 
@@ -95,6 +98,78 @@ async def _fetch_profile(clerk_user_id: str, session_id: str) -> tuple[dict, boo
     except Exception as exc:
         logger.warning("start_session: AGT-01 profile fetch failed for %s: %s", clerk_user_id, exc)
         return {"cold_start_flag": True}, False
+
+
+async def _fetch_grammar_feedback(
+    transcript: str,
+    session_id: str,
+    clerk_user_id: str,
+    skill_focus: str,
+) -> dict | None:
+    """
+    Call AGT-04 for grammar/fluency feedback. Best-effort — returns None on failure.
+    READING sessions skip feedback (comprehension scoring is a separate stub endpoint).
+    SPEAKING and LISTENING → /feedback/speaking; WRITING → /feedback/writing.
+    """
+    if skill_focus == "READING":
+        return None
+
+    endpoint = "speaking" if skill_focus in {"SPEAKING", "LISTENING"} else "writing"
+    try:
+        async with httpx.AsyncClient(timeout=8.0) as client:
+            if endpoint == "speaking":
+                payload = {
+                    "transcript": transcript,
+                    "session_id": session_id,
+                    "clerk_user_id": clerk_user_id,
+                    "duration_seconds": 0.0,
+                    "skill_domain": skill_focus,
+                }
+            else:
+                payload = {
+                    "draft": transcript,
+                    "prompt": "",
+                    "session_id": session_id,
+                    "clerk_user_id": clerk_user_id,
+                }
+            r = await client.post(f"{AGT04_BASE_URL}/feedback/{endpoint}", json=payload)
+            r.raise_for_status()
+            return r.json()
+    except Exception as exc:
+        logger.warning("process_turn: AGT-04 feedback failed for session=%s: %s", session_id, exc)
+        return None
+
+
+async def _fetch_translation(
+    content: str,
+    clerk_user_id: str,
+    skill_focus: str,
+) -> tuple[str | None, str | None]:
+    """
+    Call AGT-11 to translate the assistant message. Best-effort — returns (None, None) on failure.
+    SPEAKING sessions use session_type='conversation' → AGT-11 always returns en_only (immersion).
+    Returns (translated_text, zone); translated_text is None when zone is en_only.
+    """
+    session_type = "conversation" if skill_focus == "SPEAKING" else "exercise"
+    try:
+        async with httpx.AsyncClient(timeout=6.0) as client:
+            r = await client.post(
+                f"{AGT11_BASE_URL}/translate",
+                json={
+                    "content": content,
+                    "clerk_user_id": clerk_user_id,
+                    "session_type": session_type,
+                },
+            )
+            r.raise_for_status()
+            data = r.json()
+            zone = data.get("zone", "en_only")
+            if zone == "en_only":
+                return None, zone
+            return data.get("translated"), zone
+    except Exception as exc:
+        logger.warning("process_turn: AGT-11 translation failed for user=%s: %s", clerk_user_id, exc)
+        return None, None
 
 
 async def _fetch_plan(clerk_user_id: str) -> bool:
@@ -151,7 +226,11 @@ async def start_session(clerk_user_id: str, skill_focus: str, session_id: str | 
     # does not leave an orphaned profile entry with no matching start time.
     await _stm_set_state(session_id, skill_focus)
 
-    _SESSION_PROFILES[session_id] = {"profile": _profile, "skill_focus": skill_focus}
+    _SESSION_PROFILES[session_id] = {
+        "profile": _profile,
+        "skill_focus": skill_focus,
+        "clerk_user_id": clerk_user_id,
+    }
 
     opening = _OPENING_MESSAGES.get(skill_focus, _OPENING_MESSAGES["SPEAKING"])
     if settings.INFERENCE_MODE != "mock":
@@ -216,14 +295,16 @@ async def process_turn(session_id: str, user_message: str | None, audio_base64: 
         logger.warning("process_turn: AGT-06 get_context failed for %s: %s", session_id, exc)
         context = []
 
+    session_data = _SESSION_PROFILES.get(session_id, {})
+    clerk_user_id = session_data.get("clerk_user_id", "")
+    skill_focus = session_data.get("skill_focus", "SPEAKING")
+
     mock_feedback: str | None = None
     if settings.INFERENCE_MODE == "mock":
         assistant_message = f"[MOCK LLM AGT03] Got it - you said: {transcript_text[:60]}"
         mock_feedback = "[MOCK] Good attempt! Keep practising."
     else:
-        session_data = _SESSION_PROFILES.get(session_id, {})
         profile = session_data.get("profile", {})
-        skill_focus = session_data.get("skill_focus", "SPEAKING")
         messages = [{"role": "system", "content": _build_system_prompt(skill_focus, profile)}]
         for turn in context:
             role = "assistant" if turn.get("role") == "assistant" else "user"
@@ -237,12 +318,21 @@ async def process_turn(session_id: str, user_message: str | None, audio_base64: 
 
     _SESSION_TURN_COUNTS[session_id] = _SESSION_TURN_COUNTS.get(session_id, 0) + 1
 
+    # Best-effort AGT-04 grammar feedback and AGT-11 translation run concurrently.
+    grammar_feedback, (translated_message, translation_zone) = await asyncio.gather(
+        _fetch_grammar_feedback(transcript_text or "", session_id, clerk_user_id, skill_focus),
+        _fetch_translation(assistant_message, clerk_user_id, skill_focus),
+    )
+
     return {
         "session_id": session_id,
         "assistant_message": assistant_message,
         "transcript_text": transcript_text,
         "mock_feedback": mock_feedback,
         "language": "en",
+        "grammar_feedback": grammar_feedback,
+        "translated_message": translated_message,
+        "translation_zone": translation_zone,
     }
 
 

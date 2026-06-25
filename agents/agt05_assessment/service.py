@@ -68,6 +68,13 @@ async def _fetch_item_bank(skill_domain: str) -> list[dict]:
 
 async def start_assessment(clerk_user_id: str, skill_domain: str) -> dict:
     """Start a new CAT assessment session. Returns the first item."""
+    if skill_domain == "SPEAKING":
+        return {
+            "error": "Speaking is not assessed via CAT.",
+            "detail": "Speaking proficiency is inferred from session performance over time.",
+            "skill_domain": "SPEAKING",
+            "http_status": 422,
+        }
     item_bank = await _fetch_item_bank(skill_domain)
     if not item_bank:
         return {

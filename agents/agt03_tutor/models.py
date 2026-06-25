@@ -31,6 +31,9 @@ class TurnResponse(BaseModel):
     transcript_text: str | None = None
     mock_feedback: str | None = None
     language: str = "en"
+    grammar_feedback: dict | None = None
+    translated_message: str | None = None
+    translation_zone: str | None = None
 
 
 class EndSessionRequest(BaseModel):
