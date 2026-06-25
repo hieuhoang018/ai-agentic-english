@@ -45,6 +45,8 @@ export function scoreAssessment(
 
       if (correct / bucket.length >= SCORING_THRESHOLD) {
         highestPassing = level;
+      } else {
+        break; // sequential gating: stop climbing at the first level that fails
       }
     }
 

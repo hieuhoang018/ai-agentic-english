@@ -13,6 +13,7 @@ build/
 docs/superpowers/
 .venv/
 __pycache__/
+.pytest_cache
 *.pyc
 *.pyo
 CLAUDE.local.md

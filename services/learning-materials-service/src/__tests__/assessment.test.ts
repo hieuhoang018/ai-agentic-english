@@ -19,6 +19,12 @@ const readingA2Questions = [
   { id: 'aq-r-a2-3', skill: 'reading', cefrLevelTarget: 'A2', prompt: { question: 'Q6' }, correctAnswer: { answer: 'F' }, order: 6, createdAt: now },
 ];
 
+const readingB1Questions = [
+  { id: 'aq-r-b1-1', skill: 'reading', cefrLevelTarget: 'B1', prompt: { question: 'Q7' }, correctAnswer: { answer: 'G' }, order: 7, createdAt: now },
+  { id: 'aq-r-b1-2', skill: 'reading', cefrLevelTarget: 'B1', prompt: { question: 'Q8' }, correctAnswer: { answer: 'H' }, order: 8, createdAt: now },
+  { id: 'aq-r-b1-3', skill: 'reading', cefrLevelTarget: 'B1', prompt: { question: 'Q9' }, correctAnswer: { answer: 'I' }, order: 9, createdAt: now },
+];
+
 describe('assessment routes', () => {
   let prisma: MockPrismaClient;
   let token: string;
@@ -189,6 +195,25 @@ describe('assessment routes', () => {
         { questionId: 'aq-r-a1-1', answer: { answer: 'A' } },   // correct
         { questionId: 'aq-r-a1-2', answer: { answer: 'B' } },   // correct
         { questionId: 'aq-r-a1-3', answer: { answer: 'wrong' } }, // wrong → 2/3 = 0.67 ≥ 0.6
+      ];
+
+      const res = await request(createApp(prisma))
+        .post('/assessment/score')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ answers });
+
+      expect(res.status).toBe(200);
+      expect(res.body.levels.reading).toBe('A1');
+    });
+
+    it('uses sequential gating — failing A2 caps the result at A1 even if B1 passes', async () => {
+      const allQuestions = [...readingA1Questions, ...readingA2Questions, ...readingB1Questions];
+      prisma.assessmentQuestion.findMany.mockResolvedValue(allQuestions);
+
+      const answers = [
+        ...readingA1Questions.map((q) => ({ questionId: q.id, answer: q.correctAnswer })), // A1: 3/3 pass
+        ...readingA2Questions.map((q) => ({ questionId: q.id, answer: { answer: 'wrong' } })), // A2: 0/3 fail
+        ...readingB1Questions.map((q) => ({ questionId: q.id, answer: q.correctAnswer })), // B1: 3/3 pass
       ];
 
       const res = await request(createApp(prisma))
