@@ -310,6 +310,21 @@ async def test_start_assessment_item_bank_unavailable(monkeypatch):
     assert result["skill_domain"] == "READING"
 
 
+async def test_start_assessment_rejects_speaking():
+    from agents.agt05_assessment.service import start_assessment
+    result = await start_assessment("user-001", "SPEAKING")
+    assert result["http_status"] == 422
+    assert result["skill_domain"] == "SPEAKING"
+    assert "error" in result
+
+
+async def test_start_assessment_model_rejects_speaking():
+    from agents.agt05_assessment.models import StartAssessmentRequest
+    import pytest
+    with pytest.raises(Exception, match="SPEAKING cannot be assessed via CAT"):
+        StartAssessmentRequest(clerk_user_id="user-001", skill_domain="SPEAKING")
+
+
 # ── D9: Postgres error handling ───────────────────────────────────────────────
 
 async def test_postgres_error_does_not_propagate_on_termination(monkeypatch):

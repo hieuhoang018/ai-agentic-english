@@ -162,7 +162,7 @@ Invoke-WebRequest -Uri "http://localhost:8101/profile/chk-u2" `
   -Method POST -ContentType "application/json" -Body '{}'
 $p = (Invoke-WebRequest -Uri "http://localhost:8101/profile/chk-u2" -UseBasicParsing).Content | ConvertFrom-Json
 Write-Host "cold_start_flag: $($p.cold_start_flag)  theta.S: $($p.irt_theta.S)"
-# PASS: cold_start_flag=true, theta.S=0.0
+# PASS: cold_start_flag=true, theta.S=null (not 0.0 — S is never set by CAT)
 
 # 2. CRITICAL — intra-session merge
 # Write 2 errors to AGT-06 STM
@@ -190,9 +190,9 @@ $upd = (Invoke-WebRequest -Uri "http://localhost:8101/profile/chk-u2" -UseBasicP
 Write-Host "S: $($upd.irt_theta.S)  L: $($upd.irt_theta.L)"
 # PASS: S=0.5, L=0.0
 
-# 4. Kafka consumer flips cold_start_flag (wait 5s after a session.end event)
-# Run after completing an AGT-03 session
-# GET profile -> cold_start_flag=false
+# 4. Kafka consumer flips cold_start_flag once L, R, W all have data (S=null does not block)
+# Run after completing an AGT-03 session for any non-speaking skill
+# GET profile -> cold_start_flag=false, irt_theta.S still null
 ```
 
 ---
@@ -288,7 +288,14 @@ Write-Host "Throttled: $($r5.throttled)  Surfaced: $($r5.surfaced_error_count)"
 **Verification (all must pass — run in PowerShell):**
 
 ```powershell
-# 1. Start assessment returns first item
+# 1a. SPEAKING is rejected
+$rs = (Invoke-WebRequest -Uri "http://localhost:8105/assessments/start" -Method POST `
+  -ContentType "application/json" `
+  -Body '{"clerk_user_id":"chk-u4","skill_domain":"SPEAKING"}' -UseBasicParsing).Content | ConvertFrom-Json
+Write-Host "SPEAKING http_status: $($rs.http_status)"
+# PASS: http_status=422
+
+# 1b. Start assessment returns first item
 $r = (Invoke-WebRequest -Uri "http://localhost:8105/assessments/start" -Method POST `
   -ContentType "application/json" `
   -Body '{"clerk_user_id":"chk-u4","skill_domain":"READING"}' -UseBasicParsing).Content | ConvertFrom-Json

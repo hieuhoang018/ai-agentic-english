@@ -47,7 +47,7 @@ CATALOG_CACHE_KEY = "catalog:summary"
 CATALOG_CACHE_TTL = 3600  # 1 hour
 
 _COLD_START_PROFILE = {
-    "irt_theta": {"L": 0.0, "S": 0.0, "R": 0.0, "W": 0.0},
+    "irt_theta": {"L": 0.0, "S": None, "R": 0.0, "W": 0.0},
     "cold_start_flag": True,
 }
 

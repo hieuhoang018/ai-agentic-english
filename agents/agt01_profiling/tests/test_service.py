@@ -117,7 +117,7 @@ async def test_cold_start_profile_for_unknown_user(patch_redis):
     profile = await service.get_profile(clerk_id)
 
     assert profile["cold_start_flag"] is True
-    assert profile["irt_theta"] == {"L": 0.0, "S": 0.0, "R": 0.0, "W": 0.0}
+    assert profile["irt_theta"] == {"L": 0.0, "S": None, "R": 0.0, "W": 0.0}
 
 
 @respx.mock
