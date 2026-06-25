@@ -90,6 +90,12 @@ services:
       KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       CLUSTER_ID: ai-agentic-english-kafka
+    healthcheck:
+      test: ['CMD-SHELL', '/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list || exit 1']
+      interval: 10s
+      timeout: 10s
+      retries: 15
+      start_period: 30s
 
   minio:
     image: minio/minio:latest
@@ -271,7 +277,7 @@ services:
       redis:
         condition: service_started
       kafka:
-        condition: service_started
+        condition: service_healthy
 
   agt02-learning-path:
     build:
@@ -309,12 +315,17 @@ services:
       MINIO_SECRET_KEY: minioadmin
       INFERENCE_MODE: mock
       AGT04_BASE_URL: http://agt04-feedback:8104
+      AGT06_BASE_URL: http://agt06-memory:8106
       AGT07_BASE_URL: http://agt07-review:8107
       AGT11_BASE_URL: http://agt11-translation:8111
     depends_on:
       postgres-agents:
         condition: service_healthy
+      kafka:
+        condition: service_healthy
       agt04-feedback:
+        condition: service_started
+      agt06-memory:
         condition: service_started
       agt07-review:
         condition: service_started
@@ -485,7 +496,7 @@ services:
       INTERNAL_SECRET: dev-internal-secret
     depends_on:
       kafka:
-        condition: service_started
+        condition: service_healthy
       agt01-profiling:
         condition: service_started
       agt02-learning-path:

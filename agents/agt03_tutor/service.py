@@ -19,8 +19,9 @@ Session lifecycle:
     what AGT-01's handle_session_end consumer reacts to.
 
 pipeline.py and websocket_handler.py remain stubs this sprint; main.py calls
-this module directly over plain HTTP endpoints. AGT-04 (feedback) and AGT-11
-(translation) are not called anywhere in this module this sprint.
+this module directly over plain HTTP endpoints. process_turn calls AGT-04
+(grammar feedback) and AGT-11 (translation) concurrently via asyncio.gather,
+both best-effort — failures return None and never block the turn response.
 """
 
 from __future__ import annotations

@@ -118,3 +118,77 @@ async def test_lms_unavailable_does_not_cache_empty_result(fake_redis, lms_retur
     await svc._fetch_item_bank("READING")
     raw = await fake_redis.get("agt05:item_bank:READING")
     assert raw is None
+
+
+# ── skill domain case contract ────────────────────────────────────────────────
+
+async def test_fetch_lms_items_sends_lowercase_skill(monkeypatch):
+    """
+    LMS stores skills as lowercase ("reading", "listening", "writing").
+    Prisma does case-sensitive exact match, so uppercase would return zero items.
+    _fetch_lms_items must always send skill_domain.lower() as the query param.
+    """
+    captured_params: list[dict] = []
+
+    async def fake_get(url, **kwargs):
+        captured_params.append(kwargs.get("params", {}))
+        resp = MagicMock()
+        resp.raise_for_status = MagicMock()
+        resp.json.return_value = SAMPLE_ITEMS
+        return resp
+
+    from unittest.mock import MagicMock, AsyncMock
+    mock_client = MagicMock()
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=False)
+    mock_client.get = fake_get
+    monkeypatch.setattr(svc.httpx, "AsyncClient", lambda **kw: mock_client)
+
+    await svc._fetch_lms_items("LISTENING")
+    assert len(captured_params) == 1
+    assert captured_params[0]["skill"] == "listening", (
+        f"Expected 'listening' (lowercase), got '{captured_params[0]['skill']}'. "
+        "LMS Prisma does case-sensitive match — uppercase returns zero items."
+    )
+
+
+async def test_fetch_lms_items_sends_lowercase_for_reading(monkeypatch):
+    captured_params: list[dict] = []
+
+    async def fake_get(url, **kwargs):
+        captured_params.append(kwargs.get("params", {}))
+        resp = MagicMock()
+        resp.raise_for_status = MagicMock()
+        resp.json.return_value = SAMPLE_ITEMS
+        return resp
+
+    from unittest.mock import MagicMock, AsyncMock
+    mock_client = MagicMock()
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=False)
+    mock_client.get = fake_get
+    monkeypatch.setattr(svc.httpx, "AsyncClient", lambda **kw: mock_client)
+
+    await svc._fetch_lms_items("READING")
+    assert captured_params[0]["skill"] == "reading"
+
+
+async def test_fetch_lms_items_sends_lowercase_for_writing(monkeypatch):
+    captured_params: list[dict] = []
+
+    async def fake_get(url, **kwargs):
+        captured_params.append(kwargs.get("params", {}))
+        resp = MagicMock()
+        resp.raise_for_status = MagicMock()
+        resp.json.return_value = SAMPLE_ITEMS
+        return resp
+
+    from unittest.mock import MagicMock, AsyncMock
+    mock_client = MagicMock()
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=False)
+    mock_client.get = fake_get
+    monkeypatch.setattr(svc.httpx, "AsyncClient", lambda **kw: mock_client)
+
+    await svc._fetch_lms_items("WRITING")
+    assert captured_params[0]["skill"] == "writing"

@@ -340,3 +340,58 @@ async def test_lm_service_sync_failure_does_not_block_plan_creation(monkeypatch)
 
     assert plan["is_active"] is True
     assert plan["version"] == 1
+
+
+@respx.mock
+async def test_sync_learning_path_500_falls_back_to_uuid(monkeypatch):
+    """LMS returns HTTP 500 — plan must still be created with a fallback UUID lm_plan_id."""
+    clerk_id = f"test-user-{uuid.uuid4()}"
+
+    respx.get(f"{service.AGT01_BASE_URL}/profile/{clerk_id}").mock(
+        return_value=httpx.Response(200, json={"clerk_user_id": clerk_id, "irt_theta": {}, "cold_start_flag": True})
+    )
+    respx.get(f"{service.LM_SERVICE_BASE_URL}/internal/catalog/summary").mock(
+        return_value=httpx.Response(404)
+    )
+    respx.post(f"{service.LM_SERVICE_BASE_URL}/internal/learning-paths").mock(
+        return_value=httpx.Response(500, json={"error": "internal server error"})
+    )
+
+    async def fake_emit(topic, payload, agent_id, key=None):
+        pass
+
+    monkeypatch.setattr(service, "emit", fake_emit)
+
+    plan = await service.generate_plan(clerk_id, {"daily_minutes": 20, "goals": []})
+
+    assert plan["is_active"] is True
+    # lm_plan_id must be a non-empty string UUID fallback, not None or empty
+    assert isinstance(plan["lm_plan_id"], str)
+    assert len(plan["lm_plan_id"]) > 0
+
+
+@respx.mock
+async def test_sync_learning_path_missing_id_field_falls_back_to_uuid(monkeypatch):
+    """LMS returns 200 but no 'id' key — plan must still be created with a fallback UUID."""
+    clerk_id = f"test-user-{uuid.uuid4()}"
+
+    respx.get(f"{service.AGT01_BASE_URL}/profile/{clerk_id}").mock(
+        return_value=httpx.Response(200, json={"clerk_user_id": clerk_id, "irt_theta": {}, "cold_start_flag": True})
+    )
+    respx.get(f"{service.LM_SERVICE_BASE_URL}/internal/catalog/summary").mock(
+        return_value=httpx.Response(404)
+    )
+    respx.post(f"{service.LM_SERVICE_BASE_URL}/internal/learning-paths").mock(
+        return_value=httpx.Response(201, json={"pathId": "some-other-key"})
+    )
+
+    async def fake_emit(topic, payload, agent_id, key=None):
+        pass
+
+    monkeypatch.setattr(service, "emit", fake_emit)
+
+    plan = await service.generate_plan(clerk_id, {"daily_minutes": 20, "goals": []})
+
+    assert plan["is_active"] is True
+    assert isinstance(plan["lm_plan_id"], str)
+    assert len(plan["lm_plan_id"]) > 0
