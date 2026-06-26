@@ -1,7 +1,6 @@
 """HTTP-level tests confirming stub endpoints return 501 Not Implemented."""
 import pytest
 from unittest.mock import AsyncMock
-import httpx
 from httpx import AsyncClient, ASGITransport
 
 from agents.agt04_feedback.main import app
