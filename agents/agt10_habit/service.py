@@ -83,10 +83,8 @@ async def record_session_complete(
     """
     r = await get_redis()
     key = _streak_key(clerk_user_id)
-    stored = await r.get(key)
-    base = int(stored) if stored else current_streak
-    new_streak = base + 1
-    await r.set(key, new_streak)
+    await r.setnx(key, current_streak)
+    new_streak = await r.incr(key)
 
     if new_streak in (7, 30, 100):
         await send_milestone(clerk_user_id, f"{new_streak}-day streak")
