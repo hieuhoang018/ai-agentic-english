@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import uuid
+from unittest.mock import AsyncMock
 
 import pytest
 import fakeredis.aioredis
@@ -206,3 +207,43 @@ async def test_consolidate_session_empty_stm_session_succeeds(monkeypatch):
     emitted_payload = emitted[0][1]
     assert emitted_payload["sessionId"] == session_id
     await asyncio.sleep(0.1)
+
+
+async def test_generate_and_store_embedding_swallows_exceptions(monkeypatch):
+    monkeypatch.setattr(
+        consolidation.embeddings, "embed_transcript",
+        AsyncMock(side_effect=RuntimeError("Ollama unreachable")),
+    )
+    mock_execute = AsyncMock()
+    monkeypatch.setattr(consolidation, "execute", mock_execute)
+    # Must not raise:
+    await consolidation._generate_and_store_embedding("conv-1", [{"role": "user", "content": "Hello"}])
+    mock_execute.assert_not_awaited()
+
+
+async def test_generate_and_store_embedding_skips_empty_context(monkeypatch):
+    mock_embed = AsyncMock()
+    mock_execute = AsyncMock()
+    monkeypatch.setattr(consolidation.embeddings, "embed_transcript", mock_embed)
+    monkeypatch.setattr(consolidation, "execute", mock_execute)
+    await consolidation._generate_and_store_embedding("conv-2", [])
+    mock_embed.assert_not_awaited()
+    mock_execute.assert_not_awaited()
+
+
+async def test_generate_and_store_embedding_updates_db_on_success(monkeypatch):
+    mock_embed = AsyncMock(return_value=[0.1, 0.2, 0.3])
+    mock_execute = AsyncMock()
+    monkeypatch.setattr(consolidation.embeddings, "embed_transcript", mock_embed)
+    monkeypatch.setattr(consolidation, "execute", mock_execute)
+
+    await consolidation._generate_and_store_embedding("conv-3", [{"role": "user", "content": "Great session"}])
+
+    mock_embed.assert_awaited_once_with("Great session")
+    mock_execute.assert_awaited_once()
+    call_args = mock_execute.call_args
+    sql = call_args.args[0]
+    assert "UPDATE conversation_archive" in sql
+    from agents.agt06_memory.ltm import _vec_to_str
+    assert call_args.args[1] == _vec_to_str([0.1, 0.2, 0.3])
+    assert call_args.args[2] == "conv-3"
