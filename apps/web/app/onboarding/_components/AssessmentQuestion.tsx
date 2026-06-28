@@ -7,8 +7,8 @@ import { isApiError } from '@/lib/api/client'
 import type { AssessmentQuestionDto, AssessmentResultDto, CefrLevel, Skill } from '@/lib/api/types'
 import { useApi } from '@/lib/api/useApi'
 
-import type { SkillId } from '../_types/onboarding'
-import { assessmentLevelsToScore } from '../_utils/onboarding-request'
+import { placementSkillIds, type PlacementSkillId, type SkillId } from '../_types/onboarding'
+import { assessmentLevelsToScore, normalizeAssessmentLevels } from '../_utils/onboarding-request'
 import { onboardingRoutes } from '../_utils/onboarding-routes'
 import { useOnboarding } from './OnboardingProvider'
 
@@ -18,6 +18,7 @@ type AssessmentState =
   | { status: 'error'; message: string }
 
 type AssessmentPrompt = {
+  audioKey?: string
   passage?: string
   transcript?: string
   sentence?: string
@@ -26,38 +27,40 @@ type AssessmentPrompt = {
   options: string[]
 }
 
-const skillLabels: Record<SkillId, string> = {
+const skillLabels: Record<PlacementSkillId, string> = {
   reading: 'Reading',
   writing: 'Writing',
   listening: 'Listening',
-  speaking: 'Speaking',
 }
 
-const assessmentSkills: Skill[] = ['reading', 'writing', 'listening', 'speaking']
-const questionsPerSkill = 4
+const assessmentSkillSet = new Set<Skill>(placementSkillIds)
 
-function shuffle<T>(items: T[]): T[] {
-  const shuffled = [...items]
-
-  for (let index = shuffled.length - 1; index > 0; index -= 1) {
-    const randomIndex = Math.floor(Math.random() * (index + 1))
-    ;[shuffled[index], shuffled[randomIndex]] = [shuffled[randomIndex], shuffled[index]]
-  }
-
-  return shuffled
+function isPlacementSkill(skill: Skill): skill is PlacementSkillId {
+  return assessmentSkillSet.has(skill)
 }
 
 function selectAssessmentQuestions(questions: AssessmentQuestionDto[]) {
-  const selectedQuestions = assessmentSkills.flatMap((skill) => {
-    const skillQuestions = questions.filter((question) => question.skill === skill)
-    return shuffle(skillQuestions).slice(0, questionsPerSkill)
-  })
+  const selectedQuestions = questions.filter((question) => isPlacementSkill(question.skill))
+  const missingSkills = placementSkillIds.filter((skill) => !selectedQuestions.some((question) => question.skill === skill))
 
-  if (selectedQuestions.length !== assessmentSkills.length * questionsPerSkill) {
-    throw new Error('The assessment question bank does not contain enough questions for every skill.')
+  if (selectedQuestions.length === 0 || missingSkills.length > 0) {
+    throw new Error('The assessment question bank must include reading, writing, and listening questions.')
   }
 
-  return shuffle(selectedQuestions)
+  return selectedQuestions
+}
+
+function getAssessmentAudioUrl(audioKey?: string) {
+  const audioBaseUrl = process.env.NEXT_PUBLIC_AUDIO_BASE_URL
+
+  if (!audioKey || !audioBaseUrl) {
+    return null
+  }
+
+  const normalizedBaseUrl = audioBaseUrl.replace(/\/+$/, '')
+  const normalizedAudioKey = audioKey.replace(/^\/+/, '').split('/').map(encodeURIComponent).join('/')
+
+  return `${normalizedBaseUrl}/assessment-audio/${normalizedAudioKey}`
 }
 
 function parsePrompt(prompt: unknown): AssessmentPrompt {
@@ -70,6 +73,7 @@ function parsePrompt(prompt: unknown): AssessmentPrompt {
   const options = Array.isArray(value.options) ? value.options.filter((option): option is string => typeof option === 'string') : []
 
   return {
+    audioKey: getText('audioKey'),
     passage: getText('passage'),
     transcript: getText('transcript'),
     sentence: getText('sentence'),
@@ -86,6 +90,7 @@ export default function AssessmentQuestion() {
   const [state, setState] = useState<AssessmentState>({ status: 'loading' })
   const [currentIndex, setCurrentIndex] = useState(0)
   const [answers, setAnswers] = useState<Record<string, string>>({})
+  const [failedAudioQuestionIds, setFailedAudioQuestionIds] = useState<Record<string, true>>({})
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submissionError, setSubmissionError] = useState<string | null>(null)
   const hasLoadedQuestions = useRef(false)
@@ -102,6 +107,7 @@ export default function AssessmentQuestion() {
 
       setCurrentIndex(0)
       setAnswers({})
+      setFailedAudioQuestionIds({})
       setSubmissionError(null)
       setState({ status: 'success', questions: selectAssessmentQuestions(questions) })
     } catch (error) {
@@ -153,6 +159,9 @@ export default function AssessmentQuestion() {
   const question = questions[currentIndex]
   const prompt = parsePrompt(question.prompt)
   const answer = answers[question.id] ?? ''
+  const skillLabel = isPlacementSkill(question.skill) ? skillLabels[question.skill] : 'Assessment'
+  const audioUrl = question.skill === 'listening' ? getAssessmentAudioUrl(prompt.audioKey) : null
+  const isAudioUnavailable = question.skill === 'listening' && (!audioUrl || failedAudioQuestionIds[question.id])
   const isFirstQuestion = currentIndex === 0
   const isLastQuestion = currentIndex === questions.length - 1
   const questionText = prompt.question ?? prompt.instruction ?? 'Chọn hoặc nhập câu trả lời phù hợp nhất.'
@@ -177,7 +186,7 @@ export default function AssessmentQuestion() {
           })),
         },
       })
-      const assessmentLevels = result.levels as Partial<Record<SkillId, CefrLevel>>
+      const assessmentLevels = normalizeAssessmentLevels(result.levels as Partial<Record<SkillId, CefrLevel>>)
 
       updateProfile({
         assessmentMethod: 'test',
@@ -207,11 +216,31 @@ export default function AssessmentQuestion() {
   return (
     <div>
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-        <span className="rounded-lg border border-primary/20 bg-blue-50 px-4 py-2 text-2xl font-bold text-primary">{skillLabels[question.skill]}</span>
+        <span className="rounded-lg border border-primary/20 bg-blue-50 px-4 py-2 text-2xl font-bold text-primary">{skillLabel}</span>
         <span className="rounded-full bg-blue-50 px-4 py-2 font-bold text-primary">Câu {currentIndex + 1} / {questions.length} · {question.cefrLevelTarget}</span>
       </div>
+      {question.skill === 'listening' ? (
+        <section className="mb-5 rounded-lg border border-outline-variant bg-white p-4">
+          <div className="flex items-center gap-2 font-bold text-on-surface">
+            <span className="material-symbols-outlined text-primary">headphones</span>
+            Listening audio
+          </div>
+          {isAudioUnavailable ? (
+            <p className="mt-3 rounded-lg bg-surface p-3 text-sm text-on-surface-variant">Audio is unavailable for this listening question.</p>
+          ) : (
+            <audio
+              key={question.id}
+              controls
+              preload="metadata"
+              src={audioUrl ?? undefined}
+              onError={() => setFailedAudioQuestionIds((currentIds) => ({ ...currentIds, [question.id]: true }))}
+              className="mt-3 w-full"
+            />
+          )}
+        </section>
+      ) : null}
       {prompt.passage ? <div className="mb-5 rounded-lg border-l-4 border-primary bg-surface p-4 leading-7 text-on-surface-variant">{prompt.passage}</div> : null}
-      {prompt.transcript ? <div className="mb-5 rounded-lg border-l-4 border-primary bg-surface p-4 leading-7 text-on-surface-variant">Transcript: {prompt.transcript}</div> : null}
+      {question.skill !== 'listening' && prompt.transcript ? <div className="mb-5 rounded-lg border-l-4 border-primary bg-surface p-4 leading-7 text-on-surface-variant">Transcript: {prompt.transcript}</div> : null}
       {prompt.sentence ? <div className="mb-5 rounded-lg border-l-4 border-primary bg-surface p-4 leading-7 text-on-surface-variant">{prompt.sentence}</div> : null}
       <h2 className="text-2xl font-bold leading-9 text-on-surface">{questionText}</h2>
       {prompt.options.length > 0 ? (

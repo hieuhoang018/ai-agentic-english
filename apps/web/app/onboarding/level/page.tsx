@@ -10,9 +10,9 @@ const assessmentMethods = [
     href: onboardingRoutes.assessment,
     icon: 'quiz',
     title: 'Làm bài test',
-    description: 'Đánh giá toàn diện 4 kỹ năng với bài kiểm tra ngắn được tinh chỉnh bởi AI.',
+    description: 'Đánh giá đọc, viết và nghe với bộ câu hỏi thật từ kho học liệu.',
     metaIcon: 'timer',
-    meta: 'Ước tính 15 phút',
+    meta: 'Theo số câu hỏi hiện có',
     tone: 'bg-blue-50 text-primary',
   },
   {

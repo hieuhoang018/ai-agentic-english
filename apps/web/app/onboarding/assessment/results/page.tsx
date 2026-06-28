@@ -2,19 +2,16 @@
 
 import Link from 'next/link'
 
-import type { SkillId } from '../../_types/onboarding'
+import { placementSkillIds, type PlacementSkillId } from '../../_types/onboarding'
 import OnboardingShell from '../../_components/OnboardingShell'
 import { useOnboarding } from '../../_components/OnboardingProvider'
 import { onboardingRoutes } from '../../_utils/onboarding-routes'
 
-const skillDetails: Record<SkillId, { label: string; icon: string }> = {
+const skillDetails: Record<PlacementSkillId, { label: string; icon: string }> = {
   reading: { label: 'Reading', icon: 'menu_book' },
-  listening: { label: 'Listening', icon: 'headphones' },
   writing: { label: 'Writing', icon: 'edit_note' },
-  speaking: { label: 'Speaking', icon: 'record_voice_over' },
+  listening: { label: 'Listening', icon: 'headphones' },
 }
-
-const skillOrder: SkillId[] = ['reading', 'listening', 'writing', 'speaking']
 
 function getEvaluation(score: number) {
   if (score >= 8) {
@@ -48,7 +45,7 @@ export default function AssessmentResultsPage() {
   }
 
   const assessmentLevels = profile.assessmentLevels ?? {}
-  const assessedSkills = skillOrder.flatMap((skill) => {
+  const assessedSkills = placementSkillIds.flatMap((skill) => {
     const level = assessmentLevels[skill]
     return level ? [{ skill, level }] : []
   })

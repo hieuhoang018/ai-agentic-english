@@ -3,6 +3,9 @@ import type { CefrLevel } from '@/lib/api/types'
 export type LearningGoalId = 'conversation' | 'ielts' | 'business' | 'travel' | 'personal'
 export type AssessmentMethod = 'test' | 'selfAssessment'
 export type SkillId = 'listening' | 'speaking' | 'reading' | 'writing'
+export type PlacementSkillId = Exclude<SkillId, 'speaking'>
+
+export const placementSkillIds = ['reading', 'writing', 'listening'] as const satisfies readonly PlacementSkillId[]
 
 export interface OnboardingProfile {
   goalId: LearningGoalId
