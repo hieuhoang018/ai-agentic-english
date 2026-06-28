@@ -6,13 +6,10 @@ pilot batch) all done. This doc is a sub-plan inside the broader server-side imp
 see `CLAUDE.local.md` Current Status for where this fits relative to the rest of the roadmap
 (offline sync, etc.). Nothing here changes the architecture split documented there.
 
-**⚠️ Known issue affecting every phase below, found 2026-06-24**: `.gitignore`'s blanket
-`**/seed-data` rule means none of the `*_seed.jsonl` files this doc describes as "committed"
-have actually ever been committed to git (`git ls-files` confirms all four are untracked).
-Every phase's "Files" section below is describing the *intended* design, not the current repo
-state — until the gitignore rule is fixed and these files are actually committed, this content
-only exists on whichever machine generated it, and `npm run seed:*` will fail for anyone who
-hasn't run the corresponding ETL/generation script themselves first.
+**✅ Gitignore issue resolved 2026-06-28**: all five `*_seed.jsonl` files are now tracked in
+git (committed in `c3238d0`). Every phase's "Files" section below correctly describes the
+actual repo state. `npm run seed:*` works on any machine after a normal `git pull`, without
+needing to re-run the ETL/generation scripts first.
 
 ## Why this exists
 
@@ -52,10 +49,12 @@ generate (Python, offline, LLM via agents/shared/llm/router.call_llm)
 ```
 
 Key constraints this flow encodes:
-- **MinIO stays Python-only.** No Node/TS service has ever used MinIO/S3 (the only client in the
-  repo is Python `boto3` in `agents/agt06_memory/object_store.py`). Any phase needing binary
-  audio assets has a Python step do the fetch/generate + upload; TS only ever stores the
-  resulting object key as a plain string column.
+- **MinIO writes stay Python-only.** Any phase needing binary audio assets has a Python step do
+  the fetch/generate + upload; TS only ever stores the resulting object key as a plain string
+  column. Exception added 2026-06-28: `learning-materials-service` now has a read-only
+  `@aws-sdk/client-s3` client (`src/lib/storageClient.ts`) solely for generating presigned GET
+  URLs via `GET /api/audio-url` — it never writes to MinIO. The ETL-upload constraint still
+  applies to all future phases.
 - **All LLM calls go through `agents/shared/llm/router.call_llm`.** TS code has no inference
   layer of its own (removed in the Phase 6-TS cutover) and must not gain one back for this.
 - **Generation is a manually-triggered batch job, not a continuous pipeline.** Run once to
@@ -228,17 +227,16 @@ the ungrammatical sentence-correction "fix" mentioned above; one stale lesson le
 that earlier attempt (`mod-gen-reading-a2-l3`) was manually deleted from Postgres after the
 rewrite, since the loader only upserts and never deletes.
 
-**`listening-comprehension` prompt shape now includes `audioKey`** (2026-06-24): every
-`listening-comprehension` exercise prompt is `{transcript, question, options, audioKey}` — added
-so a client can render/play the matching audio from one exercise response, no second fetch
-required. The 9 hand-written `listening-comprehension` exercises in `prisma/seed.ts` (and the
-matching live rows in this session's Docker Postgres) carry `audioKey: null`, because none of
-them were ever backed by a real `Passage`/`MediaAsset` — they're synthetic placeholder
-transcripts invented for `seed.ts`, not derived from VOA content. `null` is the honest value
-here, not a bug. The `AssessmentQuestion` table has its own separate set of listening prompts
-(`aq-l-*` in `seed.ts`) with the same gap (no `audioKey` field at all) — left untouched, since
-the question that prompted this was specifically about curriculum exercises, not the assessment
-bank; same fix would apply there if it's ever revisited.
+**`listening-comprehension` prompt shape** (updated 2026-06-28): every
+`listening-comprehension` exercise prompt is `{transcript, question, options, audioKey,
+audioBucket}`. `audioKey` is the MinIO object path; `audioBucket` is the bucket name
+(`"passage-audio"` for curriculum exercises). Both fields are needed to call
+`GET /api/audio-url` — see `docs/frontend-backend-integration-plan.md` §Stage C for the
+frontend usage pattern. The 9 hand-written `listening-comprehension` exercises in
+`prisma/seed.ts` carry `audioKey: null` / `audioBucket: null` because they are synthetic
+placeholder transcripts not backed by real `Passage`/`MediaAsset` rows — `null` is correct,
+not a bug. Assessment listening prompts (`aq-l-*`) carry `audioKey` + `audioBucket:
+"assessment-audio"` as of 2026-06-28 (same re-seed, matched by `seedAssessment.ts`).
 
 **✅ Listening generator built (2026-06-24)** — `content_gen_etl.py` gained
 `_generate_listening_exercises`/`_build_listening_module`, a near-clone of the reading-mcq
@@ -268,7 +266,9 @@ gained matching internal-only DTOs (plain inline shapes, not added to
 
 - **Speaking practice content** (scenario/topic bank) — AGT-03/TTS-owned, blocked on TTS not
   existing anywhere yet; no backend primitive needed until that's unblocked.
-- **Any TS-side MinIO/S3 client** — stays Python-only across all phases.
+- **Any TS-side MinIO/S3 write client** — upload/write stays Python-only across all phases. (A
+  read-only presigned-URL generator was added 2026-06-28 as a narrow exception — see Actor flow
+  note above.)
 - **A content review/moderation UI** — git-based review is sufficient at current volume.
 - **`freqRank` enrichment** (NGSL/SUBTLEX) — pending a licensing check, unrelated to phase
   sequencing.
@@ -280,8 +280,9 @@ gained matching internal-only DTOs (plain inline shapes, not added to
    script's own summary stats).
 3. Re-run the same seed command — confirm no duplicate rows (idempotent upsert).
 4. `npm run lint`, `npm run build`, `npm run test` stay green for `learning-materials-service`.
-5. Phase B only: confirm the MinIO object actually resolves (presigned URL or direct bucket read)
-   before trusting a stored `audioKey`.
+5. Phase B only: confirm the MinIO object actually resolves before trusting a stored `audioKey`.
+   Use `GET /api/audio-url?bucket=passage-audio&key=<objectKey>` (with a valid Clerk token) and
+   verify the returned URL fetches as `audio/mpeg`.
 
 **Fresh machine / fresh `docker compose up`?** Postgres rows and MinIO are populated separately —
 see `infra/README.md`'s "MinIO-backed audio content" section for the per-machine audio re-fetch
