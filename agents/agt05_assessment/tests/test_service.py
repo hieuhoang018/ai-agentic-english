@@ -175,7 +175,8 @@ async def test_postgres_args_skill_domain(capture_execute):
     assert args[1] == "WRITING"  # $2 skill_domain
 
 
-async def test_postgres_args_assessment_id_as_item_id(capture_execute):
+async def test_postgres_args_item_id_is_first_response_item(capture_execute):
+    """item_id column must store the first item's ID from the response list, not the session UUID."""
     prior = _build_prior(correct_count=16, total=29)
     await record_response(
         assessment_id="my-assessment-999",
@@ -186,7 +187,39 @@ async def test_postgres_args_assessment_id_as_item_id(capture_execute):
         clerk_user_id="test-user",
     )
     args = capture_execute[0]["args"]
-    assert args[2] == "my-assessment-999"  # $3 assessment_id stored in item_id column
+    # $3 item_id: first item in the full responses list is prior[0] = "item-1"
+    assert args[2] == "item-1"
+
+
+async def test_postgres_args_assessment_session_id_is_session_uuid(capture_execute):
+    """assessment_session_id column must store the session-level assessment_id UUID."""
+    prior = _build_prior(correct_count=16, total=29)
+    await record_response(
+        assessment_id="my-assessment-999",
+        item_id="item-30",
+        correct=True,
+        prior_responses=prior,
+        skill_domain="READING",
+        clerk_user_id="test-user",
+    )
+    args = capture_execute[0]["args"]
+    # $4 assessment_session_id: must be the session-level UUID
+    assert args[3] == "my-assessment-999"
+
+
+async def test_postgres_query_contains_assessment_session_id_column(capture_execute):
+    """The INSERT query must reference assessment_session_id column, not just item_id for the session."""
+    prior = _build_prior(correct_count=16, total=29)
+    await record_response(
+        assessment_id="test-001",
+        item_id="item-30",
+        correct=True,
+        prior_responses=prior,
+        skill_domain="READING",
+        clerk_user_id="test-user",
+    )
+    query = capture_execute[0]["query"]
+    assert "assessment_session_id" in query
 
 
 async def test_postgres_args_response_is_valid_json(capture_execute):
@@ -200,7 +233,7 @@ async def test_postgres_args_response_is_valid_json(capture_execute):
         clerk_user_id="test-user",
     )
     args = capture_execute[0]["args"]
-    response_json = args[3]  # $4 response JSONB
+    response_json = args[4]  # $5 response JSONB (after clerk_user_id, skill_domain, item_id, assessment_session_id)
     parsed = json.loads(response_json)
     assert isinstance(parsed, list)
     assert len(parsed) == 30  # 29 prior + 1 current
