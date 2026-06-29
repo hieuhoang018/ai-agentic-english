@@ -67,7 +67,9 @@ async def consolidate_session(session_id: str, clerk_user_id: str, skill_focus: 
         _generate_and_store_embedding(conv_id, context)
     )
 
-    # Step 7: Emit consolidation complete event (best-effort — all DB writes already done)
+    # Step 7: Emit consolidation complete event.
+    # emit() swallows producer.send() failures internally; this guard only catches
+    # get_producer() bootstrap errors (Kafka unreachable on first call).
     try:
         await emit(
             "agent.consolidation.complete",
@@ -76,8 +78,8 @@ async def consolidate_session(session_id: str, clerk_user_id: str, skill_focus: 
         )
     except Exception as exc:
         logger.warning(
-            "consolidate_session: Kafka emit failed session=%s err=%s — data consolidated, event lost",
-            session_id, exc,
+            "consolidate_session: Kafka emit failed session=%s conv=%s err=%s — data consolidated, event lost",
+            session_id, conv_id, exc,
         )
 
     logger.info("consolidate_session: session %s consolidated successfully", session_id)

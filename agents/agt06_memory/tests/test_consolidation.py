@@ -156,16 +156,15 @@ async def test_consolidate_session_per_item_vocab_failure_does_not_abort(monkeyp
 
 
 async def test_consolidate_session_returns_true_even_when_emit_fails(monkeypatch):
-    """If Kafka emit raises at step 7, consolidation must still return True.
-    All DB writes (steps 2-6) have already succeeded; the event loss is acceptable."""
-    from agents.agt06_memory import consolidation
-
+    """If get_producer() raises during the step-7 emit (Kafka bootstrap failure),
+    consolidation must still return True — all DB writes (steps 2-6) already succeeded."""
     monkeypatch.setattr("agents.agt06_memory.stm.get_all_session_keys", AsyncMock(
         return_value={"errors": [], "context": [], "vocab": []}
     ))
     monkeypatch.setattr("agents.agt06_memory.ltm.create_session", AsyncMock())
     monkeypatch.setattr("agents.agt06_memory.ltm.close_session", AsyncMock(return_value=True))
     monkeypatch.setattr("agents.agt06_memory.ltm.insert_error_events", AsyncMock())
+    monkeypatch.setattr("agents.agt06_memory.ltm.upsert_vocab", AsyncMock())
     monkeypatch.setattr("agents.agt06_memory.ltm.insert_conversation", AsyncMock(return_value="conv-1"))
 
     async def failing_emit(*args, **kwargs):
