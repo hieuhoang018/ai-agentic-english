@@ -204,6 +204,23 @@ services:
               claims_to_verify:
                 - exp
 
+  - name: agt07-offline
+    url: http://agt07-review:8107/offline
+    routes:
+      - name: agt07-offline-route
+        paths:
+          - /api/offline
+        strip_path: true
+        methods:
+          - GET
+          - POST
+          - OPTIONS
+        plugins:
+          - name: jwt
+            config:
+              claims_to_verify:
+                - exp
+
   - name: notification-service
     url: http://notification-service:4005/health
     routes:

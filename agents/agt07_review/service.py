@@ -50,12 +50,19 @@ async def get_due_items(clerk_user_id: str) -> list[dict]:
     return due
 
 
-async def rate_item(clerk_user_id: str, item_id: str, quality: int) -> dict:
+async def rate_item(
+    clerk_user_id: str,
+    item_id: str,
+    quality: int,
+    reviewed_at: datetime | None = None,
+) -> dict:
     """
     Record a review rating for a vocabulary item.
     Reads current sm_stability from DB, computes updated stability and next
     review date via SM-2 stubs, and writes both back to vocabulary_mastery.
     quality: 0-5 (0-2 = forgotten, 3+ = recalled).
+    reviewed_at: if provided (offline replay), anchors next_review_at to that
+    timestamp instead of now().
     """
     row = await fetchrow(
         "SELECT sm_stability FROM vocabulary_mastery "
@@ -67,7 +74,7 @@ async def rate_item(clerk_user_id: str, item_id: str, quality: int) -> dict:
     current_stability = float(row["sm_stability"])
 
     new_stability = update_stability_stub(quality, current_stability)
-    next_review = next_review_date_stub(quality, new_stability)
+    next_review = next_review_date_stub(quality, new_stability, base_time=reviewed_at)
 
     await execute(
         "UPDATE vocabulary_mastery "
