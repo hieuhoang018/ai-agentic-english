@@ -20,13 +20,20 @@ from datetime import datetime, timezone, timedelta
 STUB_INTERVALS = {0: 1, 1: 1, 2: 1, 3: 3, 4: 7, 5: 14}
 
 
-def next_review_date_stub(quality: int, current_stability: float) -> datetime:
+def next_review_date_stub(
+    quality: int,
+    current_stability: float,
+    base_time: datetime | None = None,
+) -> datetime:
     """
     Stub: return next review date based on fixed intervals.
+    base_time defaults to now(); pass a client-supplied timestamp for offline replay
+    so the interval is anchored to when the review actually happened.
     TODO Phase 8+: compute from R = e^(-t/S) with target R=0.9.
     """
     days = STUB_INTERVALS.get(quality, 3)
-    return datetime.now(timezone.utc) + timedelta(days=days)
+    base = base_time if base_time is not None else datetime.now(timezone.utc)
+    return base + timedelta(days=days)
 
 
 def update_stability_stub(quality: int, current_stability: float) -> float:
