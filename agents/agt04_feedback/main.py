@@ -1,5 +1,5 @@
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from agents.agt04_feedback.service import analyze_speaking_turn, analyze_writing
 from agents.agt04_feedback.models import (
     SpeakingFeedbackRequest, WritingFeedbackRequest,
@@ -65,12 +65,7 @@ async def comprehension_feedback(body: ComprehensionFeedbackRequest):
     Returns 0.5 (neutral) until Phase 4 — callers must not use this score to
     drive difficulty adaptation before Phase 4 is implemented.
     """
-    return {
-        "score": 0.5,
-        "skill_domain": body.skill_domain,
-        "feedback": "[STUB] Comprehension feedback not yet implemented",
-        "barrier_type": None,
-    }
+    raise HTTPException(status_code=501, detail="Not implemented (Phase 4)")
 
 
 @app.post("/feedback/session-end")
@@ -80,8 +75,4 @@ async def session_end_feedback(body: SessionEndRequest):
     Reads full STM error log from AGT-06 and computes per-skill breakdown.
     TODO Phase 4: implement full session summary computation.
     """
-    return {
-        "session_id": body.session_id,
-        "summary": "[STUB] Session summary not yet implemented",
-        "errors_by_skill": {},
-    }
+    raise HTTPException(status_code=501, detail="Not implemented (Phase 4)")

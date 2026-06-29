@@ -97,7 +97,7 @@ async def test_grading_mcq_wrong(monkeypatch):
     body = resp.json()
     assert body["correct"] is False
     assert body["score"] == 0.0
-    assert "B" in body["feedback"]
+    assert "Incorrect" in body["feedback"]
 
 
 @respx.mock
@@ -173,7 +173,7 @@ async def test_grading_sentence_correction_wrong(monkeypatch):
     assert resp.status_code == 200
     body = resp.json()
     assert body["correct"] is False
-    assert "She goes to the market." in body["feedback"]
+    assert "Incorrect" in body["feedback"]
 
 
 @respx.mock

@@ -139,10 +139,20 @@ async def handle_error_event(topic: str, event: dict) -> None:
         logger.warning("handle_error_event: missing clerkUserId in %s", event)
         return
 
+    session_id = event.get("sessionId")
     error = event.get("error") or {}
     skill_domain = error.get("skill_domain", "SPEAKING")
     error_type = error.get("error_type", "unknown")
     severity = float(error.get("severity", 1))
+
+    # Idempotency: skip if already processed this exact error event
+    if session_id:
+        r = await get_redis()
+        dedup_key = f"agt01:processed:error_event:{session_id}:{skill_domain}:{error_type}"
+        was_set = await r.set(dedup_key, b"1", nx=True, ex=86400)
+        if not was_set:
+            logger.info("handle_error_event: already processed error event %s, skipping", dedup_key)
+            return
 
     profile = await _get_base_profile(clerk_user_id)
     grammar_map = dict(profile.get("grammar_error_map") or {})

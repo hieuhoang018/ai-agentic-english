@@ -78,6 +78,60 @@ async def test_cold_start_items_have_cold_start_flag(fake_redis):
 
 
 @respx.mock
+async def test_cold_start_uses_real_module_ids_when_lms_reachable(fake_redis):
+    real_modules = [
+        {"id": "mod-uuid-001", "title": "Module 1", "skillDomain": "READING", "cefrLevel": "A1"},
+        {"id": "mod-uuid-002", "title": "Module 2", "skillDomain": "WRITING", "cefrLevel": "B1"},
+        {"id": "mod-uuid-003", "title": "Module 3", "skillDomain": "LISTENING", "cefrLevel": "A2"},
+    ]
+    respx.get(f"{AGT01_URL}/profile/user-new").mock(
+        return_value=httpx.Response(200, json=_COLD_START_PROFILE)
+    )
+    respx.get(f"{LMS_URL}/modules").mock(
+        return_value=httpx.Response(200, json=real_modules)
+    )
+
+    result = await svc.get_recommendations("user-new")
+
+    assert len(result) == 3
+    result_ids = {item["id"] for item in result}
+    assert not any(id.startswith("stub-") for id in result_ids)
+    assert result_ids == {"mod-uuid-001", "mod-uuid-002", "mod-uuid-003"}
+
+
+@respx.mock
+async def test_cold_start_fewer_than_3_modules_returns_all_available(fake_redis):
+    one_module = [{"id": "mod-only-one", "title": "Only Module", "skillDomain": "SPEAKING", "cefrLevel": "B2"}]
+    respx.get(f"{AGT01_URL}/profile/user-new2").mock(
+        return_value=httpx.Response(200, json=_COLD_START_PROFILE)
+    )
+    respx.get(f"{LMS_URL}/modules").mock(
+        return_value=httpx.Response(200, json=one_module)
+    )
+
+    result = await svc.get_recommendations("user-new2")
+
+    assert len(result) == 1
+    assert result[0]["id"] == "mod-only-one"
+
+
+@respx.mock
+async def test_cold_start_empty_modules_falls_back_to_unreachable_fallback(fake_redis):
+    respx.get(f"{AGT01_URL}/profile/user-empty").mock(
+        return_value=httpx.Response(200, json=_COLD_START_PROFILE)
+    )
+    respx.get(f"{LMS_URL}/modules").mock(
+        return_value=httpx.Response(200, json=[])
+    )
+
+    result = await svc.get_recommendations("user-empty")
+
+    assert len(result) == 3
+    assert all(item.get("cold_start") is True for item in result)
+    assert all(item["id"].startswith("stub-") for item in result)
+
+
+@respx.mock
 async def test_agt01_unreachable_returns_cold_start_fallback(fake_redis):
     respx.get(f"{AGT01_URL}/profile/user-x").mock(
         side_effect=httpx.ConnectError("Connection refused")
