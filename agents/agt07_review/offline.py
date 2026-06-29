@@ -13,7 +13,7 @@ import logging
 from datetime import datetime, timezone
 
 from agents.shared.config import settings
-from agents.shared.db.postgres import fetch, fetchrow, execute
+from agents.shared.db.postgres import fetch, execute
 from agents.agt07_review.service import get_due_items, rate_item
 
 logger = logging.getLogger(__name__)
@@ -119,11 +119,15 @@ async def apply_offline_sync(clerk_user_id: str, reviews: list[dict]) -> dict:
             errors.append({"review_id": review_id, "reason": "missing required fields"})
             continue
 
-        existing = await fetchrow(
-            "SELECT review_id FROM offline_review_log WHERE review_id = $1",
-            review_id,
+        # Claim the review_id atomically. "INSERT 0 0" means the row already
+        # existed (conflict) — skip without hitting the SM-2 update path.
+        # This eliminates the TOCTOU race that a SELECT-then-INSERT pattern has.
+        claim_result = await execute(
+            "INSERT INTO offline_review_log (review_id, clerk_user_id, item_id) "
+            "VALUES ($1, $2, $3) ON CONFLICT (review_id) DO NOTHING",
+            review_id, clerk_user_id, item_id,
         )
-        if existing is not None:
+        if claim_result == "INSERT 0 0":
             skipped += 1
             continue
 
@@ -139,17 +143,14 @@ async def apply_offline_sync(clerk_user_id: str, reviews: list[dict]) -> dict:
         try:
             await rate_item(clerk_user_id, item_id, quality, reviewed_at=reviewed_at)
         except ValueError as exc:
+            # Roll back the log claim so the client can retry after correcting the item.
+            await execute(
+                "DELETE FROM offline_review_log WHERE review_id = $1",
+                review_id,
+            )
             errors.append({"review_id": review_id, "reason": str(exc)})
             continue
 
-        await execute(
-            """
-            INSERT INTO offline_review_log (review_id, clerk_user_id, item_id)
-            VALUES ($1, $2, $3)
-            ON CONFLICT (review_id) DO NOTHING
-            """,
-            review_id, clerk_user_id, item_id,
-        )
         applied += 1
 
     return {"applied": applied, "skipped": skipped, "errors": errors}

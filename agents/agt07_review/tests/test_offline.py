@@ -14,7 +14,7 @@ from unittest.mock import AsyncMock
 import agents.agt07_review.offline as offline_module
 import agents.agt07_review.service as service_module
 
-AGT06_VOCAB_URL = "http://localhost:8106/ltm/user_test/vocabulary"
+AGT06_VOCAB_URL = "http://agt06-memory:8106/ltm/user_test/vocabulary"
 AGT06_ERRORS_URL = "http://localhost:8106/ltm/user_test/errors"
 
 VOCAB_RESPONSE = [
@@ -64,20 +64,17 @@ def mock_db_online(monkeypatch):
 @pytest.fixture
 def mock_db_offline(monkeypatch):
     """
-    Mock DB for offline sync: idempotency check returns None (not seen),
-    rate_item DB calls succeed, log insert succeeds.
+    Mock DB for offline sync: log INSERT succeeds (new row), rate_item succeeds.
+    execute returns "INSERT 0 1" for the log claim so the sync proceeds.
     """
     async def fake_fetchrow(query, *args):
-        # offline_review_log check → not found
-        if "offline_review_log" in query:
-            return None
-        # rate_item stability read
         return {"sm_stability": 2.0}
 
     async def fake_execute(query, *args):
-        return "UPDATE 1" if "UPDATE" in query else "INSERT 1"
+        if "INSERT INTO offline_review_log" in query:
+            return "INSERT 0 1"
+        return "UPDATE 1"
 
-    monkeypatch.setattr("agents.agt07_review.offline.fetchrow", fake_fetchrow)
     monkeypatch.setattr("agents.agt07_review.offline.execute", fake_execute)
     monkeypatch.setattr("agents.agt07_review.service.fetchrow", fake_fetchrow)
     monkeypatch.setattr("agents.agt07_review.service.execute", fake_execute)
@@ -85,16 +82,15 @@ def mock_db_offline(monkeypatch):
 
 @pytest.fixture
 def mock_db_already_processed(monkeypatch):
-    """Idempotency check returns a row — review was already processed."""
+    """Log INSERT hits ON CONFLICT — review was already processed, skip it."""
     async def fake_fetchrow(query, *args):
-        if "offline_review_log" in query:
-            return {"review_id": "review-1"}
         return {"sm_stability": 2.0}
 
     async def fake_execute(query, *args):
+        if "INSERT INTO offline_review_log" in query:
+            return "INSERT 0 0"  # conflict: row already exists
         return "UPDATE 1"
 
-    monkeypatch.setattr("agents.agt07_review.offline.fetchrow", fake_fetchrow)
     monkeypatch.setattr("agents.agt07_review.offline.execute", fake_execute)
     monkeypatch.setattr("agents.agt07_review.service.fetchrow", fake_fetchrow)
     monkeypatch.setattr("agents.agt07_review.service.execute", fake_execute)
@@ -102,16 +98,17 @@ def mock_db_already_processed(monkeypatch):
 
 @pytest.fixture
 def mock_db_item_not_found(monkeypatch):
-    """rate_item raises ValueError — item doesn't exist for this user."""
+    """Log INSERT succeeds, but rate_item raises ValueError (item not in DB)."""
     async def fake_fetchrow(query, *args):
-        if "offline_review_log" in query:
-            return None
         return None  # vocabulary_mastery row not found → triggers ValueError
 
     async def fake_execute(query, *args):
+        if "INSERT INTO offline_review_log" in query:
+            return "INSERT 0 1"
+        if "DELETE FROM offline_review_log" in query:
+            return "DELETE 1"  # log claim rolled back on rate_item failure
         return "UPDATE 0"
 
-    monkeypatch.setattr("agents.agt07_review.offline.fetchrow", fake_fetchrow)
     monkeypatch.setattr("agents.agt07_review.offline.execute", fake_execute)
     monkeypatch.setattr("agents.agt07_review.service.fetchrow", fake_fetchrow)
     monkeypatch.setattr("agents.agt07_review.service.execute", fake_execute)
@@ -130,7 +127,7 @@ def mock_sm2_fetch(monkeypatch):
 
 @respx.mock
 async def test_offline_package_shape(mock_sm2_fetch):
-    respx.get("http://localhost:8106/ltm/user_test/vocabulary").mock(
+    respx.get("http://agt06-memory:8106/ltm/user_test/vocabulary").mock(
         return_value=httpx.Response(200, json=VOCAB_RESPONSE)
     )
     respx.get("http://localhost:8106/ltm/user_test/errors").mock(
@@ -149,7 +146,7 @@ async def test_offline_package_shape(mock_sm2_fetch):
 
 @respx.mock
 async def test_offline_package_sm2_state_contains_vocab(mock_sm2_fetch):
-    respx.get("http://localhost:8106/ltm/user_test/vocabulary").mock(
+    respx.get("http://agt06-memory:8106/ltm/user_test/vocabulary").mock(
         return_value=httpx.Response(200, json=[])
     )
     respx.get("http://localhost:8106/ltm/user_test/errors").mock(
@@ -168,7 +165,7 @@ async def test_offline_package_sm2_state_contains_vocab(mock_sm2_fetch):
 
 @respx.mock
 async def test_offline_package_highlight_snapshot_empty_on_agt06_failure(mock_sm2_fetch):
-    respx.get("http://localhost:8106/ltm/user_test/vocabulary").mock(
+    respx.get("http://agt06-memory:8106/ltm/user_test/vocabulary").mock(
         return_value=httpx.Response(200, json=[])
     )
     respx.get("http://localhost:8106/ltm/user_test/errors").mock(
@@ -187,7 +184,7 @@ async def test_offline_package_flashcards_due_only_below_threshold(mock_sm2_fetc
         "sm_stability": 100.0,
         "last_encounter": "2099-01-01T00:00:00+00:00",
     }]
-    respx.get("http://localhost:8106/ltm/user_test/vocabulary").mock(
+    respx.get("http://agt06-memory:8106/ltm/user_test/vocabulary").mock(
         return_value=httpx.Response(200, json=fresh_vocab)
     )
     respx.get("http://localhost:8106/ltm/user_test/errors").mock(
@@ -270,8 +267,6 @@ async def test_sync_processes_reviews_in_reviewed_at_order(mock_db_offline):
         return "UPDATE 1"
 
     async def tracking_fetchrow(query, *args):
-        if "offline_review_log" in query:
-            return None
         return {"sm_stability": 2.0}
 
     import agents.agt07_review.offline as om
@@ -279,11 +274,9 @@ async def test_sync_processes_reviews_in_reviewed_at_order(mock_db_offline):
 
     original_execute_offline = om.execute
     original_execute_service = sm.execute
-    original_fetchrow_offline = om.fetchrow
     original_fetchrow_service = sm.fetchrow
 
     om.execute = tracking_execute
-    om.fetchrow = tracking_fetchrow
     sm.execute = tracking_execute
     sm.fetchrow = tracking_fetchrow
 
@@ -297,7 +290,6 @@ async def test_sync_processes_reviews_in_reviewed_at_order(mock_db_offline):
         await offline_module.apply_offline_sync("user_test", reviews)
     finally:
         om.execute = original_execute_offline
-        om.fetchrow = original_fetchrow_offline
         sm.execute = original_execute_service
         sm.fetchrow = original_fetchrow_service
 
@@ -323,30 +315,25 @@ async def test_sync_reviewed_at_anchors_next_review_date(mock_db_offline):
         return "UPDATE 1"
 
     async def fake_fetchrow(query, *args):
-        if "offline_review_log" in query:
-            return None
         return {"sm_stability": 2.0}
 
     import agents.agt07_review.offline as om
     import agents.agt07_review.service as sm
 
-    original_execute = sm.execute
-    original_fetchrow_o = om.fetchrow
+    original_execute_s = sm.execute
+    original_execute_o = om.execute
     original_fetchrow_s = sm.fetchrow
 
-    om.fetchrow = fake_fetchrow
     sm.fetchrow = fake_fetchrow
     sm.execute = capture_execute
-    # offline.execute still needs to work for the log insert
     om.execute = capture_execute
 
     try:
         await offline_module.apply_offline_sync("user_test", reviews)
     finally:
-        sm.execute = original_execute
-        om.fetchrow = original_fetchrow_o
+        sm.execute = original_execute_s
+        om.execute = original_execute_o
         sm.fetchrow = original_fetchrow_s
-        om.execute = capture_execute  # intentionally left as capture
 
     assert len(captured_next_review) == 1
     next_review_dt = captured_next_review[0]
@@ -363,7 +350,7 @@ async def test_offline_package_endpoint_returns_200(mock_sm2_fetch):
     from agents.agt07_review.main import app
 
     with respx.mock:
-        respx.get("http://localhost:8106/ltm/user_abc/vocabulary").mock(
+        respx.get("http://agt06-memory:8106/ltm/user_abc/vocabulary").mock(
             return_value=_httpx.Response(200, json=[])
         )
         respx.get("http://localhost:8106/ltm/user_abc/errors").mock(
