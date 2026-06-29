@@ -155,23 +155,26 @@ async def test_consolidate_session_per_item_vocab_failure_does_not_abort(monkeyp
     await asyncio.sleep(0.1)
 
 
-async def test_consolidate_session_kafka_emit_failure_propagates(monkeypatch):
-    """Kafka emit failure is NOT swallowed — propagates to caller.
+async def test_consolidate_session_returns_true_even_when_emit_fails(monkeypatch):
+    """If get_producer() raises during the step-7 emit (Kafka bootstrap failure),
+    consolidation must still return True — all DB writes (steps 2-6) already succeeded."""
+    monkeypatch.setattr("agents.agt06_memory.stm.get_all_session_keys", AsyncMock(
+        return_value={"errors": [], "context": [], "vocab": []}
+    ))
+    monkeypatch.setattr("agents.agt06_memory.ltm.create_session", AsyncMock())
+    monkeypatch.setattr("agents.agt06_memory.ltm.close_session", AsyncMock(return_value=True))
+    monkeypatch.setattr("agents.agt06_memory.ltm.insert_error_events", AsyncMock())
+    monkeypatch.setattr("agents.agt06_memory.ltm.upsert_vocab", AsyncMock())
+    monkeypatch.setattr("agents.agt06_memory.ltm.insert_conversation", AsyncMock(return_value="conv-1"))
 
-    Design note: if emit becomes best-effort in future, this test must be updated.
-    """
-    async def failing_emit(topic, payload, agent_id, key=None):
+    async def failing_emit(*args, **kwargs):
         raise RuntimeError("Kafka broker unreachable")
 
-    monkeypatch.setattr(consolidation, "emit", failing_emit)
+    monkeypatch.setattr("agents.agt06_memory.consolidation.emit", failing_emit)
 
-    clerk_id = f"test-user-{uuid.uuid4()}"
-    session_id = str(uuid.uuid4())
-    await ltm.create_profile(clerk_id)
+    result = await consolidation.consolidate_session("sess-kafka-fail", "user-1", "SPEAKING")
 
-    with pytest.raises(RuntimeError, match="Kafka broker unreachable"):
-        await consolidation.consolidate_session(session_id, clerk_id, "SPEAKING")
-    await asyncio.sleep(0.1)
+    assert result is True, "consolidation must return True even when Kafka emit fails at step 7"
 
 
 async def test_consolidate_session_empty_stm_session_succeeds(monkeypatch):

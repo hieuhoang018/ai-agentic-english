@@ -139,13 +139,15 @@ async def _terminate(
 ) -> dict:
     """Persist assessment result and return the terminal response shape."""
     cefr = theta_to_cefr(theta)
+    first_item_id = responses[0]["item_id"] if responses else None
     try:
         await execute(
             """INSERT INTO assessment_history
-               (clerk_user_id, skill_domain, item_id, response, irt_score, cefr_band)
-               VALUES ($1, $2, $3, $4::jsonb, $5, $6)""",
+               (clerk_user_id, skill_domain, item_id, assessment_session_id, response, irt_score, cefr_band)
+               VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7)""",
             clerk_user_id,
             skill_domain,
+            first_item_id,
             assessment_id,
             json.dumps(responses),
             theta,

@@ -534,3 +534,31 @@ async def test_start_session_stores_clerk_user_id(monkeypatch):
     await service.start_session("user_ck", "SPEAKING", "ck_sess")
 
     assert service._SESSION_PROFILES["ck_sess"]["clerk_user_id"] == "user_ck"
+
+
+# ---------------------------------------------------------------------------
+# TurnRequest model contract
+# ---------------------------------------------------------------------------
+
+def test_turn_request_clerk_user_id_is_optional():
+    """TurnRequest must accept calls without clerk_user_id.
+    The field is unused by process_turn and was erroneously required,
+    causing 422 on any caller following the documented API."""
+    from agents.agt03_tutor.models import TurnRequest
+    req = TurnRequest(session_id="sess-abc", user_message="hello world")
+    assert req.clerk_user_id is None
+    assert req.session_id == "sess-abc"
+    assert req.user_message == "hello world"
+
+
+def test_turn_request_accepts_audio_without_text():
+    from agents.agt03_tutor.models import TurnRequest
+    req = TurnRequest(session_id="sess-abc", audio_base64="base64==")
+    assert req.user_message is None
+    assert req.audio_base64 == "base64=="
+
+
+def test_turn_request_clerk_user_id_still_accepted_when_provided():
+    from agents.agt03_tutor.models import TurnRequest
+    req = TurnRequest(session_id="sess-abc", clerk_user_id="user-1", user_message="hi")
+    assert req.clerk_user_id == "user-1"

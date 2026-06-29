@@ -20,7 +20,7 @@ class StartSessionResponse(BaseModel):
 
 class TurnRequest(BaseModel):
     session_id: str
-    clerk_user_id: str
+    clerk_user_id: str | None = None
     user_message: str | None = None
     audio_base64: str | None = None
 
