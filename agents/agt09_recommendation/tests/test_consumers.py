@@ -54,3 +54,17 @@ async def test_start_consumers_returns_one_cancellable_task(monkeypatch):
         assert isinstance(task, asyncio.Task)
         task.cancel()
     await asyncio.gather(*tasks, return_exceptions=True)
+
+
+async def test_handle_plan_event_does_not_propagate_invalidate_error(monkeypatch):
+    """If invalidate_cache raises, handle_plan_event must swallow the exception silently."""
+    async def failing_invalidate(clerk_user_id: str) -> None:
+        raise RuntimeError("Redis unavailable")
+
+    monkeypatch.setattr(service, "invalidate_cache", failing_invalidate)
+
+    # Must not raise
+    await consumers.handle_plan_event("agent.plan.events", {
+        "planId": "plan-x",
+        "clerkUserId": "u5",
+    })
