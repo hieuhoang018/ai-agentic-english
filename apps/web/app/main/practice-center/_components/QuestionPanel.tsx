@@ -32,7 +32,14 @@ export default function QuestionPanel({ question }: QuestionPanelProps) {
   const audioUrl = question.audioBucket
     ? resolveAudioUrl(question.audioBucket, question.audioKey)
     : null;
-  const isAudioUnavailable = question.audioBucket && (!audioUrl || hasAudioLoadFailed);
+  const isAudioUnavailable = Boolean(question.audioBucket && (!audioUrl || hasAudioLoadFailed));
+  const shouldHideSourceText = Boolean(
+    question.sourceText &&
+      question.audioBucket &&
+      audioUrl &&
+      !hasAudioLoadFailed &&
+      grading.status !== 'success',
+  );
 
   const submitAnswer = async () => {
     if (!userId) {
@@ -115,6 +122,7 @@ export default function QuestionPanel({ question }: QuestionPanelProps) {
               controls
               preload="metadata"
               src={audioUrl ?? undefined}
+              onCanPlay={() => setHasAudioLoadFailed(false)}
               onError={() => setHasAudioLoadFailed(true)}
               className="mt-3 w-full"
             />
@@ -122,7 +130,7 @@ export default function QuestionPanel({ question }: QuestionPanelProps) {
         </section>
       ) : null}
 
-      {question.sourceText ? (
+      {question.sourceText && !shouldHideSourceText ? (
         <div className="mb-6 rounded-lg border border-outline-variant/50 bg-surface p-4 leading-7 text-on-surface">
           <p className="mb-2 font-semibold">{question.sourceLabel}</p>
           <p>{question.sourceText}</p>
@@ -131,7 +139,10 @@ export default function QuestionPanel({ question }: QuestionPanelProps) {
 
       {question.context ? (
         <div className="mb-6 rounded-lg border-l-4 border-primary bg-surface p-4 text-on-surface-variant">
-          {question.context}
+          {question.contextLabel ? (
+            <p className="mb-2 text-sm font-semibold text-on-surface">{question.contextLabel}</p>
+          ) : null}
+          <p>{question.context}</p>
         </div>
       ) : null}
 

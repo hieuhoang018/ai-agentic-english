@@ -26,6 +26,7 @@ export interface PracticeQuestion {
   sourceText?: string;
   sourceLabel?: string;
   context?: string;
+  contextLabel?: string;
   audioBucket?: AudioBucket;
   audioKey?: string;
   options?: McqOption[];
