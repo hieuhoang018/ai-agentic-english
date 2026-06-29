@@ -35,10 +35,12 @@ async def handle_pattern_event(topic: str, event: dict) -> None:
         return
 
     try:
-        result = await service.generate_plan(clerk_user_id, {})
+        today = await service.get_today_plan(clerk_user_id)
+        daily_minutes = today.get("daily_minutes") or 15
+        result = await service.generate_plan(clerk_user_id, {"daily_minutes": daily_minutes})
         logger.info(
-            "handle_pattern_event: plan regenerated user=%s plan_id=%s",
-            clerk_user_id, result.get("plan_id"),
+            "handle_pattern_event: plan regenerated user=%s plan_id=%s daily_minutes=%s",
+            clerk_user_id, result.get("plan_id"), daily_minutes,
         )
     except Exception as exc:
         logger.error(

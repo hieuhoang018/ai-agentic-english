@@ -413,3 +413,46 @@ async def test_handle_session_end_irt_failure_does_not_block_behavioral(monkeypa
     assert "avg_session_length" in updates["behavioral_profile"]
     # irt_theta must NOT be in the update when IRT block fails
     assert "irt_theta" not in updates
+
+
+# ── _session_score unit tests ─────────────────────────────────────────────────
+
+def test_session_score_zero_errors_is_perfect():
+    assert consumers._session_score(0) == 1.0
+
+
+def test_session_score_five_errors_is_half():
+    assert consumers._session_score(5) == pytest.approx(0.5)
+
+
+def test_session_score_ten_errors_floors_at_one_tenth():
+    assert consumers._session_score(10) == 0.1
+
+
+def test_session_score_above_ten_stays_at_floor():
+    assert consumers._session_score(20) == 0.1
+    assert consumers._session_score(100) == 0.1
+
+
+# ── cold_start_flag when L is still null ─────────────────────────────────────
+
+async def test_handle_session_end_cold_start_not_cleared_when_l_is_null(monkeypatch):
+    """cold_start_flag must NOT be added to updates when L is still null after a SPEAKING session."""
+    mock_get_base = AsyncMock(return_value={
+        "clerk_user_id": "user1",
+        "behavioral_profile": {},
+        "irt_theta": {"L": None, "S": None, "R": 0.0, "W": 0.0},
+    })
+    mock_update = AsyncMock(return_value={})
+    monkeypatch.setattr(consumers, "_get_base_profile", mock_get_base)
+    monkeypatch.setattr(consumers, "update_profile", mock_update)
+    # SPEAKING session → only S gets updated; L stays None → cold_start must NOT clear
+    await consumers.handle_session_end("session.end", {
+        "clerkUserId": "user1",
+        "durationMinutes": 10,
+        "skillFocus": "SPEAKING",
+    })
+
+    _, updates = mock_update.call_args.args
+    # cold_start_flag must be absent — not False — because L is null
+    assert "cold_start_flag" not in updates
