@@ -417,9 +417,12 @@ services:
       KAFKA_BROKERS: kafka:9092
       INFERENCE_MODE: mock
       INTERNAL_SECRET: dev-internal-secret
+      AGT06_BASE_URL: http://agt06-memory:8106
     depends_on:
       postgres-agents:
         condition: service_healthy
+      agt06-memory:
+        condition: service_started
 
   agt08-analysis:
     build:
