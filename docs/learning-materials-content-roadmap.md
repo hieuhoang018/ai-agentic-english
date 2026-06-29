@@ -53,7 +53,7 @@ Key constraints this flow encodes:
   the fetch/generate + upload; TS only ever stores the resulting object key as a plain string
   column. Exception added 2026-06-28: `learning-materials-service` now has a read-only
   `@aws-sdk/client-s3` client (`src/lib/storageClient.ts`) solely for generating presigned GET
-  URLs via `GET /api/audio-url` — it never writes to MinIO. The ETL-upload constraint still
+  URLs via `GET /api/audio/url` — it never writes to MinIO. The ETL-upload constraint still
   applies to all future phases.
 - **All LLM calls go through `agents/shared/llm/router.call_llm`.** TS code has no inference
   layer of its own (removed in the Phase 6-TS cutover) and must not gain one back for this.
@@ -231,7 +231,7 @@ rewrite, since the loader only upserts and never deletes.
 `listening-comprehension` exercise prompt is `{transcript, question, options, audioKey,
 audioBucket}`. `audioKey` is the MinIO object path; `audioBucket` is the bucket name
 (`"passage-audio"` for curriculum exercises). Both fields are needed to call
-`GET /api/audio-url` — see `docs/frontend-backend-integration-plan.md` §Stage C for the
+`GET /api/audio/url` — see `docs/frontend-backend-integration-plan.md` §Stage C for the
 frontend usage pattern. The 9 hand-written `listening-comprehension` exercises in
 `prisma/seed.ts` carry `audioKey: null` / `audioBucket: null` because they are synthetic
 placeholder transcripts not backed by real `Passage`/`MediaAsset` rows — `null` is correct,
@@ -281,7 +281,7 @@ gained matching internal-only DTOs (plain inline shapes, not added to
 3. Re-run the same seed command — confirm no duplicate rows (idempotent upsert).
 4. `npm run lint`, `npm run build`, `npm run test` stay green for `learning-materials-service`.
 5. Phase B only: confirm the MinIO object actually resolves before trusting a stored `audioKey`.
-   Use `GET /api/audio-url?bucket=passage-audio&key=<objectKey>` (with a valid Clerk token) and
+   Use `GET /api/audio/url?bucket=passage-audio&key=<objectKey>` (with a valid Clerk token) and
    verify the returned URL fetches as `audio/mpeg`.
 
 **Fresh machine / fresh `docker compose up`?** Postgres rows and MinIO are populated separately —

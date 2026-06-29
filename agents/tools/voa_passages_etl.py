@@ -21,7 +21,9 @@ download mp3 → upload to `passage-audio` MinIO bucket → estimate CEFR level
 (or use per-series override) → append one JSON row to passage_seed.jsonl.
 
 Runs in APPEND mode by default: titles already present in the output file
-are skipped, so re-running the script never re-downloads existing audio.
+are not written again. Their MinIO audio object is still checked and uploaded
+if missing, so this script can populate a fresh local MinIO from committed
+seed metadata without duplicating JSONL rows.
 
 Manual run (from repo root or agents/tools/):
     pip3 install boto3
@@ -45,6 +47,7 @@ from collections import Counter
 
 import boto3
 from botocore.client import Config
+from botocore.exceptions import ClientError
 
 UA = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -283,6 +286,17 @@ def upload_audio(s3, audio_prefix, slug, audio_bytes):
     return object_key
 
 
+def object_exists(s3, object_key):
+    try:
+        s3.head_object(Bucket=BUCKET, Key=object_key)
+        return True
+    except ClientError as exc:
+        code = exc.response.get("Error", {}).get("Code")
+        if code in {"404", "NoSuchKey", "NotFound"}:
+            return False
+        raise
+
+
 def run_series(series_cfg, vocab_levels, s3, existing_titles, out_path, dry_run=False):
     name = series_cfg["name"]
     base_url = series_cfg["base_url"]
@@ -306,13 +320,22 @@ def run_series(series_cfg, vocab_levels, s3, existing_titles, out_path, dry_run=
             print(f"  SKIP (incomplete) {url} title={bool(title)} mp3={bool(mp3_url)} body={bool(body)}")
             continue
 
-        if title in existing_titles:
-            stats["skipped_existing"] += 1
-            print(f"  SKIP (exists)  {title}")
-            continue
-
         # Derive audio object key slug from the article filename
         file_slug = slugify(os.path.splitext(slug_path.split("/")[-1])[0])
+        object_key = f"{audio_prefix}{file_slug}.mp3"
+
+        if title in existing_titles:
+            stats["skipped_existing"] += 1
+            if dry_run:
+                print(f"  SKIP (exists)  {title}")
+            elif object_exists(s3, object_key):
+                print(f"  SKIP (exists, audio present)  {title}")
+            else:
+                audio_bytes = fetch(mp3_url)
+                upload_audio(s3, audio_prefix, file_slug, audio_bytes)
+                print(f"  OK  (audio restored) {title} ({len(audio_bytes)} bytes → {object_key})")
+            continue
+
         cefr_level = cefr_override or estimate_cefr_level(body, vocab_levels)
 
         if not dry_run:

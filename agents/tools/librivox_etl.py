@@ -18,7 +18,10 @@ Pipeline:
   5. Estimate CEFR level (or use per-series override).
   6. Append one JSON row to passage_seed.jsonl.
 
-Runs in APPEND mode: titles already present in the output file are skipped.
+Runs in APPEND mode: titles already present in the output file are not
+written again. Their MinIO audio object is still checked and uploaded if
+missing, so this script can populate a fresh local MinIO from committed seed
+metadata without duplicating JSONL rows.
 
 Manual run (from repo root or agents/tools/):
     pip3 install boto3
@@ -43,6 +46,7 @@ from collections import Counter
 
 import boto3
 from botocore.client import Config
+from botocore.exceptions import ClientError
 
 UA = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -244,6 +248,17 @@ def upload_audio(s3, audio_prefix, slug, audio_bytes):
     return object_key
 
 
+def object_exists(s3, object_key):
+    try:
+        s3.head_object(Bucket=BUCKET, Key=object_key)
+        return True
+    except ClientError as exc:
+        code = exc.response.get("Error", {}).get("Code")
+        if code in {"404", "NoSuchKey", "NotFound"}:
+            return False
+        raise
+
+
 # ---------------------------------------------------------------------------
 # Gutenberg text splitting
 # ---------------------------------------------------------------------------
@@ -363,11 +378,6 @@ def run_collection_series(series_cfg, vocab_levels, s3, existing_titles, out_pat
         display_title = display_title.replace(" In ", " in ").replace(" A ", " a ").replace(" The ", " the ").replace(" And ", " and ").replace(" Of ", " of ")
         display_title = display_title.strip()
 
-        if display_title in existing_titles or title in existing_titles:
-            stats["skipped_existing"] += 1
-            print(f"  SKIP (exists)  {display_title}")
-            continue
-
         story_body = story_texts.get(title, "")
         if not story_body:
             stats["skipped_incomplete"] += 1
@@ -377,6 +387,19 @@ def run_collection_series(series_cfg, vocab_levels, s3, existing_titles, out_pat
         cefr_level = cefr_override or estimate_cefr_level(story_body, vocab_levels)
         slug = track["slug"]
         mp3_url = track["mp3_url"]
+        object_key = f"{audio_prefix}{slug}.mp3"
+
+        if display_title in existing_titles or title in existing_titles:
+            stats["skipped_existing"] += 1
+            if dry_run:
+                print(f"  SKIP (exists)  {display_title}")
+            elif object_exists(s3, object_key):
+                print(f"  SKIP (exists, audio present)  {display_title}")
+            else:
+                audio_bytes = fetch_binary(mp3_url)
+                upload_audio(s3, audio_prefix, slug, audio_bytes)
+                print(f"  OK  (audio restored) {display_title} ({len(audio_bytes)} bytes → {object_key})")
+            continue
 
         if not dry_run:
             audio_bytes = fetch_binary(mp3_url)
@@ -432,11 +455,6 @@ def run_standalone_series(series_cfg, vocab_levels, s3, existing_titles, out_pat
     for track in tracks:
         title = track["story_title"]
 
-        if title in existing_titles:
-            stats["skipped_existing"] += 1
-            print(f"  SKIP (exists)  {title}")
-            continue
-
         print(f"  Downloading Gutenberg text for '{title}': {track['gutenberg_url']}")
         full_text = fetch_text(track["gutenberg_url"])
         story_body = story_text_from_standalone(full_text)
@@ -455,6 +473,19 @@ def run_standalone_series(series_cfg, vocab_levels, s3, existing_titles, out_pat
         cefr_level = cefr_override or estimate_cefr_level(story_body, vocab_levels)
         slug = track["slug"]
         mp3_url = track["mp3_url"]
+        object_key = f"{audio_prefix}{slug}.mp3"
+
+        if title in existing_titles:
+            stats["skipped_existing"] += 1
+            if dry_run:
+                print(f"  SKIP (exists)  {title}")
+            elif object_exists(s3, object_key):
+                print(f"  SKIP (exists, audio present)  {title}")
+            else:
+                audio_bytes = fetch_binary(mp3_url)
+                upload_audio(s3, audio_prefix, slug, audio_bytes)
+                print(f"  OK  (audio restored) {title} ({len(audio_bytes)} bytes → {object_key})")
+            continue
 
         if not dry_run:
             audio_bytes = fetch_binary(mp3_url)
