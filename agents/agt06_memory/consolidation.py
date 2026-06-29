@@ -67,12 +67,18 @@ async def consolidate_session(session_id: str, clerk_user_id: str, skill_focus: 
         _generate_and_store_embedding(conv_id, context)
     )
 
-    # Step 7: Emit consolidation complete event
-    await emit(
-        "agent.consolidation.complete",
-        {"sessionId": session_id, "clerkUserId": clerk_user_id, "convId": conv_id},
-        agent_id="AGT06",
-    )
+    # Step 7: Emit consolidation complete event (best-effort — all DB writes already done)
+    try:
+        await emit(
+            "agent.consolidation.complete",
+            {"sessionId": session_id, "clerkUserId": clerk_user_id, "convId": conv_id},
+            agent_id="AGT06",
+        )
+    except Exception as exc:
+        logger.warning(
+            "consolidate_session: Kafka emit failed session=%s err=%s — data consolidated, event lost",
+            session_id, exc,
+        )
 
     logger.info("consolidate_session: session %s consolidated successfully", session_id)
     return True
