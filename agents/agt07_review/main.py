@@ -1,7 +1,7 @@
 import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Header, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from agents.agt07_review.service import get_due_items, rate_item, build_daily_test, pick_vocab_of_the_day
 from agents.agt07_review.offline import get_offline_package, apply_offline_sync
 from agents.shared.config import settings
@@ -29,7 +29,7 @@ class RateRequest(BaseModel):
 class OfflineReview(BaseModel):
     review_id: str
     item_id: str
-    quality: int  # 0-5
+    quality: int = Field(ge=0, le=5)
     reviewed_at: str | None = None  # ISO-8601; used as SM-2 base for replay
 
 
