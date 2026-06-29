@@ -107,7 +107,11 @@ docker-compose defaults (`http://localhost:9000`, `minioadmin`/`minioadmin`).
 **Long-term direction, not implemented yet:** replace each developer's isolated local MinIO with
 a shared/team-reachable object store (a network-accessible MinIO instance, or real cloud
 storage), so `audioKey` resolves consistently for everyone instead of requiring this per-machine
-re-fetch step. No infra decision has been made on this yet — flagged as a known gap, tracked in
-the server-side status notes alongside the rest of the MinIO/audio gaps (TS has no MinIO client
-anywhere; this ETL-script approach is intentionally the only thing in the repo that talks to
-MinIO directly).
+re-fetch step. No infra decision has been made on this yet.
+
+**Serving audio to the frontend (2026-06-28):** `learning-materials-service` now exposes
+`GET /api/audio-url?bucket=<bucket>&key=<key>` (Clerk-JWT-protected, via Kong) that returns a
+1-hour presigned URL the browser can use directly as an `<audio src>`. The per-machine upload
+step above is still required for the URL to resolve — the endpoint signs and serves whatever
+objects are actually present in MinIO, it doesn't fetch or upload anything itself. See
+`docs/frontend-backend-integration-plan.md` §Stage C for the frontend usage pattern.

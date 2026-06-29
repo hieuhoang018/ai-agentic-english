@@ -133,6 +133,19 @@ services:
               claims_to_verify:
                 - exp
 
+  - name: lm-audio
+    url: http://learning-materials-service:4002/audio
+    routes:
+      - name: lm-audio-route
+        paths:
+          - /api/audio
+        strip_path: true
+        plugins:
+          - name: jwt
+            config:
+              claims_to_verify:
+                - exp
+
   - name: lm-assessment
     url: http://learning-materials-service:4002/assessment
     routes:

@@ -69,7 +69,7 @@ async def test_handle_session_end_missing_fields_is_noop(monkeypatch):
     mock_update.assert_not_awaited()
 
 
-async def test_handle_error_event_accumulates_severity(monkeypatch):
+async def test_handle_error_event_accumulates_severity(monkeypatch, fake_redis):
     mock_get_base = AsyncMock(return_value={
         "clerk_user_id": "user1",
         "grammar_error_map": {"SPEAKING": {"verb_tense": 1.0}},
@@ -92,7 +92,7 @@ async def test_handle_error_event_accumulates_severity(monkeypatch):
     assert updates["grammar_error_map"]["SPEAKING"]["verb_tense"] == 3.0
 
 
-async def test_handle_error_event_new_skill_and_error_type(monkeypatch):
+async def test_handle_error_event_new_skill_and_error_type(monkeypatch, fake_redis):
     mock_get_base = AsyncMock(return_value={
         "clerk_user_id": "user1",
         "grammar_error_map": {"SPEAKING": {"verb_tense": 1.0}},
@@ -301,6 +301,87 @@ async def test_handle_session_end_updates_irt_theta_many_errors(monkeypatch, fak
     assert "irt_theta" in updates
     assert updates["irt_theta"]["L"] == -0.04
     assert updates["irt_theta"]["S"] == 0.0  # other keys untouched
+
+
+async def test_handle_error_event_is_idempotent_with_session_id(monkeypatch, fake_redis):
+    """Two calls with the same sessionId/skill_domain/error_type → update_profile called once."""
+    mock_get_base = AsyncMock(return_value={
+        "clerk_user_id": "user1",
+        "grammar_error_map": {},
+    })
+    mock_update = AsyncMock(return_value={})
+    monkeypatch.setattr(consumers, "_get_base_profile", mock_get_base)
+    monkeypatch.setattr(consumers, "update_profile", mock_update)
+
+    event = {
+        "clerkUserId": "user1",
+        "sessionId": "sess-dedup",
+        "error": {
+            "skill_domain": "SPEAKING",
+            "error_type": "verb_tense",
+            "severity": 2,
+        },
+    }
+
+    await consumers.handle_error_event("agent.errors", event)
+    await consumers.handle_error_event("agent.errors", event)
+
+    # update_profile must be called exactly once — second delivery is skipped
+    mock_update.assert_awaited_once()
+    _, updates = mock_update.call_args.args
+    # severity of ONE event (2.0), not doubled (4.0)
+    assert updates["grammar_error_map"]["SPEAKING"]["verb_tense"] == 2.0
+
+
+async def test_handle_error_event_without_session_id_always_processes(monkeypatch):
+    """No sessionId → no dedup → both calls are processed."""
+    mock_get_base = AsyncMock(return_value={
+        "clerk_user_id": "user1",
+        "grammar_error_map": {},
+    })
+    mock_update = AsyncMock(return_value={})
+    monkeypatch.setattr(consumers, "_get_base_profile", mock_get_base)
+    monkeypatch.setattr(consumers, "update_profile", mock_update)
+
+    event = {
+        "clerkUserId": "user1",
+        "error": {
+            "skill_domain": "SPEAKING",
+            "error_type": "verb_tense",
+            "severity": 2,
+        },
+    }
+
+    await consumers.handle_error_event("agent.errors", event)
+    await consumers.handle_error_event("agent.errors", event)
+
+    assert mock_update.await_count == 2
+
+
+async def test_handle_error_event_dedup_key_is_written_after_processing(monkeypatch, fake_redis):
+    """After one successful call, the dedup key must exist in Redis."""
+    mock_get_base = AsyncMock(return_value={
+        "clerk_user_id": "user1",
+        "grammar_error_map": {},
+    })
+    mock_update = AsyncMock(return_value={})
+    monkeypatch.setattr(consumers, "_get_base_profile", mock_get_base)
+    monkeypatch.setattr(consumers, "update_profile", mock_update)
+
+    await consumers.handle_error_event("agent.errors", {
+        "clerkUserId": "user1",
+        "sessionId": "sess-key-check",
+        "error": {
+            "skill_domain": "WRITING",
+            "error_type": "article_usage",
+            "severity": 1,
+        },
+    })
+
+    key_exists = await fake_redis.exists(
+        b"agt01:processed:error_event:sess-key-check:WRITING:article_usage"
+    )
+    assert key_exists, "Dedup key must be written after processing"
 
 
 async def test_handle_session_end_irt_failure_does_not_block_behavioral(monkeypatch, fake_redis):

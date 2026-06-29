@@ -119,7 +119,7 @@ async def orchestrate_grading(body: GradingRequest):
 
     correct = body.attemptedAnswer.strip().lower() == correct_answer.strip().lower()
     score = 1.0 if correct else 0.0
-    feedback = "Correct!" if correct else f"Incorrect. The correct answer is: {correct_answer}"
+    feedback = "Correct!" if correct else f"Incorrect"
 
     try:
         await emit(

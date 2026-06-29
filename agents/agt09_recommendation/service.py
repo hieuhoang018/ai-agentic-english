@@ -43,10 +43,23 @@ async def _compute_recommendations(clerk_user_id: str) -> list[dict]:
             modules = catalog_r.json()
     except Exception as exc:
         logger.warning("Recommendation data fetch failed for %s: %s", clerk_user_id, exc)
-        return _cold_start_fallback()
+        return _unreachable_fallback()
 
     if profile.get("cold_start_flag", True):
-        recs = _cold_start_fallback()
+        if modules:
+            recs = [
+                {
+                    "id": m["id"],
+                    "title": m["title"],
+                    "skillDomain": m.get("skillDomain", "READING"),
+                    "cefrLevel": m.get("cefrLevel", "A1"),
+                    "rationale": "Popular starting point for new learners.",
+                    "cold_start": True,
+                }
+                for m in modules[:min(3, len(modules))]
+            ]
+        else:
+            recs = _unreachable_fallback()
     else:
         candidates = [
             {"id": m["id"], "title": m["title"], "difficulty": 0.5,
@@ -60,8 +73,8 @@ async def _compute_recommendations(clerk_user_id: str) -> list[dict]:
     return recs
 
 
-def _cold_start_fallback() -> list[dict]:
-    """Return placeholder recommendations for new users."""
+def _unreachable_fallback() -> list[dict]:
+    """Return placeholder recommendations when AGT-01 or LMS is unreachable, or modules list is empty."""
     return [
         {"id": "stub-1", "title": "Business Email Writing", "skillDomain": "WRITING",
          "rationale": "Popular starting point for professionals.", "cold_start": True},

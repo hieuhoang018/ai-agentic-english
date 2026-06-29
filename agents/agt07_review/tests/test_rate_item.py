@@ -90,13 +90,12 @@ async def test_rate_item_reads_stability_from_db(mock_db):
     assert "user-1" in mock_db["fetchrow"]
 
 
-async def test_rate_item_no_row_defaults_stability_to_1(monkeypatch):
-    """When DB has no row, stability defaults to 1.0 and no error is raised."""
+async def test_rate_item_raises_value_error_when_no_row(monkeypatch):
+    """When DB has no row, ValueError is raised (item not found)."""
     monkeypatch.setattr("agents.agt07_review.service.fetchrow", AsyncMock(return_value=None))
     monkeypatch.setattr("agents.agt07_review.service.execute", AsyncMock(return_value="UPDATE 0"))
 
     from agents.agt07_review.service import rate_item
 
-    result = await rate_item("user-1", "unknown-item", quality=4)
-    assert "next_review" in result
-    assert result["new_stability"] > 0
+    with pytest.raises(ValueError):
+        await rate_item("user-1", "unknown-item", quality=4)

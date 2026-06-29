@@ -45,7 +45,10 @@ async def rate(clerk_user_id: str, body: RateRequest):
     Record a review rating and update SM-2 state.
     TODO Phase 8+: full SM-2 stability/retrievability update.
     """
-    return await rate_item(clerk_user_id, body.item_id, body.quality)
+    try:
+        return await rate_item(clerk_user_id, body.item_id, body.quality)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Vocab item not found")
 
 
 @app.get("/tests/{clerk_user_id}/daily")

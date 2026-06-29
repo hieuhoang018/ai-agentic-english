@@ -227,6 +227,37 @@ async def test_rate_item_all_quality_levels(quality: int, mock_db):
     assert result["quality"] == quality
 
 
+@pytest.fixture
+def mock_db_missing(monkeypatch):
+    calls: dict = {}
+
+    async def fake_fetchrow(query, *args):
+        calls["fetchrow"] = args
+        return None
+
+    async def fake_execute(query, *args):
+        calls["execute"] = args
+        return "UPDATE 0"
+
+    monkeypatch.setattr("agents.agt07_review.service.fetchrow", fake_fetchrow)
+    monkeypatch.setattr("agents.agt07_review.service.execute", fake_execute)
+    return calls
+
+
+async def test_rate_item_raises_value_error_when_item_not_found(mock_db_missing):
+    with pytest.raises(ValueError):
+        await service.rate_item("user_x", "nonexistent-uuid", 4)
+    assert "fetchrow" in mock_db_missing
+    assert "execute" not in mock_db_missing
+
+
+async def test_rate_item_raises_value_error_when_wrong_user(mock_db_missing):
+    with pytest.raises(ValueError):
+        await service.rate_item("wrong_user", "some-uuid", 3)
+    assert "fetchrow" in mock_db_missing
+    assert "execute" not in mock_db_missing
+
+
 # ---------------------------------------------------------------------------
 # build_daily_test
 # ---------------------------------------------------------------------------

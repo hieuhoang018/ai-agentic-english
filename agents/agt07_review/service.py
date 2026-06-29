@@ -62,7 +62,9 @@ async def rate_item(clerk_user_id: str, item_id: str, quality: int) -> dict:
         "WHERE vocab_id = $1::uuid AND clerk_user_id = $2",
         item_id, clerk_user_id,
     )
-    current_stability = float(row["sm_stability"]) if row else 1.0
+    if row is None:
+        raise ValueError(f"Vocab item {item_id!r} not found for user {clerk_user_id!r}")
+    current_stability = float(row["sm_stability"])
 
     new_stability = update_stability_stub(quality, current_stability)
     next_review = next_review_date_stub(quality, new_stability)

@@ -11,4 +11,4 @@ WORKDIR /app
 ENV NODE_ENV=production
 COPY --from=build /app /app
 EXPOSE 4002
-CMD ["node", "services/learning-materials-service/dist/index.js"]
+CMD ["sh", "-c", "cd /app/services/learning-materials-service && npx prisma migrate deploy && npx tsx prisma/seedAssessment.ts && node /app/services/learning-materials-service/dist/index.js"]

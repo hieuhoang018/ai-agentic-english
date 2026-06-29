@@ -29,6 +29,7 @@ repeat the same pattern everywhere else.
 | `/api/modules` → `/`, `/:id`, `/:id/lessons` | GET | learning-materials-service | — | `ModuleDto[]` / `ModuleDto` / `LessonDto[]` |
 | `/api/lessons/:id` → `/:id/exercises` | GET | learning-materials-service | — | `LessonDto` / `ExerciseDto[]` |
 | `/api/exercises/:id` | GET | learning-materials-service | — | `ExerciseDto` (no answer key) |
+| `/api/audio-url?bucket=&key=` | GET | learning-materials-service | — | `{url: string}` (1-hour presigned MinIO URL) |
 | `/api/assessment/questions?skill=` | GET | learning-materials-service | — | `AssessmentQuestionDto[]` |
 | `/api/assessment/score` | POST | learning-materials-service | `{answers:[{questionId,answer}]}` | scored result |
 | `/api/learning-paths/:userId/active` | GET | learning-materials-service | — | `LearningPathDto` (404 if none) |
@@ -185,6 +186,8 @@ answer calls the real grading orchestrator route instead of local mock-feedback 
   `POST /api/orchestrate/grading` (`{exerciseId, attemptedAnswer, userId}`), replacing the local
   mock-feedback comparison. Use the real response's `{correct, score, feedback}` for the
   existing feedback UI states (already built — just needs real data piped in).
+- [ ] **(Frontend dev)** Wire audio playback for `listening-comprehension` exercises and
+  listening assessment questions — see **Audio playback** section below.
 - [ ] **(Backend dev)** Heads-up to frontend dev: grading is currently a **naive case-insensitive
   string match** (see Known Issues in `CLAUDE.local.md`) — no normalization for
   punctuation/whitespace, and only `mcq`/`sentence-correction` types are seeded today. Don't
@@ -201,6 +204,91 @@ answer calls the real grading orchestrator route instead of local mock-feedback 
 Exit criterion: at least one full module's lesson/exercise list and grading flow in
 Practice Center is sourced entirely from the backend, with zero references to
 `practice-content.ts` for that module.
+
+### Audio playback (added 2026-06-28)
+
+Applies to both **Stage C** (curriculum `listening-comprehension` exercises) and **Stage B**
+(placement assessment questions with `skill: "listening"`).
+
+**How the data flows:**
+
+Every `listening-comprehension` exercise and every `listening` assessment question now carries
+two fields inside its `prompt` JSON object:
+
+```ts
+prompt: {
+  transcript: string;
+  question: string;
+  options: string[];
+  audioKey: string | null;      // MinIO object path, e.g. "voa/words-and-their-stories/foo.mp3"
+  audioBucket: string | null;   // bucket name, e.g. "passage-audio" or "assessment-audio"
+}
+```
+
+`audioKey`/`audioBucket` are `null` only on the 9 old hand-written exercises in `seed.ts` —
+every generated and assessment listening item has real values. Treat `null` as "no audio
+available, render transcript only."
+
+**Endpoint:**
+
+```
+GET /api/audio-url?bucket=<audioBucket>&key=<audioKey>
+Authorization: Bearer <clerk-token>
+
+→ 200 { url: "http://localhost:9000/passage-audio/voa/.../foo.mp3?X-Amz-..." }
+→ 400 if bucket is not one of: passage-audio, assessment-audio
+→ 401 if no/invalid token
+```
+
+The returned `url` is a **presigned S3-compatible URL** valid for **1 hour**. Pass it directly
+to `<audio src>` — no further auth headers needed (the signature is in the query string).
+
+**Frontend implementation pattern:**
+
+```tsx
+// Don't fetch the presigned URL at page/list load time — fetch lazily just before
+// the user plays, and don't cache it longer than ~55 minutes (it expires in 60).
+
+async function getAudioUrl(bucket: string, key: string, token: string): Promise<string> {
+  const res = await apiFetch<{ url: string }>(
+    `/audio-url?bucket=${encodeURIComponent(bucket)}&key=${encodeURIComponent(key)}`,
+    { token }
+  );
+  return res.url;
+}
+
+// In the exercise/question component:
+function ListeningExercise({ prompt, token }: { prompt: ListeningPrompt; token: string }) {
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+
+  // Fetch once on mount (or use a button to fetch on demand)
+  useEffect(() => {
+    if (prompt.audioKey && prompt.audioBucket) {
+      getAudioUrl(prompt.audioBucket, prompt.audioKey, token).then(setAudioUrl);
+    }
+  }, [prompt.audioKey, prompt.audioBucket, token]);
+
+  return (
+    <div>
+      {audioUrl ? (
+        <audio src={audioUrl} controls />
+      ) : prompt.audioKey ? (
+        <p>Loading audio…</p>
+      ) : (
+        <p>No audio available — read the transcript below.</p>
+      )}
+      <p>{prompt.transcript}</p>
+      {/* question + options */}
+    </div>
+  );
+}
+```
+
+**Dev environment note:** Audio files are stored per-machine in MinIO. If the presigned URL
+returns HTTP 403 or the audio doesn't play, MinIO hasn't been populated yet on your machine —
+run the ETL scripts described in `infra/README.md`'s "MinIO-backed audio content" section.
+CORS is already configured on MinIO (`Access-Control-Allow-Origin: http://localhost:3000`), so
+browser requests from the Next.js dev server will work once the files are present.
 
 ---
 

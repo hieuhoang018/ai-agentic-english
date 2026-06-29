@@ -3,7 +3,9 @@ import cors from 'cors';
 import express, { Express } from 'express';
 import { PrismaClient } from '../prisma/generated/client';
 import { AppPrismaClient } from './lib/prisma';
+import { StorageClient, createStorageClient } from './lib/storageClient';
 import { createAssessmentRouter } from './routes/assessment';
+import { createAudioRouter } from './routes/audio';
 import { createExercisesRouter } from './routes/exercises';
 import { createInternalRouter } from './routes/internal';
 import { createLearningPathsRouter } from './routes/learningPaths';
@@ -14,7 +16,10 @@ export interface HealthCheckClient {
   $queryRaw: PrismaClient['$queryRaw'];
 }
 
-export function createApp(prisma: AppPrismaClient = new PrismaClient()): Express {
+export function createApp(
+  prisma: AppPrismaClient = new PrismaClient(),
+  storage: StorageClient = createStorageClient(),
+): Express {
   const app = express();
 
   app.use(cors());
@@ -34,6 +39,7 @@ export function createApp(prisma: AppPrismaClient = new PrismaClient()): Express
   app.use('/exercises', createExercisesRouter(prisma));
   app.use('/assessment', createAssessmentRouter(prisma));
   app.use('/learning-paths', createLearningPathsRouter(prisma));
+  app.use('/audio', createAudioRouter(storage));
 
   const internalSecret = getEnv('INTERNAL_SECRET', 'dev-internal-secret');
   app.use('/internal', createInternalMiddleware(internalSecret), createInternalRouter(prisma));

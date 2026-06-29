@@ -4,6 +4,8 @@ Uses boto3 with MinIO endpoint — S3-compatible API.
 Switching to AWS S3 or GCP GCS requires only endpoint config change.
 """
 
+import asyncio
+
 import boto3
 from botocore.client import Config
 from agents.shared.config import settings
@@ -51,17 +53,25 @@ async def put_audio(clerk_user_id: str, session_id: str, turn_id: str, audio_byt
     Non-blocking wrapper — boto3 is sync; run in executor for async contexts.
     """
     key = audio_key(clerk_user_id, session_id, turn_id)
-    _get_s3().put_object(Bucket=BUCKET_AUDIO, Key=key, Body=audio_bytes, ContentType="audio/webm")
+    loop = asyncio.get_running_loop()
+    await loop.run_in_executor(
+        None,
+        lambda: _get_s3().put_object(Bucket=BUCKET_AUDIO, Key=key, Body=audio_bytes, ContentType="audio/webm"),
+    )
     return f"{settings.MINIO_ENDPOINT}/{BUCKET_AUDIO}/{key}"
 
 
 async def put_writing_sample(clerk_user_id: str, sample_id: str, html_content: str) -> str:
     key = writing_key(clerk_user_id, sample_id)
-    _get_s3().put_object(
-        Bucket=BUCKET_WRITING,
-        Key=key,
-        Body=html_content.encode("utf-8"),
-        ContentType="text/html",
+    loop = asyncio.get_running_loop()
+    await loop.run_in_executor(
+        None,
+        lambda: _get_s3().put_object(
+            Bucket=BUCKET_WRITING,
+            Key=key,
+            Body=html_content.encode("utf-8"),
+            ContentType="text/html",
+        ),
     )
     return f"{settings.MINIO_ENDPOINT}/{BUCKET_WRITING}/{key}"
 
