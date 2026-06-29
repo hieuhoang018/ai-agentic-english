@@ -82,6 +82,14 @@ MAX_TOKENS = 8000  # generous — gpt-oss-20b spends real tokens on internal rea
 # "prove the pipeline first" approach. Raise *_limit / exercises_per_* to
 # scale up a re-run; module ids stay the same so re-runs accumulate/update
 # in place rather than creating duplicate modules.
+# Passage allocation across all reading + listening batches (26 A2 passages total, 0-indexed):
+#   Reading  batch 1: indices  0- 2  (offset=0,  limit=3)
+#   Listening batch 1: indices  3- 5  (offset=3,  limit=3)
+#   Reading  batch 2: indices  6- 8  (offset=6,  limit=3)
+#   Reading  batch 3: indices  9-11  (offset=9,  limit=3)
+#   Listening batch 2: indices 12-14  (offset=12, limit=3)
+#   Listening batch 3: indices 15-17  (offset=15, limit=3)
+# Indices 18-25 remain available for future batches.
 READING_BATCHES = [
     {
         "module_id": "mod-gen-reading-a2",
@@ -94,6 +102,34 @@ READING_BATCHES = [
         "cefr_level": "A2",
         "order": 4,
         "passages_offset": 0,
+        "passages_limit": 3,
+        "exercises_per_passage": 5,
+    },
+    {
+        "module_id": "mod-gen-reading-a2-2",
+        "title": "Reading Practice 2 (Generated)",
+        "description": (
+            "LLM-generated reading comprehension drills, second batch of VOA "
+            "Learning English passages."
+        ),
+        "skill": "reading",
+        "cefr_level": "A2",
+        "order": 7,
+        "passages_offset": 6,
+        "passages_limit": 3,
+        "exercises_per_passage": 5,
+    },
+    {
+        "module_id": "mod-gen-reading-a2-3",
+        "title": "Reading Practice 3 (Generated)",
+        "description": (
+            "LLM-generated reading comprehension drills, third batch of VOA "
+            "Learning English passages."
+        ),
+        "skill": "reading",
+        "cefr_level": "A2",
+        "order": 8,
+        "passages_offset": 9,
         "passages_limit": 3,
         "exercises_per_passage": 5,
     },
@@ -117,8 +153,38 @@ LISTENING_BATCHES = [
         "passages_limit": 3,
         "exercises_per_passage": 5,
     },
+    {
+        "module_id": "mod-gen-listening-a2-2",
+        "title": "Listening Practice 2 (Generated)",
+        "description": (
+            "LLM-generated listening comprehension drills, second batch of VOA "
+            "Learning English passages, with matching audio files."
+        ),
+        "skill": "listening",
+        "cefr_level": "A2",
+        "order": 9,
+        "passages_offset": 12,
+        "passages_limit": 3,
+        "exercises_per_passage": 5,
+    },
+    {
+        "module_id": "mod-gen-listening-a2-3",
+        "title": "Listening Practice 3 (Generated)",
+        "description": (
+            "LLM-generated listening comprehension drills, third batch of VOA "
+            "Learning English passages, with matching audio files."
+        ),
+        "skill": "listening",
+        "cefr_level": "A2",
+        "order": 10,
+        "passages_offset": 15,
+        "passages_limit": 3,
+        "exercises_per_passage": 5,
+    },
 ]
 
+# Writing batches use different CEFR levels so each batch draws from a distinct
+# grammar-point pool (the fetch has no offset param — level is the differentiator).
 WRITING_BATCHES = [
     {
         "module_id": "mod-gen-writing-b1",
@@ -130,6 +196,34 @@ WRITING_BATCHES = [
         "skill": "writing",
         "cefr_level": "B1",
         "order": 5,
+        "grammar_limit": 8,
+        "exercises_per_grammar_point": 2,
+        "exercises_per_lesson": 5,
+        "exercise_types": ["fill-blank", "sentence-correction"],
+    },
+    {
+        "module_id": "mod-gen-writing-a2",
+        "title": "Writing Practice — A2 (Generated)",
+        "description": (
+            "LLM-generated writing drills grounded on A2-level grammar points."
+        ),
+        "skill": "writing",
+        "cefr_level": "A2",
+        "order": 11,
+        "grammar_limit": 8,
+        "exercises_per_grammar_point": 2,
+        "exercises_per_lesson": 5,
+        "exercise_types": ["fill-blank", "sentence-correction"],
+    },
+    {
+        "module_id": "mod-gen-writing-b2",
+        "title": "Writing Practice — B2 (Generated)",
+        "description": (
+            "LLM-generated writing drills grounded on B2-level grammar points."
+        ),
+        "skill": "writing",
+        "cefr_level": "B2",
+        "order": 12,
         "grammar_limit": 8,
         "exercises_per_grammar_point": 2,
         "exercises_per_lesson": 5,
@@ -267,9 +361,10 @@ Respond with ONLY a JSON object (no markdown fences, no commentary):
     exercises = _validate_exercises(parsed.get("exercises", []), {"listening-comprehension"}, "listening")
     for ex in exercises:
         ex["grounded_on"] = {"type": "passage", "id": passage["id"], "title": passage["title"]}
-        # Real audioKey from the passage's linked MediaAsset, not LLM output —
-        # the model never sees or invents this, so it can't get it wrong.
+        # Real audioKey/audioBucket from the passage's linked MediaAsset, not LLM output —
+        # the model never sees or invents these, so they can't be hallucinated or mismatched.
         ex["prompt"]["audioKey"] = passage.get("audioKey")
+        ex["prompt"]["audioBucket"] = "passage-audio" if passage.get("audioKey") else None
     return exercises
 
 
