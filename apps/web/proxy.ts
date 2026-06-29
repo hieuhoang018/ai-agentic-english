@@ -3,7 +3,7 @@ import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server';
 const isProtectedRoute = createRouteMatcher(['/main(.*)', '/onboarding(.*)']);
 
 export const config = {
-  matcher: ['/main/:path*', '/onboarding/:path*', '/(api|trpc)(.*)', '/__clerk/:path*'],
+  matcher: ['/main/:path*', '/onboarding/:path*', '/api/:path*', '/__clerk/:path*'],
 };
 
 // Export the clerk middleware as the proxy handler so `auth()` detects it at runtime.

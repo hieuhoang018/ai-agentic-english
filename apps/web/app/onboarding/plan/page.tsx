@@ -5,7 +5,6 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { isApiError } from '@/lib/api/client'
 import type { OnboardingResponse } from '@/lib/api/types'
-import { useApi } from '@/lib/api/useApi'
 
 import CompleteOnboardingLink from '../_components/CompleteOnboardingLink'
 import GeneratedPlanPreview from '../_components/GeneratedPlanPreview'
@@ -18,8 +17,26 @@ type PlanState =
   | { status: 'success'; plan: OnboardingResponse }
   | { status: 'error'; message: string }
 
+async function parseJsonResponse<TResponse>(response: Response): Promise<TResponse> {
+  if (!response.ok) {
+    const body = await response.json().catch(() => undefined)
+    throw {
+      status: response.status,
+      message:
+        typeof body === 'object' &&
+        body !== null &&
+        'message' in body &&
+        typeof body.message === 'string'
+          ? body.message
+          : response.statusText,
+      body,
+    }
+  }
+
+  return response.json() as Promise<TResponse>
+}
+
 export default function GeneratedPlanPage() {
-  const api = useApi()
   const { isLoaded, user } = useUser()
   const { isReady, profile } = useOnboarding()
   const [state, setState] = useState<PlanState>({ status: 'loading' })
@@ -39,10 +56,12 @@ export default function GeneratedPlanPage() {
     setState({ status: 'loading' })
 
     try {
-      const plan = await api<OnboardingResponse>('/orchestrate/onboarding', {
+      const response = await fetch('/api/orchestrate/onboarding', {
         method: 'POST',
-        body: toOnboardingRequest(userId, profile),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(toOnboardingRequest(userId, profile)),
       })
+      const plan = await parseJsonResponse<OnboardingResponse>(response)
       setState({ status: 'success', plan })
     } catch (error) {
       setState({
@@ -50,7 +69,7 @@ export default function GeneratedPlanPage() {
         message: isApiError(error) ? error.message : 'Không thể tạo lộ trình lúc này. Vui lòng thử lại.',
       })
     }
-  }, [api, profile, requestKey, userId])
+  }, [profile, requestKey, userId])
 
   useEffect(() => {
     if (!isLoaded || !isReady || !requestKey || submittedRequestKey.current === requestKey) return

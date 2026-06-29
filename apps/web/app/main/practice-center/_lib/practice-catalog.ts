@@ -1,4 +1,5 @@
 import type { ExerciseDto, LessonDto } from '@/lib/api/types';
+import type { AudioBucket } from '@/lib/audio';
 
 import type {
   PracticeQuestion,
@@ -66,6 +67,10 @@ function firstPromptText(prompt: Record<string, unknown> | null, keys: string[])
   }
 
   return undefined;
+}
+
+function asAudioBucket(value: unknown): AudioBucket | undefined {
+  return value === 'passage-audio' || value === 'assessment-audio' ? value : undefined;
 }
 
 function optionLabel(value: unknown) {
@@ -140,6 +145,7 @@ export function toPracticeQuestion(exercise: ExerciseDto): PracticeQuestion {
   const sentence =
     firstPromptText(prompt, ['sentence']) ?? (exercise.skill === 'writing' ? promptBody : undefined);
   const audioKey = firstPromptText(prompt, ['audioKey', 'audio_key', 'objectKey', 'object_key']);
+  const audioBucket = asAudioBucket(prompt?.audioBucket ?? prompt?.audio_bucket);
   const isListening = exercise.skill === 'listening' || exercise.type === 'listening-comprehension';
   const options = toOptions(prompt);
   const type =
@@ -163,7 +169,7 @@ export function toPracticeQuestion(exercise: ExerciseDto): PracticeQuestion {
         : exercise.type === 'sentence-correction'
           ? 'Sentence to correct:'
           : undefined,
-    audioBucket: isListening && audioKey ? 'passage-audio' : undefined,
+    audioBucket: isListening && audioKey ? (audioBucket ?? 'passage-audio') : undefined,
     audioKey: isListening ? audioKey : undefined,
     options,
     placeholder:

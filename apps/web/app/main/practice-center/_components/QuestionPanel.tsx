@@ -3,7 +3,7 @@
 import { useAuth } from '@clerk/nextjs';
 import { useState } from 'react';
 
-import { resolveAudioUrl } from '@/lib/audio';
+import { usePresignedAudioUrl } from '@/lib/audio';
 import { isApiError } from '@/lib/api/client';
 import type { GradingRequest, GradingResponse } from '@/lib/api/types';
 
@@ -25,19 +25,14 @@ export default function QuestionPanel({ question }: QuestionPanelProps) {
   const [selectedOptionId, setSelectedOptionId] = useState<string | null>(null);
   const [textAnswer, setTextAnswer] = useState('');
   const [grading, setGrading] = useState<GradingState>({ status: 'idle' });
-  const [hasAudioLoadFailed, setHasAudioLoadFailed] = useState(false);
+  const audio = usePresignedAudioUrl(question.audioBucket, question.audioKey);
 
   const selectedOption = question.options?.find((option) => option.id === selectedOptionId);
   const attemptedAnswer = question.type === 'mcq' ? (selectedOption?.label ?? '') : textAnswer;
-  const audioUrl = question.audioBucket
-    ? resolveAudioUrl(question.audioBucket, question.audioKey)
-    : null;
-  const isAudioUnavailable = Boolean(question.audioBucket && (!audioUrl || hasAudioLoadFailed));
   const shouldHideSourceText = Boolean(
     question.sourceText &&
       question.audioBucket &&
-      audioUrl &&
-      !hasAudioLoadFailed &&
+      audio.status !== 'error' &&
       grading.status !== 'success',
   );
 
@@ -113,19 +108,33 @@ export default function QuestionPanel({ question }: QuestionPanelProps) {
             <span className="material-symbols-outlined text-primary">headphones</span>
             Listening audio
           </div>
-          {isAudioUnavailable ? (
-            <p className="mt-3 rounded-lg bg-surface-container p-3 text-sm text-on-surface-variant">
-              Audio is unavailable for this listening exercise.
-            </p>
-          ) : (
+          {audio.status === 'ready' ? (
             <audio
               controls
               preload="metadata"
-              src={audioUrl ?? undefined}
-              onCanPlay={() => setHasAudioLoadFailed(false)}
-              onError={() => setHasAudioLoadFailed(true)}
+              src={audio.url}
+              onError={audio.markPlaybackFailed}
               className="mt-3 w-full"
             />
+          ) : (
+            <div className="mt-3 flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                onClick={() => void audio.load()}
+                disabled={audio.status === 'loading'}
+                className="inline-flex h-10 items-center gap-2 rounded-lg bg-primary px-4 text-sm font-semibold text-white transition-colors hover:bg-[#0047bb] disabled:cursor-wait disabled:opacity-70"
+              >
+                <span className="material-symbols-outlined text-base">
+                  {audio.status === 'loading' ? 'progress_activity' : 'play_arrow'}
+                </span>
+                {audio.status === 'loading' ? 'Loading audio...' : 'Load audio'}
+              </button>
+              {audio.status === 'error' ? (
+                <p className="text-sm text-error" role="alert">
+                  {audio.message}
+                </p>
+              ) : null}
+            </div>
           )}
         </section>
       ) : null}
