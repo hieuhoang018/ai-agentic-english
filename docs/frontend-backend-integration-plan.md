@@ -29,7 +29,7 @@ repeat the same pattern everywhere else.
 | `/api/modules` → `/`, `/:id`, `/:id/lessons` | GET | learning-materials-service | — | `ModuleDto[]` / `ModuleDto` / `LessonDto[]` |
 | `/api/lessons/:id` → `/:id/exercises` | GET | learning-materials-service | — | `LessonDto` / `ExerciseDto[]` |
 | `/api/exercises/:id` | GET | learning-materials-service | — | `ExerciseDto` (no answer key) |
-| `/api/audio-url?bucket=&key=` | GET | learning-materials-service | — | `{url: string}` (1-hour presigned MinIO URL) |
+| `/api/audio/url?bucket=&key=` | GET | learning-materials-service | — | `{url: string}` (1-hour presigned MinIO URL) |
 | `/api/assessment/questions?skill=` | GET | learning-materials-service | — | `AssessmentQuestionDto[]` |
 | `/api/assessment/score` | POST | learning-materials-service | `{answers:[{questionId,answer}]}` | scored result |
 | `/api/learning-paths/:userId/active` | GET | learning-materials-service | — | `LearningPathDto` (404 if none) |
@@ -232,7 +232,7 @@ available, render transcript only."
 **Endpoint:**
 
 ```
-GET /api/audio-url?bucket=<audioBucket>&key=<audioKey>
+GET /api/audio/url?bucket=<audioBucket>&key=<audioKey>
 Authorization: Bearer <clerk-token>
 
 → 200 { url: "http://localhost:9000/passage-audio/voa/.../foo.mp3?X-Amz-..." }
