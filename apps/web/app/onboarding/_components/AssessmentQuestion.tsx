@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 
+import { resolveAudioUrl } from '@/lib/audio'
 import { isApiError } from '@/lib/api/client'
 import type { AssessmentQuestionDto, AssessmentResultDto, CefrLevel, Skill } from '@/lib/api/types'
 import { useApi } from '@/lib/api/useApi'
@@ -48,19 +49,6 @@ function selectAssessmentQuestions(questions: AssessmentQuestionDto[]) {
   }
 
   return selectedQuestions
-}
-
-function getAssessmentAudioUrl(audioKey?: string) {
-  const audioBaseUrl = process.env.NEXT_PUBLIC_AUDIO_BASE_URL
-
-  if (!audioKey || !audioBaseUrl) {
-    return null
-  }
-
-  const normalizedBaseUrl = audioBaseUrl.replace(/\/+$/, '')
-  const normalizedAudioKey = audioKey.replace(/^\/+/, '').split('/').map(encodeURIComponent).join('/')
-
-  return `${normalizedBaseUrl}/assessment-audio/${normalizedAudioKey}`
 }
 
 function parsePrompt(prompt: unknown): AssessmentPrompt {
@@ -160,7 +148,7 @@ export default function AssessmentQuestion() {
   const prompt = parsePrompt(question.prompt)
   const answer = answers[question.id] ?? ''
   const skillLabel = isPlacementSkill(question.skill) ? skillLabels[question.skill] : 'Assessment'
-  const audioUrl = question.skill === 'listening' ? getAssessmentAudioUrl(prompt.audioKey) : null
+  const audioUrl = question.skill === 'listening' ? resolveAudioUrl('assessment-audio', prompt.audioKey) : null
   const isAudioUnavailable = question.skill === 'listening' && (!audioUrl || failedAudioQuestionIds[question.id])
   const isFirstQuestion = currentIndex === 0
   const isLastQuestion = currentIndex === questions.length - 1

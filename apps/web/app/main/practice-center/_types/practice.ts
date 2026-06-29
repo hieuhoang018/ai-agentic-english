@@ -1,3 +1,5 @@
+import type { AudioBucket } from '@/lib/audio';
+
 export type PracticeSkillId = 'reading' | 'listening' | 'writing';
 
 export interface PracticeSkill {
@@ -24,6 +26,8 @@ export interface PracticeQuestion {
   sourceText?: string;
   sourceLabel?: string;
   context?: string;
+  audioBucket?: AudioBucket;
+  audioKey?: string;
   options?: McqOption[];
   placeholder?: string;
 }

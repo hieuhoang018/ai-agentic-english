@@ -3,6 +3,7 @@
 import { useAuth } from '@clerk/nextjs';
 import { useState } from 'react';
 
+import { resolveAudioUrl } from '@/lib/audio';
 import { isApiError } from '@/lib/api/client';
 import type { GradingRequest, GradingResponse } from '@/lib/api/types';
 
@@ -24,9 +25,14 @@ export default function QuestionPanel({ question }: QuestionPanelProps) {
   const [selectedOptionId, setSelectedOptionId] = useState<string | null>(null);
   const [textAnswer, setTextAnswer] = useState('');
   const [grading, setGrading] = useState<GradingState>({ status: 'idle' });
+  const [hasAudioLoadFailed, setHasAudioLoadFailed] = useState(false);
 
   const selectedOption = question.options?.find((option) => option.id === selectedOptionId);
   const attemptedAnswer = question.type === 'mcq' ? (selectedOption?.label ?? '') : textAnswer;
+  const audioUrl = question.audioBucket
+    ? resolveAudioUrl(question.audioBucket, question.audioKey)
+    : null;
+  const isAudioUnavailable = question.audioBucket && (!audioUrl || hasAudioLoadFailed);
 
   const submitAnswer = async () => {
     if (!userId) {
@@ -93,6 +99,28 @@ export default function QuestionPanel({ question }: QuestionPanelProps) {
         <span className="material-symbols-outlined">quiz</span>
         Câu hỏi thực hành
       </h2>
+
+      {question.audioBucket ? (
+        <section className="mb-6 rounded-lg border border-outline-variant/50 bg-surface p-4">
+          <div className="flex items-center gap-2 font-bold text-on-surface">
+            <span className="material-symbols-outlined text-primary">headphones</span>
+            Listening audio
+          </div>
+          {isAudioUnavailable ? (
+            <p className="mt-3 rounded-lg bg-surface-container p-3 text-sm text-on-surface-variant">
+              Audio is unavailable for this listening exercise.
+            </p>
+          ) : (
+            <audio
+              controls
+              preload="metadata"
+              src={audioUrl ?? undefined}
+              onError={() => setHasAudioLoadFailed(true)}
+              className="mt-3 w-full"
+            />
+          )}
+        </section>
+      ) : null}
 
       {question.sourceText ? (
         <div className="mb-6 rounded-lg border border-outline-variant/50 bg-surface p-4 leading-7 text-on-surface">

@@ -69,6 +69,8 @@ export function toPracticeQuestion(exercise: ExerciseDto): PracticeQuestion {
   const sentence = promptText(prompt, 'sentence');
   const instruction = promptText(prompt, 'instruction');
   const question = promptText(prompt, 'question');
+  const audioKey = promptText(prompt, 'audioKey');
+  const isListening = exercise.skill === 'listening' || exercise.type === 'listening-comprehension';
   const options = toOptions(prompt);
   const type = options
     ? 'mcq'
@@ -87,6 +89,8 @@ export function toPracticeQuestion(exercise: ExerciseDto): PracticeQuestion {
         ? 'Read the following passage:'
         : undefined,
     context: sentence && sentence !== question && sentence !== instruction ? sentence : undefined,
+    audioBucket: isListening && audioKey ? 'passage-audio' : undefined,
+    audioKey: isListening ? audioKey : undefined,
     options,
     placeholder:
       type === 'writingPrompt' ? 'Enter your corrected sentence...' : 'Enter your answer...',
