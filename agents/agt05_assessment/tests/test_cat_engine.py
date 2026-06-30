@@ -1,55 +1,67 @@
+import math
 import pytest
 from agents.agt05_assessment.cat_engine import (
-    estimate_theta_stub,
+    estimate_theta_eap,
     select_next_item_stub,
     should_terminate,
 )
 
 
-# ── estimate_theta_stub ───────────────────────────────────────────────────────
+# ── estimate_theta_eap ────────────────────────────────────────────────────────
 
-def test_estimate_theta_stub_no_responses_returns_zero():
-    assert estimate_theta_stub([]) == 0.0
-
-
-def test_estimate_theta_stub_all_correct_returns_max():
-    responses = [{"item_id": f"item-{i}", "correct": True} for i in range(10)]
-    assert estimate_theta_stub(responses) == 2.0
+def _resp(item_id: str, difficulty: float, correct: bool) -> dict:
+    return {"item_id": item_id, "difficulty_param": difficulty, "correct": correct}
 
 
-def test_estimate_theta_stub_all_wrong_returns_min():
-    responses = [{"item_id": f"item-{i}", "correct": False} for i in range(10)]
-    assert estimate_theta_stub(responses) == -2.0
+def test_estimate_theta_eap_no_responses_returns_prior_mean():
+    """With zero responses, EAP must collapse to the prior mean (0.0 for N(0,1))."""
+    assert estimate_theta_eap([]) == 0.0
 
 
-def test_estimate_theta_stub_half_correct_returns_zero():
-    responses = [{"item_id": f"item-{i}", "correct": i % 2 == 0} for i in range(10)]
-    # 5 correct / 10 total → 0.5 * 4.0 - 2.0 = 0.0
-    assert estimate_theta_stub(responses) == 0.0
+def test_estimate_theta_eap_all_correct_on_easy_items_skews_positive():
+    """Acing items well below the prior mean should pull theta clearly positive,
+    since getting easy items right is weak evidence, but getting MANY right
+    with no wrong answers should still move the estimate up from 0."""
+    responses = [_resp(f"item-{i}", -1.0, True) for i in range(10)]
+    theta = estimate_theta_eap(responses)
+    assert theta > 0.3
 
 
-def test_estimate_theta_stub_17_of_30():
-    # Demo learner 1: Nguyen Van Minh — expected B1
-    responses = [{"item_id": f"item-{i}", "correct": i <= 17} for i in range(1, 31)]
-    result = estimate_theta_stub(responses)
-    # 17/30 = 0.5667 → round(0.5667 * 4.0 - 2.0, 3) = 0.267
-    assert result == pytest.approx(0.267, abs=0.001)
+def test_estimate_theta_eap_all_wrong_on_hard_items_skews_negative():
+    responses = [_resp(f"item-{i}", 1.0, False) for i in range(10)]
+    theta = estimate_theta_eap(responses)
+    assert theta < -0.3
 
 
-def test_estimate_theta_stub_10_of_30():
-    # Demo learner 2: Nguyen Thi Van — expected A2
-    responses = [{"item_id": f"item-{i}", "correct": i <= 10} for i in range(1, 31)]
-    result = estimate_theta_stub(responses)
-    # 10/30 = 0.3333 → round(0.3333 * 4.0 - 2.0, 3) = -0.667
-    assert result == pytest.approx(-0.667, abs=0.001)
+def test_estimate_theta_eap_mixed_at_zero_difficulty_near_zero():
+    """5 correct, 5 wrong, all items at b=0.0 (matches the prior mean) should
+    land close to theta=0."""
+    responses = (
+        [_resp(f"item-c{i}", 0.0, True) for i in range(5)]
+        + [_resp(f"item-w{i}", 0.0, False) for i in range(5)]
+    )
+    theta = estimate_theta_eap(responses)
+    assert abs(theta) < 0.3
 
 
-def test_estimate_theta_stub_23_of_30():
-    # Demo learner 3: Tran Thu Huong — expected B2
-    responses = [{"item_id": f"item-{i}", "correct": i <= 23} for i in range(1, 31)]
-    result = estimate_theta_stub(responses)
-    # 23/30 = 0.7667 → round(0.7667 * 4.0 - 2.0, 3) = 1.067
-    assert result == pytest.approx(1.067, abs=0.001)
+def test_estimate_theta_eap_is_bounded():
+    """EAP over a finite quadrature grid must stay within the grid's range
+    (a real implementation bug would let it diverge to +/- infinity)."""
+    responses = [_resp(f"item-{i}", -2.0, True) for i in range(30)]
+    theta = estimate_theta_eap(responses)
+    assert -4.0 <= theta <= 4.0
+
+
+def test_estimate_theta_eap_more_correct_responses_increase_theta_monotonically():
+    """Adding another correct response (on a fixed-difficulty item) must never
+    decrease the running theta estimate."""
+    responses = []
+    thetas = []
+    for i in range(8):
+        responses.append(_resp(f"item-{i}", 0.0, True))
+        thetas.append(estimate_theta_eap(responses))
+    for earlier, later in zip(thetas, thetas[1:]):
+        assert later >= earlier - 1e-9, f"theta decreased: {thetas}"
 
 
 # ── should_terminate ──────────────────────────────────────────────────────────

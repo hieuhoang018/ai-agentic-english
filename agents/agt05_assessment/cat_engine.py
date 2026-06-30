@@ -20,20 +20,51 @@ Exposure control:
   TODO Phase 8+: implement exposure control table per item bank
 """
 
+import math
+
 from agents.shared.config import settings
 
+_QUADRATURE_POINTS = [round(-4.0 + 0.1 * i, 2) for i in range(81)]  # -4.0 to 4.0 step 0.1
 
-def estimate_theta_stub(responses: list[dict]) -> float:
+
+def _prior_density(theta: float) -> float:
+    """Standard normal N(0, 1) probability density."""
+    return math.exp(-0.5 * theta * theta) / math.sqrt(2 * math.pi)
+
+
+def _p_correct(theta: float, difficulty: float) -> float:
+    """1PL (Rasch) probability of a correct response."""
+    return 1.0 / (1.0 + math.exp(-(theta - difficulty)))
+
+
+def _likelihood(theta: float, responses: list[dict]) -> float:
+    likelihood = 1.0
+    for r in responses:
+        p = _p_correct(theta, r["difficulty_param"])
+        likelihood *= p if r["correct"] else (1.0 - p)
+    return likelihood
+
+
+def estimate_theta_eap(responses: list[dict]) -> float:
     """
-    Stub theta estimation: simple proportion-correct mapped to theta range.
-    Full EAP estimation deferred to Phase 8+.
+    EAP (Expectation A Posteriori) theta estimation under a 1PL (Rasch) model,
+    via numerical quadrature over a fixed grid (no numpy/scipy dependency).
+    Each response dict must have "difficulty_param" (float) and "correct" (bool).
+    Returns 0.0 (the prior mean) when responses is empty.
     """
     if not responses:
         return 0.0
-    correct = sum(1 for r in responses if r.get("correct", False))
-    proportion = correct / len(responses)
-    # Linear mapping: 0% correct -> theta=-2.0, 100% correct -> theta=2.0
-    return round((proportion * 4.0) - 2.0, 3)
+
+    numerator = 0.0
+    denominator = 0.0
+    for theta in _QUADRATURE_POINTS:
+        weight = _likelihood(theta, responses) * _prior_density(theta)
+        numerator += theta * weight
+        denominator += weight
+
+    if denominator == 0.0:
+        return 0.0  # degenerate likelihood (extremely unlikely in practice); fall back to prior mean
+    return round(numerator / denominator, 4)
 
 
 def select_next_item_stub(theta: float, answered_ids: list[str], item_bank: list[dict]) -> dict | None:
