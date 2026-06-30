@@ -98,7 +98,14 @@ def _openrouter_client() -> AsyncOpenAI:
 
 
 def _ollama_client() -> AsyncOpenAI:
-    return AsyncOpenAI(base_url=settings.OLLAMA_BASE_URL + "/v1", api_key="ollama")
+    import httpx
+    # Short connect timeout so a missing Ollama container fails fast (< 5 s)
+    # rather than blocking each call for the full 60 s openai-client default.
+    return AsyncOpenAI(
+        base_url=settings.OLLAMA_BASE_URL + "/v1",
+        api_key="ollama",
+        http_client=httpx.AsyncClient(timeout=httpx.Timeout(connect=4.0, read=300.0, write=30.0, pool=4.0)),
+    )
 
 
 async def call_llm(
