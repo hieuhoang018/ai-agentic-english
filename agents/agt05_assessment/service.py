@@ -2,8 +2,9 @@
 Assessment Agent service layer.
 Manages CAT sessions: start, respond, terminate, produce results.
 
-At scaffold: sequential item delivery with stub theta estimation.
-Full 3PL IRT + Fisher information maximisation deferred to Phase 8+.
+Theta estimation, item selection, and termination are delegated to the real
+1PL (Rasch) EAP psychometrics in cat_engine.py. True 3PL IRT (discrimination
+and guessing parameters) remains deferred to Phase 8+ pending calibration data.
 """
 
 import json
@@ -11,7 +12,7 @@ import uuid
 import httpx
 import logging
 from agents.agt05_assessment.cat_engine import (
-    estimate_theta_stub, select_next_item_stub, should_terminate
+    estimate_theta_eap, select_next_item_eap, should_terminate_eap
 )
 from agents.shared.config import settings
 from agents.shared.db.postgres import execute
@@ -82,8 +83,8 @@ async def start_assessment(clerk_user_id: str, skill_domain: str) -> dict:
             "skill_domain": skill_domain,
         }
 
-    theta = 0.0  # start at midpoint
-    first_item = select_next_item_stub(theta, [], item_bank)
+    theta = 0.0  # start at midpoint, matches the EAP prior mean
+    first_item = select_next_item_eap(theta, [], item_bank)
     if not first_item:
         return {"error": "No items available", "skill_domain": skill_domain}
 
@@ -106,18 +107,26 @@ async def record_response(
     clerk_user_id: str,
 ) -> dict:
     """Record a response and return the next item or termination result."""
-    responses = prior_responses + [{"item_id": item_id, "correct": correct}]
-    theta = estimate_theta_stub(responses)
+    item_bank = await _fetch_item_bank(skill_domain)
+    current_difficulty = next(
+        (i["difficulty_param"] for i in item_bank if i["item_id"] == item_id),
+        0.0,  # fallback: item not found in current bank fetch (e.g. cache raced
+              # with a bank update) — 0.0 is the prior mean, a neutral default
+              # rather than crashing the whole assessment turn.
+    )
+    responses = prior_responses + [
+        {"item_id": item_id, "difficulty_param": current_difficulty, "correct": correct}
+    ]
+    theta = estimate_theta_eap(responses)
 
-    if should_terminate(responses):
+    if should_terminate_eap(responses, theta, item_bank_size=len(item_bank)):
         return await _terminate(assessment_id, clerk_user_id, skill_domain, responses, theta)
 
-    item_bank = await _fetch_item_bank(skill_domain)
     answered_ids = [r["item_id"] for r in responses]
-    next_item = select_next_item_stub(theta, answered_ids, item_bank)
+    next_item = select_next_item_eap(theta, answered_ids, item_bank)
 
     if next_item is None:
-        # Item bank exhausted before 30-item threshold — still a terminal state.
+        # Item bank exhausted before the SE/max_items threshold — still terminal.
         return await _terminate(assessment_id, clerk_user_id, skill_domain, responses, theta)
 
     return {
