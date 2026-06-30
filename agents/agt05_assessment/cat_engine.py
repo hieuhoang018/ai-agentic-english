@@ -34,7 +34,8 @@ def _prior_density(theta: float) -> float:
 
 def _p_correct(theta: float, difficulty: float) -> float:
     """1PL (Rasch) probability of a correct response."""
-    return 1.0 / (1.0 + math.exp(-(theta - difficulty)))
+    exponent = max(-700.0, min(700.0, -(theta - difficulty)))
+    return 1.0 / (1.0 + math.exp(exponent))
 
 
 def _likelihood(theta: float, responses: list[dict]) -> float:

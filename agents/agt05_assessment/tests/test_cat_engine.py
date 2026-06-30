@@ -52,6 +52,15 @@ def test_estimate_theta_eap_is_bounded():
     assert -4.0 <= theta <= 4.0
 
 
+def test_p_correct_does_not_overflow_on_extreme_inputs():
+    """_p_correct must clamp its exponent so extreme theta/difficulty values
+    don't raise OverflowError from math.exp; result should be ~0.0 here since
+    theta is far below difficulty."""
+    from agents.agt05_assessment.cat_engine import _p_correct
+    result = _p_correct(-1000.0, 1000.0)
+    assert result == pytest.approx(0.0, abs=1e-9)
+
+
 def test_estimate_theta_eap_more_correct_responses_increase_theta_monotonically():
     """Adding another correct response (on a fixed-difficulty item) must never
     decrease the running theta estimate."""
