@@ -67,6 +67,7 @@ import re
 
 import httpx
 
+from agents.shared.diversity import DiversityChecker
 from agents.shared.llm.router import AgentID, call_llm
 
 LM_SERVICE_BASE_URL = os.environ.get("LM_SERVICE_BASE_URL", "http://localhost:4002")
@@ -74,7 +75,7 @@ LM_INTERNAL_SECRET = os.environ.get("LM_INTERNAL_SECRET", "dev-internal-secret")
 
 _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 _REPO_ROOT = os.path.dirname(os.path.dirname(_SCRIPT_DIR))
-OUT = os.path.join(
+OUT = os.environ.get("CONTENT_GEN_OUT") or os.path.join(
     _REPO_ROOT,
     "services", "learning-materials-service", "prisma", "seed-data",
     "generated_content_seed.jsonl",
@@ -88,6 +89,41 @@ GRAMMAR_SEED = os.path.join(SEED_DATA_DIR, "grammar_seed.jsonl")
 
 ALLOWED_TYPES = {"mcq", "fill-blank", "sentence-correction", "listening-comprehension"}
 ALLOWED_DIFFICULTIES = {"easy", "medium", "hard"}
+
+# Listening question taxonomy — Phase 4 (docs/listening-question-taxonomy.md).
+# Each entry is (taxonomy_id, cognitive_type, response_format, position_constraint).
+# Phase 5 script generator selects entries from the allowed set for the lesson's CEFR level
+# and must produce a script satisfying the listed position_constraint.
+#
+# Implementation-priority subset only — mcq-multi, I-M, I-MCQ2 deferred.
+_TaxonomyEntry = tuple[str, str, str, str]  # (id, cognitive_type, response_format, position)
+LISTENING_TAXONOMY: list[_TaxonomyEntry] = [
+    # id          cognitive_type   response_format       position
+    ("G-MCQ1",   "gist",          "mcq-single",         "WHOLE"),
+    ("G-SC",     "gist",          "sentence-completion", "WHOLE"),
+    ("G-NC",     "gist",          "note-completion",     "WHOLE"),
+    ("S-M",      "sequencing",    "matching",            "SEQUENTIAL"),
+    ("S-SC",     "sequencing",    "sentence-completion", "SEQUENTIAL"),
+    ("S-NC",     "sequencing",    "note-completion",     "SEQUENTIAL"),
+    ("I-MCQ1",   "inference",     "mcq-single",          "MULTI_PART"),
+    ("I-SC",     "inference",     "sentence-completion", "MULTI_PART"),
+    ("D-MCQ1",   "detail-at-end", "mcq-single",          "BACK_30"),
+    ("D-SC",     "detail-at-end", "sentence-completion", "BACK_30"),
+    ("D-NC",     "detail-at-end", "note-completion",     "BACK_30"),
+]
+
+# Allowed taxonomy IDs per CEFR level.
+# Full rationale in docs/listening-question-taxonomy.md §CEFR Band Rules.
+LISTENING_ALLOWED_BY_CEFR: dict[str, list[str]] = {
+    "A1": ["G-MCQ1"],
+    "A2": ["G-MCQ1", "G-SC", "S-M", "S-SC", "D-MCQ1", "D-SC", "D-NC"],
+    "B1": ["G-MCQ1", "G-SC", "G-NC", "S-M", "S-SC", "S-NC", "I-MCQ1", "I-SC", "D-MCQ1", "D-SC", "D-NC"],
+    "B2": [e[0] for e in LISTENING_TAXONOMY],
+    "C1": [e[0] for e in LISTENING_TAXONOMY],
+    "C2": [e[0] for e in LISTENING_TAXONOMY],
+}
+
+_TAXONOMY_BY_ID: dict[str, _TaxonomyEntry] = {e[0]: e for e in LISTENING_TAXONOMY}
 
 MAX_TOKENS = 8000  # generous — gpt-oss-20b spends real tokens on internal reasoning first
 FORCE_DETERMINISTIC = os.environ.get("CONTENT_GEN_FORCE_DETERMINISTIC") == "true"
@@ -566,23 +602,35 @@ def _deterministic_passage_exercises(passage: dict, skill: str, n: int) -> list[
             continue
         answer = words[min(2, len(words) - 1)]
         cloze = re.sub(rf"\b{re.escape(answer)}\b", "______", sentence, count=1)
-        prompt_key = "transcript" if skill == "listening" else "passage"
-        ex_type = "listening-comprehension" if skill == "listening" else "mcq"
-        ex = {
-            "type": ex_type,
-            "prompt": {
-                prompt_key: sentence,
-                "question": f"Which word completes the excerpt: {cloze}",
-                "options": _word_options(answer, sentence),
-            },
-            "answer_key": {"answer": answer},
-            "difficulty": "medium",
-            "skill": skill,
-            "grounded_on": {"type": "passage", "id": passage["id"], "title": passage["title"]},
-        }
         if skill == "listening":
-            ex["prompt"]["audioKey"] = passage.get("audioKey")
-            ex["prompt"]["audioBucket"] = "passage-audio" if passage.get("audioKey") else None
+            # No transcript field — learner hears the audio; question stem must not
+            # quote the answer-bearing sentence (cloze is shown without context sentence).
+            ex = {
+                "type": "listening-comprehension",
+                "prompt": {
+                    "question": f"Which word best completes this sentence from the recording? '{cloze}'",
+                    "options": _word_options(answer, sentence),
+                    "audioKey": passage.get("audioKey"),
+                    "audioBucket": "passage-audio" if passage.get("audioKey") else None,
+                },
+                "answer_key": {"answer": answer},
+                "difficulty": "medium",
+                "skill": "listening",
+                "grounded_on": {"type": "passage", "id": passage["id"], "title": passage["title"]},
+            }
+        else:
+            ex = {
+                "type": "mcq",
+                "prompt": {
+                    "passage": sentence,
+                    "question": f"Which word completes the excerpt: {cloze}",
+                    "options": _word_options(answer, sentence),
+                },
+                "answer_key": {"answer": answer},
+                "difficulty": "medium",
+                "skill": "reading",
+                "grounded_on": {"type": "passage", "id": passage["id"], "title": passage["title"]},
+            }
         out.append(ex)
     return out
 
@@ -705,21 +753,114 @@ Respond with ONLY a JSON object (no markdown fences, no commentary):
     return exercises
 
 
+def _select_taxonomy_entries(cefr_level: str, n: int) -> list[_TaxonomyEntry]:
+    """Return n taxonomy entries for the given CEFR level.
+
+    Round-robins across cognitive types so all types get representation before
+    any type repeats. Within each type, cycles through the allowed entries in
+    allowed_ids order.
+    """
+    from collections import defaultdict
+
+    allowed_ids = LISTENING_ALLOWED_BY_CEFR.get(cefr_level, ["G-MCQ1", "D-MCQ1"])
+    pool = [_TAXONOMY_BY_ID[tid] for tid in allowed_ids if tid in _TAXONOMY_BY_ID]
+    if not pool:
+        return []
+
+    by_type: dict[str, list[_TaxonomyEntry]] = defaultdict(list)
+    for entry in pool:
+        by_type[entry[1]].append(entry)
+
+    # Preserve the cognitive-type order as first seen in the allowed_ids list.
+    type_order = list(dict.fromkeys(e[1] for e in pool))
+    indices: dict[str, int] = {t: 0 for t in type_order}
+
+    result: list[_TaxonomyEntry] = []
+    while len(result) < n:
+        for cog_type in type_order:
+            if len(result) >= n:
+                break
+            bucket = by_type[cog_type]
+            result.append(bucket[indices[cog_type] % len(bucket)])
+            indices[cog_type] += 1
+    return result
+
+
+def _build_taxonomy_prompt_block(entries: list[_TaxonomyEntry]) -> str:
+    """Render the per-question assignment block for the LLM prompt."""
+    position_notes = {
+        "WHOLE": "requires synthesising the WHOLE recording — no single sentence states the answer",
+        "SEQUENTIAL": "answer requires tracking the ORDER of events/points distributed across the recording",
+        "MULTI_PART": "answer requires combining clues from ≥ 2 NON-ADJACENT segments; neither alone is sufficient",
+        "BACK_30": "answer-bearing sentence is in the FINAL 30% of the recording; the first 70% must not reveal it",
+    }
+    format_notes = {
+        "mcq-single": '4 options, one correct; "options" array has exactly 4 strings',
+        "sentence-completion": '"question" is a gapped sentence ending with ______ ; "options" has 4 completion choices',
+        "note-completion": '"question" is a structured note (2–3 bullet slots) where blanks are marked ______ ; "options" lists 4 possible completions for the LAST blank only (other blanks are fill-in)',
+        "matching": (
+            'Ask about the position of ONE specific item in a sequence. '
+            '"question" names the item and asks which position it occupies '
+            '(e.g. "According to the recording, which of these expressions is introduced SECOND?"). '
+            '"options" lists 4 candidate items from the recording — exactly one occupies the named position. '
+            'Example: question="Which topic does the speaker introduce THIRD?", '
+            'options=["kitchen-table politics","green politics","identity politics","gotcha politics"], '
+            'answer_key.answer="identity politics". '
+            'The learner must track order across the whole recording to answer correctly.'
+        ),
+    }
+    # Track cognitive types already assigned so duplicate types get a deduplication note.
+    seen_cog: dict[str, int] = {}
+    lines = []
+    for i, (tid, cog, fmt, pos) in enumerate(entries, start=1):
+        occurrence = seen_cog.get(cog, 0)
+        seen_cog[cog] = occurrence + 1
+        dedup = (
+            f"\n  Deduplication: a {cog} question already appears earlier in this set — "
+            f"this question MUST ask about a DIFFERENT aspect of the recording "
+            f"(different concept, different section, different vocabulary item)."
+            if occurrence > 0 else ""
+        )
+        lines.append(
+            f"Question {i}: taxonomy_id={tid}, cognitive_type={cog}, response_format={fmt}\n"
+            f"  Position rule: {position_notes[pos]}\n"
+            f"  Format rule: {format_notes[fmt]}"
+            f"{dedup}"
+        )
+    return "\n\n".join(lines)
+
+
 async def _generate_listening_exercises(client: httpx.AsyncClient, passage: dict, cefr_level: str, n: int) -> list[dict]:
     if FORCE_DETERMINISTIC:
         return _deterministic_passage_exercises(passage, "listening", n)
 
-    instructions = f"""Generate exactly {n} multiple-choice (listening-comprehension) exercises for CEFR level {cefr_level}, based ONLY on the transcript below. Every question and its 4 options must be answerable directly from this transcript — do not introduce outside facts.
+    entries = _select_taxonomy_entries(cefr_level, n)
+    taxonomy_block = _build_taxonomy_prompt_block(entries)
 
-TRANSCRIPT: "{passage['title']}"
+    instructions = f"""Generate exactly {n} listening-comprehension questions for CEFR level {cefr_level}.
+
+The learner HEARS this recording; they do NOT read the text. Use the recording content below only to design questions — never surface the text to the learner.
+
+RECORDING CONTENT: "{passage['title']}"
 {passage['body']}
+
+Each question is assigned a cognitive type and response format from the taxonomy. Follow each assignment exactly:
+
+{taxonomy_block}
+
+STRICT RULES (apply to every question):
+1. The "prompt" object must contain ONLY "question" and "options" — no "transcript", no "excerpt", no quoted sentences from the recording.
+2. The question stem and every option must NOT quote or closely paraphrase the answer-bearing sentence from the recording.
+3. Distractors must be plausible given the recording topic — not obviously wrong to someone who listened.
+4. answer_key.answer must be the exact text of one of the strings in "options".
 
 Respond with ONLY a JSON object (no markdown fences, no commentary):
 {{
   "exercises": [
     {{
       "type": "listening-comprehension",
-      "prompt": {{"transcript": "a short relevant excerpt from above", "question": "...", "options": ["...", "...", "...", "..."]}},
+      "taxonomy_id": "...",
+      "prompt": {{"question": "...", "options": ["...", "...", "...", "..."]}},
       "answer_key": {{"answer": "the exact text of the correct option"}},
       "difficulty": "easy|medium|hard"
     }}
@@ -745,15 +886,22 @@ Respond with ONLY a JSON object (no markdown fences, no commentary):
     exercises = _validate_exercises(parsed.get("exercises", []), {"listening-comprehension"}, "listening")
     for ex in exercises:
         ex["grounded_on"] = {"type": "passage", "id": passage["id"], "title": passage["title"]}
-        # Real audioKey/audioBucket from the passage's linked MediaAsset, not LLM output —
-        # the model never sees or invents these, so they can't be hallucinated or mismatched.
+        # Strip any transcript/excerpt the model may have leaked despite the rules,
+        # then attach the real audioKey from the passage's MediaAsset (never from LLM output).
+        ex["prompt"].pop("transcript", None)
+        ex["prompt"].pop("excerpt", None)
         ex["prompt"]["audioKey"] = passage.get("audioKey")
         ex["prompt"]["audioBucket"] = "passage-audio" if passage.get("audioKey") else None
     return exercises
 
 
 async def _generate_writing_exercises(
-    client: httpx.AsyncClient, grammar_point: dict, cefr_level: str, allowed_types: list[str], n: int
+    client: httpx.AsyncClient,
+    grammar_point: dict,
+    cefr_level: str,
+    allowed_types: list[str],
+    n: int,
+    diversity_checker: DiversityChecker | None = None,
 ) -> list[dict]:
     if FORCE_DETERMINISTIC:
         return _deterministic_writing_exercises(grammar_point, n)
@@ -761,22 +909,57 @@ async def _generate_writing_exercises(
     example = grammar_point["examples"][0]["sentence"] if grammar_point.get("examples") else None
     example_line = f'Reference example: "{example}"' if example else "(no reference example — write your own correct example sentence for this construct)"
 
-    instructions = f"""Generate exactly {n} writing exercises for CEFR level {cefr_level} that drill ONE specific grammar point and nothing else: "{grammar_point['title']}" (category: {grammar_point['category']}).
+    # Build the per-type exercise spec only for the types actually requested.
+    type_specs = []
+    if "fill-blank" in allowed_types:
+        type_specs.append(
+            '- "fill-blank": use sentence_pool[0]; prompt.sentence contains "______" where the '
+            "target grammar item belongs, prompt.instruction explains the task, "
+            "answer_key.answer is the exact word/phrase that fills the blank"
+        )
+    if "sentence-correction" in allowed_types:
+        type_specs.append(
+            '- "sentence-correction": use sentence_pool[1]; prompt.sentence is a complete sentence '
+            "containing exactly ONE grammatical error related to this construct, "
+            'prompt.instruction is "Find and correct the error.", '
+            "answer_key.answer is the fully corrected sentence"
+        )
+
+    instructions = f"""Generate a pool of 3 varied sentences that each correctly use the grammar point "{grammar_point['title']}" (category: {grammar_point['category']}) at CEFR level {cefr_level}. Each sentence must depict a DIFFERENT real-world scenario (e.g., workplace email, casual conversation, formal presentation, shopping, travel). No two sentences may share the same subject, setting, or situation.
 {example_line}
 
-Allowed exercise types: {', '.join(allowed_types)}.
-- "fill-blank": prompt.sentence must contain a literal blank "______", prompt.instruction explains the task, answer_key.answer is the word/phrase that fills it.
-- "sentence-correction": prompt.sentence is a complete sentence containing exactly one grammatical error related to this construct, prompt.instruction is "Find and correct the error.", answer_key.answer is the fully corrected sentence.
+Then create exactly {n} exercises, one per type below. Each exercise MUST draw from a different sentence in sentence_pool — never restyle the same source sentence for two exercise types.
 
-Every sentence must be a natural, complete, self-contained sentence about this grammar point only — do not force in unrelated vocabulary or topics.
+Exercise types (in order):
+{chr(10).join(type_specs)}
+
+STRICT RULES:
+1. sentence_pool entries must be complete, natural sentences ONLY — no labels, parentheses, scenario descriptions, or any meta-text. Output the raw sentence and nothing else.
+2. sentence_pool[0] is used ONLY for the fill-blank exercise.
+3. sentence_pool[1] is used ONLY for the sentence-correction exercise.
+4. sentence_pool[2] is a reserve — do not use it in any exercise.
+5. Every sentence must be natural, complete, and self-contained — do not force in unrelated vocabulary.
+6. For fill-blank: "______" replaces ONLY the exact target grammar item (the word or phrase being practised). Do not include surrounding words in the answer — if the sentence reads "She ______ going", the answer is "is", not "is going".
+7. For sentence-correction: the error must be clearly and unambiguously wrong (e.g. subject-verb disagreement, wrong tense, omitted required word) — not a stylistic or contextual preference.
 
 Respond with ONLY a JSON object (no markdown fences, no commentary):
 {{
+  "sentence_pool": [
+    "First complete sentence here.",
+    "Second complete sentence here.",
+    "Third complete sentence here."
+  ],
   "exercises": [
     {{
-      "type": "fill-blank or sentence-correction",
-      "prompt": {{ ... }},
-      "answer_key": {{"answer": "..."}},
+      "type": "fill-blank",
+      "prompt": {{"sentence": "...", "instruction": "Complete the sentence to practise: {grammar_point['title']}."}},
+      "answer_key": {{"answer": "the exact word or phrase that fills the blank"}},
+      "difficulty": "easy|medium|hard"
+    }},
+    {{
+      "type": "sentence-correction",
+      "prompt": {{"sentence": "...", "instruction": "Find and correct the error."}},
+      "answer_key": {{"answer": "the complete corrected sentence"}},
       "difficulty": "easy|medium|hard"
     }}
   ]
@@ -798,9 +981,42 @@ Respond with ONLY a JSON object (no markdown fences, no commentary):
         print(f"SKIP grammar point {grammar_point['id']}: could not parse LLM JSON output ({exc})")
         return []
 
+    raw_pool = parsed.get("sentence_pool", [])
+    # Strip any scenario labels the model appended despite the rules,
+    # e.g. "She is here. (scenario: workplace)" → "She is here."
+    pool = [re.sub(r"\s*\(scenario:[^)]*\)", "", s).strip() for s in raw_pool]
+    if len(pool) >= 2:
+        print(f"  pool[0]={pool[0][:60]!r} | pool[1]={pool[1][:60]!r}")
+        # Within-pool diversity check: pool[0] and pool[1] must be distinct sentences.
+        # If the model reused the same sentence, log a warning — the exercise will still
+        # be emitted so the module isn't silently empty, but human review of the JSONL
+        # should replace any flagged pair.
+        pool_checker = DiversityChecker(threshold=0.72)
+        pool_checker.add(pool[0], "pool-0")
+        pool_result = pool_checker.check(pool[1], "pool-1")
+        if not pool_result.is_diverse:
+            print(
+                f"  WARN pool-diversity [{grammar_point['title']}]: "
+                f"pool[0] and pool[1] too similar (score={pool_result.nearest_score:.2f}) "
+                f"— fill-blank and sentence-correction may share the same source sentence"
+            )
+
     exercises = _validate_exercises(parsed.get("exercises", []), set(allowed_types), "writing")
     for ex in exercises:
         ex["grounded_on"] = {"type": "grammar_point", "id": grammar_point["id"], "title": grammar_point["title"]}
+        # Cross-grammar-point diversity check: flag sentences that are too similar to
+        # previously accepted sentences in the same module.
+        if diversity_checker is not None:
+            sentence = ex.get("prompt", {}).get("sentence", "")
+            if sentence:
+                label = f"{grammar_point['title']}/{ex['type']}"
+                result = diversity_checker.check_and_add(sentence, label)
+                if not result.is_diverse:
+                    print(
+                        f"  WARN cross-diversity [{label}]: "
+                        f"score={result.nearest_score:.2f} vs '{result.nearest_label}' "
+                        f"— sentence may be a near-duplicate of an earlier exercise in this module"
+                    )
     return exercises
 
 
@@ -897,10 +1113,15 @@ async def _build_writing_module(client: httpx.AsyncClient, batch: dict) -> dict 
         print(f"SKIP module {batch['module_id']}: no grammar points available for {batch['cefr_level']}")
         return None
 
+    # One checker per module — tracks all accepted sentences across grammar points
+    # to flag near-duplicates that slip through despite different grounding targets.
+    module_diversity = DiversityChecker(threshold=0.72)
+
     flat_exercises = []
     for gp in grammar_points:
         exercises = await _generate_writing_exercises(
-            client, gp, batch["cefr_level"], batch["exercise_types"], batch["exercises_per_grammar_point"]
+            client, gp, batch["cefr_level"], batch["exercise_types"],
+            batch["exercises_per_grammar_point"], diversity_checker=module_diversity,
         )
         flat_exercises.extend(exercises)
         print(f"OK  grammar point \"{gp['title']}\" -> {len(exercises)} exercises")
