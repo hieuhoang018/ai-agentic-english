@@ -47,7 +47,7 @@ async def run_analysis(clerk_user_id: str) -> dict:
     persistent = detect_persistent_errors(errors, min_sessions=5)
 
     # Plateau detection
-    theta_series = []  # TODO Phase 8+: extract theta history from assessment_history
+    theta_series = [0.0] * len(sessions)  # proxy count; Phase 8+ will extract real theta values
     plateau_result = detect_plateau(theta_series)
 
     # Behavioural risk

@@ -70,3 +70,22 @@ async def test_empty_sessions_does_not_crash(monkeypatch):
 
     result = await run_analysis("user-003")
     assert "risk_score" in result
+
+
+async def test_plateau_reaches_stub_when_5_or_more_sessions(monkeypatch):
+    """
+    With >= 5 sessions, plateau detection must reach changepoint.py's stub:True
+    branch — NOT return insufficient_data:True.
+    This test FAILS before the fix because theta_series is hardcoded to [].
+    """
+    sessions = [_make_session(i * 3) for i in range(6)]  # 6 sessions, every 3 days
+    _make_http_client_mock(sessions, monkeypatch)
+
+    from agents.agt08_analysis.service import run_analysis
+    result = await run_analysis("user-plateau-fix")
+
+    assert result["plateau"].get("insufficient_data") is not True, (
+        "Expected plateau to reach stub branch for 6 sessions, "
+        f"but got insufficient_data=True. Full result: {result}"
+    )
+    assert result["plateau"].get("stub") is True
