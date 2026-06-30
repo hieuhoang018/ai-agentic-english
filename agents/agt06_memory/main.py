@@ -126,6 +126,30 @@ async def get_writing(session_id: str):
     return state
 
 
+@app.post("/sessions/{session_id}/meta", status_code=204)
+async def set_session_meta(session_id: str, body: dict = Body(...)):
+    await stm.set_session_meta(session_id, body)
+
+
+@app.get("/sessions/{session_id}/meta")
+async def get_session_meta(session_id: str):
+    meta = await stm.get_session_meta(session_id)
+    if meta is None:
+        raise HTTPException(status_code=404, detail="Session meta not found")
+    return meta
+
+
+@app.delete("/sessions/{session_id}/meta", status_code=204)
+async def delete_session_meta(session_id: str):
+    await stm.delete_session_meta(session_id)
+
+
+@app.post("/sessions/{session_id}/meta/increment-turn")
+async def increment_turn(session_id: str):
+    count = await stm.incr_turn_count(session_id)
+    return {"turn_count": count}
+
+
 # ── Consolidation ─────────────────────────────────────────────────────────────
 
 @app.post("/sessions/{session_id}/consolidate")
