@@ -57,6 +57,6 @@ async def translate(content: str, zone: str) -> tuple[str, bool]:
     ]
     translated = await call_llm(messages, AgentID.AGT11)
 
-    await r.setex(key, CACHE_TTL, translated.encode("utf-8"))
+    await r.set(key, translated.encode("utf-8"), ex=CACHE_TTL)
     logger.debug("Translation cached key=%s", key)
     return translated, False

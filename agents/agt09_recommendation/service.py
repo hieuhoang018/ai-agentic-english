@@ -69,7 +69,7 @@ async def _compute_recommendations(clerk_user_id: str) -> list[dict]:
         recs = score_items(candidates, profile, [])
 
     r = await get_redis()
-    await r.setex(f"reco:{clerk_user_id}", CACHE_TTL, json.dumps(recs))
+    await r.set(f"reco:{clerk_user_id}", json.dumps(recs), ex=CACHE_TTL)
     return recs
 
 

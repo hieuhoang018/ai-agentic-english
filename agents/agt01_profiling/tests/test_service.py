@@ -134,7 +134,7 @@ async def test_get_profile_with_session_id_calls_agt06_not_redis(monkeypatch):
         "goal_profile": {},
         "cold_start_flag": False,
     }
-    await fake.setex(b"profile:user1", 300, json.dumps(profile).encode())
+    await fake.set(b"profile:user1", json.dumps(profile).encode(), ex=300)
 
     async def fake_get_redis():
         return fake
@@ -174,7 +174,7 @@ async def test_update_profile_deep_merges_grammar_error_map(monkeypatch):
         "goal_profile": {},
         "cold_start_flag": False,
     }
-    await fake.setex(b"profile:user_dm", 300, json.dumps(profile).encode())
+    await fake.set(b"profile:user_dm", json.dumps(profile).encode(), ex=300)
 
     async def fake_get_redis():
         return fake

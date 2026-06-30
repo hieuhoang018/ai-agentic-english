@@ -108,7 +108,7 @@ async def _fetch_catalog_summary() -> dict:
     except Exception as exc:
         logger.warning("generate_plan: catalog summary fetch failed: %s", exc)
 
-    await r.setex(CATALOG_CACHE_KEY, CATALOG_CACHE_TTL, json.dumps(catalog))
+    await r.set(CATALOG_CACHE_KEY, json.dumps(catalog), ex=CATALOG_CACHE_TTL)
     return catalog
 
 
