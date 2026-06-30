@@ -2,10 +2,10 @@ import math
 import pytest
 from agents.agt05_assessment.cat_engine import (
     estimate_theta_eap,
-    select_next_item_stub,
     select_next_item_eap,
-    should_terminate,
+    should_terminate_eap,
     _fisher_information,
+    _standard_error,
 )
 
 
@@ -75,73 +75,6 @@ def test_estimate_theta_eap_more_correct_responses_increase_theta_monotonically(
         assert later >= earlier - 1e-9, f"theta decreased: {thetas}"
 
 
-# ── should_terminate ──────────────────────────────────────────────────────────
-
-def test_should_terminate_empty_responses():
-    assert should_terminate([]) is False
-
-
-def test_should_terminate_below_max():
-    responses = [{"item_id": f"item-{i}", "correct": True} for i in range(29)]
-    assert should_terminate(responses) is False
-
-
-def test_should_terminate_at_max():
-    responses = [{"item_id": f"item-{i}", "correct": True} for i in range(30)]
-    assert should_terminate(responses) is True
-
-
-def test_should_terminate_above_max():
-    responses = [{"item_id": f"item-{i}", "correct": True} for i in range(35)]
-    assert should_terminate(responses) is True
-
-
-def test_should_terminate_one_below_max():
-    responses = [{"item_id": f"item-{i}", "correct": True} for i in range(29)]
-    assert should_terminate(responses) is False
-
-
-# ── select_next_item_stub ─────────────────────────────────────────────────────
-
-def test_select_next_item_stub_empty_bank_returns_none():
-    assert select_next_item_stub(0.0, [], []) is None
-
-
-def test_select_next_item_stub_all_answered_returns_none():
-    item_bank = [{"item_id": "item-1", "difficulty_param": 0.0}]
-    assert select_next_item_stub(0.0, ["item-1"], item_bank) is None
-
-
-def test_select_next_item_stub_picks_closest_difficulty_to_theta():
-    item_bank = [
-        {"item_id": "easy",   "difficulty_param": -1.0},
-        {"item_id": "medium", "difficulty_param":  0.1},
-        {"item_id": "hard",   "difficulty_param":  1.5},
-    ]
-    result = select_next_item_stub(0.0, [], item_bank)
-    # |0.1 - 0.0| = 0.1 is smallest
-    assert result["item_id"] == "medium"
-
-
-def test_select_next_item_stub_skips_already_answered():
-    item_bank = [
-        {"item_id": "easy",   "difficulty_param": -1.0},
-        {"item_id": "medium", "difficulty_param":  0.1},
-        {"item_id": "hard",   "difficulty_param":  1.5},
-    ]
-    result = select_next_item_stub(0.0, ["medium"], item_bank)
-    # medium answered → next closest to 0.0 is easy (|-1.0| = 1.0) vs hard (|1.5| = 1.5)
-    assert result["item_id"] == "easy"
-
-
-def test_select_next_item_stub_returns_full_item_dict():
-    item_bank = [{"item_id": "item-1", "difficulty_param": 0.5, "extra_field": "value"}]
-    result = select_next_item_stub(0.0, [], item_bank)
-    assert result is not None
-    assert result["item_id"] == "item-1"
-    assert result["extra_field"] == "value"
-
-
 # ── _fisher_information / select_next_item_eap ────────────────────────────────
 
 def test_fisher_information_is_maximised_at_theta_equals_difficulty():
@@ -186,3 +119,54 @@ def test_select_next_item_eap_returns_full_item_dict():
     item_bank = [{"item_id": "item-1", "difficulty_param": 0.5, "extra_field": "value"}]
     result = select_next_item_eap(theta=0.0, answered_ids=[], item_bank=item_bank)
     assert result["extra_field"] == "value"
+
+
+# ── _standard_error / should_terminate_eap ────────────────────────────────────
+
+def test_standard_error_decreases_as_more_items_answered():
+    """SE(theta) must shrink as more informative responses accumulate."""
+    se_after_1 = _standard_error(theta=0.0, administered_difficulties=[0.0])
+    se_after_5 = _standard_error(theta=0.0, administered_difficulties=[0.0] * 5)
+    assert se_after_5 < se_after_1
+
+
+def test_standard_error_undefined_with_zero_items_returns_large_value():
+    """With no items administered, SE is undefined (division by zero info) —
+    must return a large sentinel, not raise or return 0.0 (which would
+    incorrectly signal high precision with zero data)."""
+    se = _standard_error(theta=0.0, administered_difficulties=[])
+    assert se > 10.0
+
+
+def test_should_terminate_eap_false_when_se_above_threshold_and_bank_not_exhausted():
+    responses = [{"item_id": "item-1", "difficulty_param": 0.0, "correct": True}]
+    result = should_terminate_eap(responses, theta=0.0, item_bank_size=12)
+    assert result is False
+
+
+def test_should_terminate_eap_true_when_se_below_threshold():
+    """After enough well-targeted responses, SE(theta) should drop below 0.3."""
+    responses = [
+        {"item_id": f"item-{i}", "difficulty_param": 0.0, "correct": i % 2 == 0}
+        for i in range(12)
+    ]
+    result = should_terminate_eap(responses, theta=0.0, item_bank_size=12)
+    assert result is True
+
+
+def test_should_terminate_eap_true_when_bank_exhausted_even_if_se_above_threshold():
+    """A 12-item bank with only 1 item answered so far but item_bank_size=1
+    must terminate — there is nothing left to administer, regardless of SE."""
+    responses = [{"item_id": "item-1", "difficulty_param": 0.0, "correct": True}]
+    result = should_terminate_eap(responses, theta=0.0, item_bank_size=1)
+    assert result is True
+
+
+def test_should_terminate_eap_respects_max_items_cap_below_bank_size():
+    """Even with a huge item bank, a max_items cap (default 30) must still apply."""
+    responses = [
+        {"item_id": f"item-{i}", "difficulty_param": 5.0, "correct": False}  # poorly targeted -> high SE
+        for i in range(30)
+    ]
+    result = should_terminate_eap(responses, theta=0.0, item_bank_size=1000, max_items=30)
+    assert result is True

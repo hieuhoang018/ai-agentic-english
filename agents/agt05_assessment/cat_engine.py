@@ -1,23 +1,33 @@
 """
 Computerised Adaptive Testing (CAT) engine.
 
-STUB — sequential item delivery only.
-TODO Phase 8+: implement full 3PL IRT with Fisher information maximisation.
+Implements real 1PL (Rasch) IRT psychometrics: EAP theta estimation,
+Fisher-information-based item selection, and SE(theta)-based termination.
+This is the complete, non-stub implementation for the current 1PL scope.
 
-3PL model (for future implementation):
-  P(correct | theta) = c + (1-c) / (1 + exp(-a*(theta - b)))
-  Parameters per item: a (discrimination), b (difficulty), c (guessing)
+1PL (Rasch) model:
+  P(correct | theta) = 1 / (1 + exp(-(theta - b)))
+  Parameter per item: b (difficulty). There is no discrimination (a) or
+  guessing (c) parameter, since the real item bank only calibrates a single
+  difficulty value per item.
 
-CAT termination:
-  SE(theta) < 0.3  OR  max_items reached (default 30 per skill)
+Theta estimation:
+  EAP (Expectation A Posteriori) via numerical quadrature over a fixed grid
+  (see estimate_theta_eap).
 
 Item selection:
-  Fisher information maximisation: I(theta) = a^2 * P*(1-P*) / P(1-P)
-  where P* = P - c / (1 - c)
+  Fisher information maximisation: I(theta) = P(theta) * (1 - P(theta))
+  (see select_next_item_eap / _fisher_information).
 
-Exposure control:
-  Sympson-Hetter method (target exposure rate <= 0.25 per item)
-  TODO Phase 8+: implement exposure control table per item bank
+CAT termination:
+  SE(theta) < 0.3  OR  answered count reaches min(max_items, item_bank_size)
+  (see should_terminate_eap / _standard_error).
+
+Deliberately out of scope:
+  - True 3PL (discrimination `a` and guessing `c` parameters) — would
+    require fabricating calibration data the item bank does not have.
+  - Sympson-Hetter exposure control — not needed at the current item bank
+    size/usage scale; not part of this module's design.
 """
 
 import math
@@ -68,18 +78,6 @@ def estimate_theta_eap(responses: list[dict]) -> float:
     return round(numerator / denominator, 4)
 
 
-def select_next_item_stub(theta: float, answered_ids: list[str], item_bank: list[dict]) -> dict | None:
-    """
-    Stub item selection: return next unanswered item ordered by difficulty proximity to theta.
-    TODO Phase 8+: replace with Fisher information maximisation.
-    """
-    unanswered = [i for i in item_bank if i["item_id"] not in answered_ids]
-    if not unanswered:
-        return None
-    # Select item whose difficulty is closest to current theta
-    return min(unanswered, key=lambda i: abs(i.get("difficulty_param", 0.0) - theta))
-
-
 def _fisher_information(theta: float, difficulty: float) -> float:
     """1PL Fisher information: I(theta) = P(theta)*(1 - P(theta))."""
     p = _p_correct(theta, difficulty)
@@ -99,9 +97,35 @@ def select_next_item_eap(theta: float, answered_ids: list[str], item_bank: list[
     return max(unanswered, key=lambda i: _fisher_information(theta, i.get("difficulty_param", 0.0)))
 
 
-def should_terminate(responses: list[dict], max_items: int = 30) -> bool:
+_SE_TERMINATION_THRESHOLD = 0.3
+_LARGE_SE_SENTINEL = 999.0
+
+
+def _standard_error(theta: float, administered_difficulties: list[float]) -> float:
+    """SE(theta) = 1 / sqrt(sum of Fisher information across administered items)."""
+    total_info = sum(_fisher_information(theta, b) for b in administered_difficulties)
+    if total_info <= 0.0:
+        return _LARGE_SE_SENTINEL
+    return 1.0 / math.sqrt(total_info)
+
+
+def should_terminate_eap(
+    responses: list[dict],
+    theta: float,
+    item_bank_size: int,
+    max_items: int = 30,
+) -> bool:
     """
-    Stub termination: stop at max_items.
-    TODO Phase 8+: terminate when SE(theta) < 0.3.
+    Terminate when SE(theta) < 0.3, OR when the answered count reaches
+    min(max_items, item_bank_size) — whichever comes first. The bank-size cap
+    matters because the real item bank (~12 items/skill) is far smaller than
+    the default max_items=30, so without this cap the function would never
+    naturally terminate via the "max_items reached" path against real data.
     """
-    return len(responses) >= max_items
+    effective_max = min(max_items, item_bank_size)
+    if len(responses) >= effective_max:
+        return True
+
+    administered_difficulties = [r["difficulty_param"] for r in responses]
+    se = _standard_error(theta, administered_difficulties)
+    return se < _SE_TERMINATION_THRESHOLD
