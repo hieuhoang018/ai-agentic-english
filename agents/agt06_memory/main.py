@@ -150,6 +150,12 @@ async def increment_turn(session_id: str):
     return {"turn_count": count}
 
 
+@app.get("/sessions/{session_id}/meta/turn-count")
+async def get_turn_count(session_id: str):
+    count = await stm.get_turn_count(session_id)
+    return {"turn_count": count}
+
+
 # ── Consolidation ─────────────────────────────────────────────────────────────
 
 @app.post("/sessions/{session_id}/consolidate")

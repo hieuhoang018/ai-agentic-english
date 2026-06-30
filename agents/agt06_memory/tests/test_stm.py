@@ -146,3 +146,17 @@ async def test_incr_turn_count_is_independent_per_session():
     await stm.incr_turn_count("sess1")
     count_other = await stm.incr_turn_count("sess2")
     assert count_other == 1
+
+
+async def test_get_turn_count_without_incrementing():
+    await stm.incr_turn_count("sess1")
+    await stm.incr_turn_count("sess1")
+    count = await stm.get_turn_count("sess1")
+    assert count == 2
+    # confirm it truly did not increment as a side effect
+    count_again = await stm.get_turn_count("sess1")
+    assert count_again == 2
+
+
+async def test_get_turn_count_zero_when_never_incremented():
+    assert await stm.get_turn_count("never-touched") == 0

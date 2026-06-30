@@ -53,3 +53,18 @@ async def test_increment_turn_endpoint_returns_count():
 
         resp = await client.post("/sessions/sessC/meta/increment-turn")
         assert resp.json() == {"turn_count": 2}
+
+
+async def test_get_turn_count_endpoint_returns_zero_for_new_session():
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.get("/sessions/fresh-session/meta/turn-count")
+        assert resp.status_code == 200
+        assert resp.json() == {"turn_count": 0}
+
+
+async def test_get_turn_count_endpoint_reflects_increments():
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        await client.post("/sessions/sessD/meta/increment-turn")
+        await client.post("/sessions/sessD/meta/increment-turn")
+        resp = await client.get("/sessions/sessD/meta/turn-count")
+        assert resp.json() == {"turn_count": 2}

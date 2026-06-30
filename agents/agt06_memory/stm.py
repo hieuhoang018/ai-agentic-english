@@ -145,6 +145,12 @@ async def incr_turn_count(session_id: str) -> int:
     return count
 
 
+async def get_turn_count(session_id: str) -> int:
+    r = await get_redis()
+    raw = await r.get(f"session:{session_id}:turns")
+    return int(raw) if raw else 0
+
+
 async def get_all_session_keys(session_id: str) -> dict:
     """
     Read all STM data for a session in one pass.
