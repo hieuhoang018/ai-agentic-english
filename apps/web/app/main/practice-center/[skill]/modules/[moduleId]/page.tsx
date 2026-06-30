@@ -5,6 +5,7 @@ import { serverApiFetch } from '@/lib/api/server';
 import type { ExerciseDto, LessonDto, ModuleDto } from '@/lib/api/types';
 
 import ExerciseWorkspace from '../../../_components/ExerciseWorkspace';
+import { getActivePathModuleIds, isModuleInActivePath } from '../../../_lib/active-path';
 import { isPracticeSkillId } from '../../../_lib/practice-catalog';
 
 type ModuleExercisePageProps = {
@@ -35,6 +36,8 @@ export default async function ModuleExercisePage({
 }: ModuleExercisePageProps) {
   const { skill, moduleId } = await params;
   if (!isPracticeSkillId(skill)) notFound();
+  const activePathModuleIds = await getActivePathModuleIds();
+  if (!isModuleInActivePath(moduleId, activePathModuleIds)) notFound();
 
   const practiceModule = await getRequired<ModuleDto>(`/modules/${moduleId}`);
   if (practiceModule.skillFocus !== skill) notFound();
