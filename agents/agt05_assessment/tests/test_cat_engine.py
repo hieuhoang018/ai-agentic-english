@@ -3,7 +3,9 @@ import pytest
 from agents.agt05_assessment.cat_engine import (
     estimate_theta_eap,
     select_next_item_stub,
+    select_next_item_eap,
     should_terminate,
+    _fisher_information,
 )
 
 
@@ -137,4 +139,50 @@ def test_select_next_item_stub_returns_full_item_dict():
     result = select_next_item_stub(0.0, [], item_bank)
     assert result is not None
     assert result["item_id"] == "item-1"
+    assert result["extra_field"] == "value"
+
+
+# ── _fisher_information / select_next_item_eap ────────────────────────────────
+
+def test_fisher_information_is_maximised_at_theta_equals_difficulty():
+    """Information I(theta) = P(1-P) peaks at exactly 0.25 when theta == difficulty
+    (since P=0.5 there, and P(1-P) is maximised at P=0.5)."""
+    info_at_peak = _fisher_information(0.5, 0.5)
+    info_away = _fisher_information(0.5, 2.0)
+    assert info_at_peak == pytest.approx(0.25)
+    assert info_at_peak > info_away
+
+
+def test_select_next_item_eap_picks_item_closest_to_theta_when_well_separated():
+    item_bank = [
+        {"item_id": "easy", "difficulty_param": -2.0},
+        {"item_id": "medium", "difficulty_param": 0.1},
+        {"item_id": "hard", "difficulty_param": 2.0},
+    ]
+    result = select_next_item_eap(theta=0.0, answered_ids=[], item_bank=item_bank)
+    assert result["item_id"] == "medium"
+
+
+def test_select_next_item_eap_skips_already_answered():
+    item_bank = [
+        {"item_id": "easy", "difficulty_param": -1.0},
+        {"item_id": "medium", "difficulty_param": 0.1},
+        {"item_id": "hard", "difficulty_param": 1.5},
+    ]
+    result = select_next_item_eap(theta=0.0, answered_ids=["medium"], item_bank=item_bank)
+    assert result["item_id"] == "easy"  # |-1.0| info > |1.5| info at theta=0
+
+
+def test_select_next_item_eap_empty_bank_returns_none():
+    assert select_next_item_eap(theta=0.0, answered_ids=[], item_bank=[]) is None
+
+
+def test_select_next_item_eap_all_answered_returns_none():
+    item_bank = [{"item_id": "item-1", "difficulty_param": 0.0}]
+    assert select_next_item_eap(theta=0.0, answered_ids=["item-1"], item_bank=item_bank) is None
+
+
+def test_select_next_item_eap_returns_full_item_dict():
+    item_bank = [{"item_id": "item-1", "difficulty_param": 0.5, "extra_field": "value"}]
+    result = select_next_item_eap(theta=0.0, answered_ids=[], item_bank=item_bank)
     assert result["extra_field"] == "value"

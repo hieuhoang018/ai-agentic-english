@@ -80,6 +80,25 @@ def select_next_item_stub(theta: float, answered_ids: list[str], item_bank: list
     return min(unanswered, key=lambda i: abs(i.get("difficulty_param", 0.0) - theta))
 
 
+def _fisher_information(theta: float, difficulty: float) -> float:
+    """1PL Fisher information: I(theta) = P(theta)*(1 - P(theta))."""
+    p = _p_correct(theta, difficulty)
+    return p * (1.0 - p)
+
+
+def select_next_item_eap(theta: float, answered_ids: list[str], item_bank: list[dict]) -> dict | None:
+    """
+    Select the unanswered item that maximises Fisher information at the
+    current theta estimate. Under 1PL this is equivalent to (but computed via
+    the real information formula, not a difficulty-distance proxy) picking
+    the item whose difficulty is closest to theta.
+    """
+    unanswered = [i for i in item_bank if i["item_id"] not in answered_ids]
+    if not unanswered:
+        return None
+    return max(unanswered, key=lambda i: _fisher_information(theta, i.get("difficulty_param", 0.0)))
+
+
 def should_terminate(responses: list[dict], max_items: int = 30) -> bool:
     """
     Stub termination: stop at max_items.
