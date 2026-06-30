@@ -113,7 +113,7 @@ export default function GeneratedPlanPage() {
         <h1 className="text-4xl font-bold text-primary">Hành Trình Của Bạn Bắt Đầu</h1>
         <p className="mt-3 max-w-2xl text-on-surface-variant">Wise Mentor đã thiết kế lộ trình học tập cá nhân hóa dựa trên các lựa chọn của bạn.</p>
       </div>
-      <GeneratedPlanPreview activities={state.plan.pathDefinition.activities} />
+      <GeneratedPlanPreview pathDefinition={state.plan.pathDefinition} />
       <CompleteOnboardingLink href={onboardingRoutes.done} className="mt-8 flex h-14 items-center justify-center rounded-full bg-primary px-10 text-xl font-bold text-white shadow-lg">
         Bắt Đầu Hành Trình
       </CompleteOnboardingLink>
