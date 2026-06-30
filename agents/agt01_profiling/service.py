@@ -98,7 +98,7 @@ async def _get_base_profile(clerk_user_id: str) -> dict:
 
     profile = _row_to_dict(row)
     # Write to cache
-    await r.setex(cache_key, PROFILE_CACHE_TTL, json.dumps(profile, default=str))
+    await r.set(cache_key, json.dumps(profile, default=str), ex=PROFILE_CACHE_TTL)
     return profile
 
 

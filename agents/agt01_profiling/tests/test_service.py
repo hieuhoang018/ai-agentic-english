@@ -134,7 +134,7 @@ async def test_get_profile_with_session_id_calls_agt06_not_redis(monkeypatch):
         "goal_profile": {},
         "cold_start_flag": False,
     }
-    await fake.setex(b"profile:user1", 300, json.dumps(profile).encode())
+    await fake.set(b"profile:user1", json.dumps(profile).encode(), ex=300)
 
     async def fake_get_redis():
         return fake
@@ -174,7 +174,7 @@ async def test_update_profile_deep_merges_grammar_error_map(monkeypatch):
         "goal_profile": {},
         "cold_start_flag": False,
     }
-    await fake.setex(b"profile:user_dm", 300, json.dumps(profile).encode())
+    await fake.set(b"profile:user_dm", json.dumps(profile).encode(), ex=300)
 
     async def fake_get_redis():
         return fake
@@ -209,3 +209,108 @@ async def test_update_profile_deep_merges_grammar_error_map(monkeypatch):
     gmap = current["grammar_error_map"]
     assert gmap["SPEAKING"]["verb_tense"] == 1.0, "verb_tense must survive deep merge"
     assert gmap["SPEAKING"]["article_usage"] == 0.5, "article_usage must be added by deep merge"
+
+
+@respx.mock
+async def test_merge_falls_back_to_base_when_agt06_returns_500(patch_redis):
+    """AGT-06 HTTP 500 -> _get_stm_errors returns [] -> base profile returned unchanged."""
+    clerk_id = f"test-user-{uuid.uuid4()}"
+    session_id = str(uuid.uuid4())
+    await service.create_profile(clerk_id)
+    await service.update_profile(clerk_id, {
+        "grammar_error_map": {"SPEAKING": {"verb_tense": 2.0}},
+    })
+
+    agt06_url = service.AGT06_BASE_URL
+    respx.get(f"{agt06_url}/sessions/{session_id}/errors").mock(
+        return_value=httpx.Response(500)
+    )
+
+    result = await service.get_profile(clerk_id, session_id=session_id)
+
+    assert result["grammar_error_map"]["SPEAKING"]["verb_tense"] == 2.0
+    assert "_merged_session_id" not in result
+
+
+@respx.mock
+async def test_merge_defaults_skill_domain_when_missing_from_error_event(patch_redis):
+    """Error event without skill_domain key must default to SPEAKING, not crash."""
+    clerk_id = f"test-user-{uuid.uuid4()}"
+    session_id = str(uuid.uuid4())
+    await service.create_profile(clerk_id)
+
+    agt06_url = service.AGT06_BASE_URL
+    respx.get(f"{agt06_url}/sessions/{session_id}/errors").mock(
+        return_value=httpx.Response(200, json=[
+            {"error_type": "verb_tense", "severity": 3}
+        ])
+    )
+
+    result = await service.get_profile(clerk_id, session_id=session_id)
+
+    assert result["grammar_error_map"]["SPEAKING"]["verb_tense"] == 3.0
+    assert "_merged_session_id" in result
+
+
+@respx.mock
+async def test_merge_defaults_severity_to_1_when_missing(patch_redis):
+    """Error event without severity must add 1.0 to the error count."""
+    clerk_id = f"test-user-{uuid.uuid4()}"
+    session_id = str(uuid.uuid4())
+    await service.create_profile(clerk_id)
+
+    agt06_url = service.AGT06_BASE_URL
+    respx.get(f"{agt06_url}/sessions/{session_id}/errors").mock(
+        return_value=httpx.Response(200, json=[
+            {"skill_domain": "WRITING", "error_type": "punctuation"}
+        ])
+    )
+
+    result = await service.get_profile(clerk_id, session_id=session_id)
+
+    assert result["grammar_error_map"]["WRITING"]["punctuation"] == 1.0
+
+
+@respx.mock
+async def test_merge_speaking_errors_do_not_bleed_into_writing(patch_redis):
+    """SPEAKING and WRITING error counts must be tracked independently."""
+    clerk_id = f"test-user-{uuid.uuid4()}"
+    session_id = str(uuid.uuid4())
+    await service.create_profile(clerk_id)
+    await service.update_profile(clerk_id, {
+        "grammar_error_map": {
+            "SPEAKING": {"verb_tense": 1.0},
+            "WRITING": {"punctuation": 5.0},
+        },
+    })
+
+    agt06_url = service.AGT06_BASE_URL
+    respx.get(f"{agt06_url}/sessions/{session_id}/errors").mock(
+        return_value=httpx.Response(200, json=[
+            {"skill_domain": "SPEAKING", "error_type": "verb_tense", "severity": 2}
+        ])
+    )
+
+    result = await service.get_profile(clerk_id, session_id=session_id)
+
+    assert result["grammar_error_map"]["SPEAKING"]["verb_tense"] == 3.0
+    assert result["grammar_error_map"]["WRITING"]["punctuation"] == 5.0
+
+
+@respx.mock
+async def test_merge_initialises_new_error_type_not_in_ltm(patch_redis):
+    """An error type with no LTM history must be initialised to severity, not crash."""
+    clerk_id = f"test-user-{uuid.uuid4()}"
+    session_id = str(uuid.uuid4())
+    await service.create_profile(clerk_id)
+
+    agt06_url = service.AGT06_BASE_URL
+    respx.get(f"{agt06_url}/sessions/{session_id}/errors").mock(
+        return_value=httpx.Response(200, json=[
+            {"skill_domain": "READING", "error_type": "comprehension", "severity": 4}
+        ])
+    )
+
+    result = await service.get_profile(clerk_id, session_id=session_id)
+
+    assert result["grammar_error_map"]["READING"]["comprehension"] == 4.0

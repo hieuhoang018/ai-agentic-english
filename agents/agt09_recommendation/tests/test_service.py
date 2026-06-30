@@ -218,7 +218,7 @@ async def test_cache_miss_stores_result_in_redis(fake_redis):
 async def test_cache_hit_does_not_call_http(fake_redis):
     # Prepopulate cache manually
     cached = [{"id": "cached-item", "title": "Cached", "cold_start": True}]
-    await fake_redis.setex("reco:user-hit", 3600, json.dumps(cached))
+    await fake_redis.set("reco:user-hit", json.dumps(cached), ex=3600)
 
     # These routes must not be called — respx will raise if they are
     respx.get(f"{AGT01_URL}/profile/user-hit").mock(
@@ -235,7 +235,7 @@ async def test_cache_hit_does_not_call_http(fake_redis):
 @respx.mock
 async def test_cache_hit_returns_exact_cached_data(fake_redis):
     cached = [{"id": "x", "title": "X", "skillDomain": "READING"}]
-    await fake_redis.setex("reco:user-exact", 3600, json.dumps(cached))
+    await fake_redis.set("reco:user-exact", json.dumps(cached), ex=3600)
 
     respx.get(f"{AGT01_URL}/profile/user-exact").mock(
         side_effect=AssertionError("must not be called")
@@ -251,7 +251,7 @@ async def test_cache_hit_returns_exact_cached_data(fake_redis):
 @respx.mock
 async def test_different_users_have_independent_caches(fake_redis):
     # User A: cached with 1 cold-start item
-    await fake_redis.setex("reco:user-a", 3600, json.dumps([{"id": "a", "cold_start": True}]))
+    await fake_redis.set("reco:user-a", json.dumps([{"id": "a", "cold_start": True}]), ex=3600)
 
     # User B: cache miss → calls HTTP
     respx.get(f"{AGT01_URL}/profile/user-b").mock(
@@ -272,7 +272,7 @@ async def test_different_users_have_independent_caches(fake_redis):
 # ── invalidate_cache ──────────────────────────────────────────────────────────
 
 async def test_invalidate_cache_removes_redis_key(fake_redis):
-    await fake_redis.setex("reco:user-inv", 3600, json.dumps([{"id": "stale"}]))
+    await fake_redis.set("reco:user-inv", json.dumps([{"id": "stale"}]), ex=3600)
 
     await svc.invalidate_cache("user-inv")
 
@@ -283,7 +283,7 @@ async def test_invalidate_cache_removes_redis_key(fake_redis):
 @respx.mock
 async def test_after_invalidation_next_call_recomputes(fake_redis):
     # Seed cache
-    await fake_redis.setex("reco:user-reinv", 3600, json.dumps([{"id": "old"}]))
+    await fake_redis.set("reco:user-reinv", json.dumps([{"id": "old"}]), ex=3600)
 
     # Invalidate
     await svc.invalidate_cache("user-reinv")

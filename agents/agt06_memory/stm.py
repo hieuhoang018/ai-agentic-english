@@ -43,7 +43,7 @@ async def get_errors(session_id: str) -> list[dict]:
 
 async def set_state(session_id: str, state: dict) -> None:
     r = await get_redis()
-    await r.setex(f"session:{session_id}:state", SESSION_TTL, json.dumps(state))
+    await r.set(f"session:{session_id}:state", json.dumps(state), ex=SESSION_TTL)
 
 
 async def get_state(session_id: str) -> dict | None:
@@ -74,7 +74,7 @@ async def get_context(session_id: str) -> list[dict]:
 
 async def set_difficulty(session_id: str, state: dict) -> None:
     r = await get_redis()
-    await r.setex(f"session:{session_id}:difficulty", SESSION_TTL, json.dumps(state))
+    await r.set(f"session:{session_id}:difficulty", json.dumps(state), ex=SESSION_TTL)
 
 
 async def get_difficulty(session_id: str) -> dict | None:
@@ -85,7 +85,7 @@ async def get_difficulty(session_id: str) -> dict | None:
 
 async def set_lang(session_id: str, state: dict) -> None:
     r = await get_redis()
-    await r.setex(f"session:{session_id}:lang", SESSION_TTL, json.dumps(state))
+    await r.set(f"session:{session_id}:lang", json.dumps(state), ex=SESSION_TTL)
 
 
 async def get_lang(session_id: str) -> dict | None:
@@ -111,7 +111,7 @@ async def get_vocab(session_id: str) -> list[dict]:
 
 async def set_writing(session_id: str, state: dict) -> None:
     r = await get_redis()
-    await r.setex(f"session:{session_id}:writing", SESSION_TTL, json.dumps(state))
+    await r.set(f"session:{session_id}:writing", json.dumps(state), ex=SESSION_TTL)
 
 
 async def get_writing(session_id: str) -> dict | None:

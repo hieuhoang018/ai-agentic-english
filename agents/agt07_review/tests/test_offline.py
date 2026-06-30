@@ -13,9 +13,10 @@ from unittest.mock import AsyncMock
 
 import agents.agt07_review.offline as offline_module
 import agents.agt07_review.service as service_module
+from agents.shared.config import settings as _settings
 
-AGT06_VOCAB_URL = "http://agt06-memory:8106/ltm/user_test/vocabulary"
-AGT06_ERRORS_URL = "http://localhost:8106/ltm/user_test/errors"
+AGT06_VOCAB_URL = f"{_settings.AGT06_BASE_URL}/ltm/user_test/vocabulary"
+AGT06_ERRORS_URL = f"{_settings.AGT06_BASE_URL}/ltm/user_test/errors"
 
 VOCAB_RESPONSE = [
     {
@@ -127,10 +128,10 @@ def mock_sm2_fetch(monkeypatch):
 
 @respx.mock
 async def test_offline_package_shape(mock_sm2_fetch):
-    respx.get("http://agt06-memory:8106/ltm/user_test/vocabulary").mock(
+    respx.get(f"{_settings.AGT06_BASE_URL}/ltm/user_test/vocabulary").mock(
         return_value=httpx.Response(200, json=VOCAB_RESPONSE)
     )
-    respx.get("http://localhost:8106/ltm/user_test/errors").mock(
+    respx.get(f"{_settings.AGT06_BASE_URL}/ltm/user_test/errors").mock(
         return_value=httpx.Response(200, json=ERRORS_RESPONSE)
     )
 
@@ -146,10 +147,10 @@ async def test_offline_package_shape(mock_sm2_fetch):
 
 @respx.mock
 async def test_offline_package_sm2_state_contains_vocab(mock_sm2_fetch):
-    respx.get("http://agt06-memory:8106/ltm/user_test/vocabulary").mock(
+    respx.get(f"{_settings.AGT06_BASE_URL}/ltm/user_test/vocabulary").mock(
         return_value=httpx.Response(200, json=[])
     )
-    respx.get("http://localhost:8106/ltm/user_test/errors").mock(
+    respx.get(f"{_settings.AGT06_BASE_URL}/ltm/user_test/errors").mock(
         return_value=httpx.Response(200, json=[])
     )
 
@@ -165,10 +166,10 @@ async def test_offline_package_sm2_state_contains_vocab(mock_sm2_fetch):
 
 @respx.mock
 async def test_offline_package_highlight_snapshot_empty_on_agt06_failure(mock_sm2_fetch):
-    respx.get("http://agt06-memory:8106/ltm/user_test/vocabulary").mock(
+    respx.get(f"{_settings.AGT06_BASE_URL}/ltm/user_test/vocabulary").mock(
         return_value=httpx.Response(200, json=[])
     )
-    respx.get("http://localhost:8106/ltm/user_test/errors").mock(
+    respx.get(f"{_settings.AGT06_BASE_URL}/ltm/user_test/errors").mock(
         return_value=httpx.Response(500)
     )
 
@@ -184,10 +185,10 @@ async def test_offline_package_flashcards_due_only_below_threshold(mock_sm2_fetc
         "sm_stability": 100.0,
         "last_encounter": "2099-01-01T00:00:00+00:00",
     }]
-    respx.get("http://agt06-memory:8106/ltm/user_test/vocabulary").mock(
+    respx.get(f"{_settings.AGT06_BASE_URL}/ltm/user_test/vocabulary").mock(
         return_value=httpx.Response(200, json=fresh_vocab)
     )
-    respx.get("http://localhost:8106/ltm/user_test/errors").mock(
+    respx.get(f"{_settings.AGT06_BASE_URL}/ltm/user_test/errors").mock(
         return_value=httpx.Response(200, json=[])
     )
 
@@ -350,10 +351,10 @@ async def test_offline_package_endpoint_returns_200(mock_sm2_fetch):
     from agents.agt07_review.main import app
 
     with respx.mock:
-        respx.get("http://agt06-memory:8106/ltm/user_abc/vocabulary").mock(
+        respx.get(f"{_settings.AGT06_BASE_URL}/ltm/user_abc/vocabulary").mock(
             return_value=_httpx.Response(200, json=[])
         )
-        respx.get("http://localhost:8106/ltm/user_abc/errors").mock(
+        respx.get(f"{_settings.AGT06_BASE_URL}/ltm/user_abc/errors").mock(
             return_value=_httpx.Response(200, json=[])
         )
         async with _httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:

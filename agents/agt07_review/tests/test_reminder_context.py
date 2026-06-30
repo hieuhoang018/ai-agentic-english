@@ -7,7 +7,7 @@ from agents.shared.config import settings
 
 client = TestClient(app)
 
-AGT06_VOCAB_URL = "http://agt06-memory:8106/ltm/user_abc/vocabulary"
+AGT06_VOCAB_URL = f"{settings.AGT06_BASE_URL}/ltm/user_abc/vocabulary"
 
 VOCAB_RESPONSE = [
     {
