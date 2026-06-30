@@ -120,6 +120,31 @@ async def get_writing(session_id: str) -> dict | None:
     return json.loads(raw) if raw else None
 
 
+async def set_session_meta(session_id: str, meta: dict) -> None:
+    r = await get_redis()
+    await r.set(f"session:{session_id}:meta", json.dumps(meta), ex=SESSION_TTL)
+
+
+async def get_session_meta(session_id: str) -> dict | None:
+    r = await get_redis()
+    raw = await r.get(f"session:{session_id}:meta")
+    return json.loads(raw) if raw else None
+
+
+async def delete_session_meta(session_id: str) -> None:
+    r = await get_redis()
+    await r.delete(f"session:{session_id}:meta", f"session:{session_id}:turns")
+
+
+async def incr_turn_count(session_id: str) -> int:
+    r = await get_redis()
+    key = f"session:{session_id}:turns"
+    count = await r.incr(key)
+    if count == 1:
+        await r.expire(key, SESSION_TTL)
+    return count
+
+
 async def get_all_session_keys(session_id: str) -> dict:
     """
     Read all STM data for a session in one pass.

@@ -99,3 +99,50 @@ async def test_append_vocab_sets_ttl(patch_redis):
     await stm.append_vocab("sess1", {"word": "finance", "count": 3})
     ttl = await patch_redis.ttl(key)
     assert ttl > 0, f"TTL not set on {key}: got {ttl}"
+
+
+async def test_set_and_get_session_meta():
+    meta = {
+        "start_time": "2026-06-30T10:00:00+00:00",
+        "clerk_user_id": "user1",
+        "skill_focus": "SPEAKING",
+        "profile": {"cold_start_flag": True},
+        "profile_loaded": True,
+    }
+    await stm.set_session_meta("sess1", meta)
+    result = await stm.get_session_meta("sess1")
+    assert result == meta
+
+
+async def test_get_session_meta_returns_none_when_missing():
+    assert await stm.get_session_meta("does-not-exist") is None
+
+
+async def test_delete_session_meta_removes_it():
+    await stm.set_session_meta("sess1", {"clerk_user_id": "u1"})
+    await stm.delete_session_meta("sess1")
+    assert await stm.get_session_meta("sess1") is None
+
+
+async def test_delete_session_meta_is_idempotent_when_already_missing():
+    # Must not raise when called on a session that was never set or already deleted.
+    await stm.delete_session_meta("never-existed")
+
+
+async def test_incr_turn_count_starts_at_one():
+    count = await stm.incr_turn_count("sess1")
+    assert count == 1
+
+
+async def test_incr_turn_count_increments_across_calls():
+    await stm.incr_turn_count("sess1")
+    await stm.incr_turn_count("sess1")
+    count = await stm.incr_turn_count("sess1")
+    assert count == 3
+
+
+async def test_incr_turn_count_is_independent_per_session():
+    await stm.incr_turn_count("sess1")
+    await stm.incr_turn_count("sess1")
+    count_other = await stm.incr_turn_count("sess2")
+    assert count_other == 1
