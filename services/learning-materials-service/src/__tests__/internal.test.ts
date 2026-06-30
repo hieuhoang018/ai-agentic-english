@@ -187,6 +187,59 @@ describe('internal routes', () => {
     });
   });
 
+  describe('GET /internal/catalog/summary', () => {
+    it('returns module summaries with ordered lessons and exercise IDs', async () => {
+      prisma.module.findMany.mockResolvedValue([
+        {
+          id: 'mod-1',
+          title: 'Reading Fundamentals',
+          cefrLevel: 'A2',
+          skillFocus: 'reading',
+          lessons: [
+            {
+              id: 'les-1',
+              exercises: [{ id: 'ex-1' }, { id: 'ex-2' }],
+            },
+          ],
+        },
+      ]);
+
+      const res = await request(createApp(prisma))
+        .get('/internal/catalog/summary')
+        .set(INTERNAL_HEADER, INTERNAL_SECRET);
+
+      expect(res.status).toBe(200);
+      expect(res.body.modules[0]).toEqual({
+        id: 'mod-1',
+        title: 'Reading Fundamentals',
+        cefrLevel: 'A2',
+        skillFocus: 'reading',
+        lessonCount: 1,
+        exerciseCount: 2,
+        lessons: [{ id: 'les-1', exerciseIds: ['ex-1', 'ex-2'] }],
+      });
+      expect(res.body.modules[0].lessons[0].id).toBe('les-1');
+      expect(res.body.modules[0].lessons[0].exerciseIds).toEqual(['ex-1', 'ex-2']);
+      expect(res.body.totalModules).toBe(1);
+      expect(res.body.totalLessons).toBe(1);
+      expect(res.body.totalExercises).toBe(2);
+      expect(prisma.module.findMany).toHaveBeenCalledWith({
+        include: {
+          lessons: {
+            include: {
+              exercises: {
+                select: { id: true },
+                orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+              },
+            },
+            orderBy: { order: 'asc' },
+          },
+        },
+        orderBy: { order: 'asc' },
+      });
+    });
+  });
+
   describe('GET /internal/vocab', () => {
     const vocabRow = {
       id: 'vocab-1',

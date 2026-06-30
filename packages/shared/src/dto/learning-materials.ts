@@ -50,6 +50,7 @@ export interface PathDefinition {
   }>;
   activities?: Array<{
     activity_id: string;
+    module_id?: string;
     skill_domain: string;
     activity_type: string;
     title: string;
@@ -90,6 +91,10 @@ export interface CatalogSummaryDto {
     skillFocus: Skill;
     lessonCount: number;
     exerciseCount: number;
+    lessons: Array<{
+      id: string;
+      exerciseIds: string[];
+    }>;
   }>;
   totalModules: number;
   totalLessons: number;

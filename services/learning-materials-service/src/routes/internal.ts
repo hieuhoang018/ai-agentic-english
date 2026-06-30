@@ -82,7 +82,17 @@ export function createInternalRouter(prisma: AppPrismaClient): Router {
     '/catalog/summary',
     asyncHandler(async (_req, res) => {
       const modules = await prisma.module.findMany({
-        include: { lessons: { include: { exercises: { select: { id: true } } } } },
+        include: {
+          lessons: {
+            include: {
+              exercises: {
+                select: { id: true },
+                orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+              },
+            },
+            orderBy: { order: 'asc' },
+          },
+        },
         orderBy: { order: 'asc' },
       });
 
@@ -101,6 +111,10 @@ export function createInternalRouter(prisma: AppPrismaClient): Router {
           skillFocus: m.skillFocus,
           lessonCount,
           exerciseCount,
+          lessons: m.lessons.map((l) => ({
+            id: l.id,
+            exerciseIds: l.exercises.map((e) => e.id),
+          })),
         };
       });
 
