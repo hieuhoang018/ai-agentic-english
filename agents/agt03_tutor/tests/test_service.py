@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 import httpx
 import pytest
 import respx
@@ -7,15 +9,31 @@ import respx
 from agents.agt03_tutor import service
 
 
-@pytest.fixture(autouse=True)
-def reset_session_state():
-    service._SESSION_START_TIMES.clear()
-    service._SESSION_TURN_COUNTS.clear()
-    service._SESSION_PROFILES.clear()
-    yield
-    service._SESSION_START_TIMES.clear()
-    service._SESSION_TURN_COUNTS.clear()
-    service._SESSION_PROFILES.clear()
+def _mock_session_meta(respx_mock, session_id: str, *, clerk_user_id: str = "user1",
+                        skill_focus: str = "SPEAKING", profile: dict | None = None,
+                        turn_count: int = 0):
+    """Mock AGT-06's session-meta GET endpoint to simulate an active session."""
+    from datetime import datetime, timezone
+    meta = {
+        "start_time": datetime.now(timezone.utc).isoformat(),
+        "clerk_user_id": clerk_user_id,
+        "skill_focus": skill_focus,
+        "profile": profile or {},
+        "profile_loaded": True,
+    }
+    respx_mock.get(f"{service.AGT06_BASE_URL}/sessions/{session_id}/meta").mock(
+        return_value=httpx.Response(200, json=meta)
+    )
+    respx_mock.post(f"{service.AGT06_BASE_URL}/sessions/{session_id}/meta/increment-turn").mock(
+        return_value=httpx.Response(200, json={"turn_count": turn_count + 1})
+    )
+    respx_mock.get(f"{service.AGT06_BASE_URL}/sessions/{session_id}/meta/turn-count").mock(
+        return_value=httpx.Response(200, json={"turn_count": turn_count})
+    )
+    respx_mock.delete(f"{service.AGT06_BASE_URL}/sessions/{session_id}/meta").mock(
+        return_value=httpx.Response(204)
+    )
+    return meta
 
 
 @respx.mock
@@ -28,6 +46,7 @@ async def test_start_session_returns_opening_message_and_emits_event(monkeypatch
     )
     respx.post(f"{service.AGT06_BASE_URL}/sessions/abc/state").mock(return_value=httpx.Response(204))
     respx.post(f"{service.AGT06_BASE_URL}/sessions/abc/context").mock(return_value=httpx.Response(204))
+    respx.post(f"{service.AGT06_BASE_URL}/sessions/abc/meta").mock(return_value=httpx.Response(204))
 
     emitted = []
 
@@ -55,6 +74,7 @@ async def test_start_session_profile_loaded_false_when_agt01_unreachable(monkeyp
     )
     respx.post(f"{service.AGT06_BASE_URL}/sessions/xyz/state").mock(return_value=httpx.Response(204))
     respx.post(f"{service.AGT06_BASE_URL}/sessions/xyz/context").mock(return_value=httpx.Response(204))
+    respx.post(f"{service.AGT06_BASE_URL}/sessions/xyz/meta").mock(return_value=httpx.Response(204))
 
     async def fake_emit(topic, payload, agent_id, key=None):
         pass
@@ -78,6 +98,7 @@ async def test_start_session_plan_loaded_false_when_agt02_unreachable(monkeypatc
     )
     respx.post(f"{service.AGT06_BASE_URL}/sessions/sess3/state").mock(return_value=httpx.Response(204))
     respx.post(f"{service.AGT06_BASE_URL}/sessions/sess3/context").mock(return_value=httpx.Response(204))
+    respx.post(f"{service.AGT06_BASE_URL}/sessions/sess3/meta").mock(return_value=httpx.Response(204))
 
     async def fake_emit(topic, payload, agent_id, key=None):
         pass
@@ -100,6 +121,7 @@ async def test_start_session_plan_loaded_false_when_no_active_plan(monkeypatch):
     )
     respx.post(f"{service.AGT06_BASE_URL}/sessions/sess4/state").mock(return_value=httpx.Response(204))
     respx.post(f"{service.AGT06_BASE_URL}/sessions/sess4/context").mock(return_value=httpx.Response(204))
+    respx.post(f"{service.AGT06_BASE_URL}/sessions/sess4/meta").mock(return_value=httpx.Response(204))
 
     async def fake_emit(topic, payload, agent_id, key=None):
         pass
@@ -119,7 +141,7 @@ async def test_process_turn_mock_mode_echoes_user_message(monkeypatch):
         return_value=httpx.Response(200, json=[{"role": "user", "content": "Hello, I work in finance."}])
     )
 
-    service._SESSION_START_TIMES["abc"] = service.time.monotonic()
+    _mock_session_meta(respx, "abc")
 
     result = await service.process_turn("abc", "Hello, I work in finance.", None)
 
@@ -137,7 +159,7 @@ async def test_process_turn_with_audio_uses_asr(monkeypatch):
     respx.post(f"{service.AGT06_BASE_URL}/sessions/abc/context").mock(return_value=httpx.Response(204))
     respx.get(f"{service.AGT06_BASE_URL}/sessions/abc/context").mock(return_value=httpx.Response(200, json=[]))
 
-    service._SESSION_START_TIMES["abc"] = service.time.monotonic()
+    _mock_session_meta(respx, "abc")
 
     audio_b64 = base64.b64encode(b"fake-audio-bytes").decode()
 
@@ -148,22 +170,39 @@ async def test_process_turn_with_audio_uses_asr(monkeypatch):
 
 @respx.mock
 async def test_process_turn_increments_turn_count(monkeypatch):
-    service._SESSION_START_TIMES["abc"] = service.time.monotonic()
-    service._SESSION_TURN_COUNTS["abc"] = 0
+    turn_calls: list[int] = []
 
+    def _next_turn_response(request):
+        turn_calls.append(1)
+        return httpx.Response(200, json={"turn_count": len(turn_calls)})
+
+    _mock_session_meta(respx, "abc")
+    respx.post(f"{service.AGT06_BASE_URL}/sessions/abc/meta/increment-turn").mock(
+        side_effect=_next_turn_response
+    )
     respx.post(f"{service.AGT06_BASE_URL}/sessions/abc/context").mock(return_value=httpx.Response(204))
     respx.get(f"{service.AGT06_BASE_URL}/sessions/abc/context").mock(return_value=httpx.Response(200, json=[]))
 
     await service.process_turn("abc", "first message", None)
     await service.process_turn("abc", "second message", None)
 
-    assert service._SESSION_TURN_COUNTS["abc"] == 2
+    assert len(turn_calls) == 2, "increment-turn endpoint must be called once per process_turn call"
 
 
 @respx.mock
 async def test_end_session_consolidates_and_emits_event(monkeypatch):
-    service._SESSION_START_TIMES["abc"] = service.time.monotonic() - 60
-    service._SESSION_TURN_COUNTS["abc"] = 3
+    from datetime import datetime, timezone, timedelta
+    past_start = (datetime.now(timezone.utc) - timedelta(seconds=60)).isoformat()
+    respx.get(f"{service.AGT06_BASE_URL}/sessions/abc/meta").mock(
+        return_value=httpx.Response(200, json={
+            "start_time": past_start, "clerk_user_id": "user1",
+            "skill_focus": "SPEAKING", "profile": {}, "profile_loaded": True,
+        })
+    )
+    respx.get(f"{service.AGT06_BASE_URL}/sessions/abc/meta/turn-count").mock(
+        return_value=httpx.Response(200, json={"turn_count": 3})
+    )
+    respx.delete(f"{service.AGT06_BASE_URL}/sessions/abc/meta").mock(return_value=httpx.Response(204))
 
     respx.post(f"{service.AGT06_BASE_URL}/sessions/abc/consolidate").mock(
         return_value=httpx.Response(200, json={"consolidated": True, "session_id": "abc"})
@@ -192,8 +231,18 @@ async def test_end_session_consolidates_and_emits_event(monkeypatch):
 
 @respx.mock
 async def test_end_session_handles_agt06_unreachable(monkeypatch):
-    service._SESSION_START_TIMES["abc"] = service.time.monotonic() - 30
-    service._SESSION_TURN_COUNTS["abc"] = 1
+    from datetime import datetime, timezone, timedelta
+    past_start = (datetime.now(timezone.utc) - timedelta(seconds=30)).isoformat()
+    respx.get(f"{service.AGT06_BASE_URL}/sessions/abc/meta").mock(
+        return_value=httpx.Response(200, json={
+            "start_time": past_start, "clerk_user_id": "user1",
+            "skill_focus": "SPEAKING", "profile": {}, "profile_loaded": True,
+        })
+    )
+    respx.get(f"{service.AGT06_BASE_URL}/sessions/abc/meta/turn-count").mock(
+        return_value=httpx.Response(200, json={"turn_count": 1})
+    )
+    respx.delete(f"{service.AGT06_BASE_URL}/sessions/abc/meta").mock(return_value=httpx.Response(204))
 
     respx.post(f"{service.AGT06_BASE_URL}/sessions/abc/consolidate").mock(side_effect=httpx.ConnectError("refused"))
 
@@ -221,8 +270,20 @@ async def test_get_session_state_returns_none_on_404():
 @respx.mock
 async def test_end_session_double_call_does_not_emit_twice(monkeypatch):
     """Second end_session call must NOT emit session.end again."""
-    service._SESSION_START_TIMES["abc"] = service.time.monotonic() - 60
-    service._SESSION_TURN_COUNTS["abc"] = 2
+    from datetime import datetime, timezone, timedelta
+    past_start = (datetime.now(timezone.utc) - timedelta(seconds=60)).isoformat()
+    meta_responses = [
+        httpx.Response(200, json={
+            "start_time": past_start, "clerk_user_id": "user1",
+            "skill_focus": "SPEAKING", "profile": {}, "profile_loaded": True,
+        }),
+        httpx.Response(404),  # second end_session call: meta already deleted
+    ]
+    respx.get(f"{service.AGT06_BASE_URL}/sessions/abc/meta").mock(side_effect=meta_responses)
+    respx.get(f"{service.AGT06_BASE_URL}/sessions/abc/meta/turn-count").mock(
+        return_value=httpx.Response(200, json={"turn_count": 2})
+    )
+    respx.delete(f"{service.AGT06_BASE_URL}/sessions/abc/meta").mock(return_value=httpx.Response(204))
 
     respx.post(f"{service.AGT06_BASE_URL}/sessions/abc/consolidate").mock(
         return_value=httpx.Response(200, json={"consolidated": True, "session_id": "abc"})
@@ -249,10 +310,12 @@ async def test_process_turn_raises_when_no_message_and_no_audio():
         await service.process_turn("abc", None, None)
 
 
+@respx.mock
 async def test_process_turn_raises_for_unknown_session():
-    """process_turn must raise ValueError for a session_id not in _SESSION_START_TIMES."""
-    # Ensure no session with this ID exists
-    service._SESSION_START_TIMES.pop("dead-session", None)
+    """process_turn must raise ValueError when AGT-06 has no meta for this session."""
+    respx.get(f"{service.AGT06_BASE_URL}/sessions/dead-session/meta").mock(
+        return_value=httpx.Response(404)
+    )
 
     with pytest.raises(ValueError, match="not active"):
         await service.process_turn("dead-session", "hello", None)
@@ -289,16 +352,11 @@ async def test_process_turn_system_prompt_includes_profile_data(monkeypatch):
     )
 
     # Simulate a session that was started with a real profile
-    service._SESSION_START_TIMES["abc"] = service.time.monotonic()
-    service._SESSION_PROFILES["abc"] = {
-        "profile": {
-            "irt_theta": {"L": 0.2, "S": 0.8, "R": 0.5, "W": 0.3},
-            "grammar_error_map": {"SPEAKING": {"verb_tense": 3.0}},
-            "cold_start_flag": False,
-        },
-        "skill_focus": "SPEAKING",
-        "clerk_user_id": "user_live",
-    }
+    _mock_session_meta(respx, "abc", clerk_user_id="user_live", skill_focus="SPEAKING", profile={
+        "irt_theta": {"L": 0.2, "S": 0.8, "R": 0.5, "W": 0.3},
+        "grammar_error_map": {"SPEAKING": {"verb_tense": 3.0}},
+        "cold_start_flag": False,
+    })
 
     captured_messages = []
 
@@ -348,12 +406,7 @@ async def test_process_turn_includes_grammar_feedback_from_agt04():
         })
     )
 
-    service._SESSION_START_TIMES["abc"] = service.time.monotonic()
-    service._SESSION_PROFILES["abc"] = {
-        "profile": {},
-        "skill_focus": "SPEAKING",
-        "clerk_user_id": "user_fb",
-    }
+    _mock_session_meta(respx, "abc", clerk_user_id="user_fb", skill_focus="SPEAKING")
 
     result = await service.process_turn("abc", "I go there yesterday.", None)
 
@@ -376,12 +429,7 @@ async def test_process_turn_grammar_feedback_none_when_agt04_fails():
         side_effect=httpx.ConnectError("AGT-11 down")
     )
 
-    service._SESSION_START_TIMES["abc"] = service.time.monotonic()
-    service._SESSION_PROFILES["abc"] = {
-        "profile": {},
-        "skill_focus": "SPEAKING",
-        "clerk_user_id": "user_fb",
-    }
+    _mock_session_meta(respx, "abc", clerk_user_id="user_fb", skill_focus="SPEAKING")
 
     result = await service.process_turn("abc", "I go there yesterday.", None)
 
@@ -403,12 +451,7 @@ async def test_process_turn_reading_skill_skips_agt04():
         })
     )
 
-    service._SESSION_START_TIMES["abc"] = service.time.monotonic()
-    service._SESSION_PROFILES["abc"] = {
-        "profile": {},
-        "skill_focus": "READING",
-        "clerk_user_id": "user_read",
-    }
+    _mock_session_meta(respx, "abc", clerk_user_id="user_read", skill_focus="READING")
 
     result = await service.process_turn("abc", "I understood the text.", None)
 
@@ -440,12 +483,7 @@ async def test_process_turn_includes_translation_for_vi_primary_user():
         })
     )
 
-    service._SESSION_START_TIMES["abc"] = service.time.monotonic()
-    service._SESSION_PROFILES["abc"] = {
-        "profile": {},
-        "skill_focus": "WRITING",
-        "clerk_user_id": "user_vi",
-    }
+    _mock_session_meta(respx, "abc", clerk_user_id="user_vi", skill_focus="WRITING")
 
     result = await service.process_turn("abc", "Dear manager, I writing to...", None)
 
@@ -470,12 +508,7 @@ async def test_process_turn_speaking_session_returns_en_only_zone():
         })
     )
 
-    service._SESSION_START_TIMES["abc"] = service.time.monotonic()
-    service._SESSION_PROFILES["abc"] = {
-        "profile": {},
-        "skill_focus": "SPEAKING",
-        "clerk_user_id": "user_speak",
-    }
+    _mock_session_meta(respx, "abc", clerk_user_id="user_speak", skill_focus="SPEAKING")
 
     result = await service.process_turn("abc", "I work in marketing.", None)
 
@@ -497,12 +530,7 @@ async def test_process_turn_translation_none_when_agt11_fails():
         side_effect=httpx.ConnectError("AGT-11 down")
     )
 
-    service._SESSION_START_TIMES["abc"] = service.time.monotonic()
-    service._SESSION_PROFILES["abc"] = {
-        "profile": {},
-        "skill_focus": "SPEAKING",
-        "clerk_user_id": "user_fail",
-    }
+    _mock_session_meta(respx, "abc", clerk_user_id="user_fail", skill_focus="SPEAKING")
 
     result = await service.process_turn("abc", "Hello there.", None)
 
@@ -516,7 +544,7 @@ async def test_process_turn_translation_none_when_agt11_fails():
 
 @respx.mock
 async def test_start_session_stores_clerk_user_id(monkeypatch):
-    """clerk_user_id must be stored in _SESSION_PROFILES so process_turn can use it."""
+    """clerk_user_id must be persisted to AGT-06 session meta so process_turn can use it."""
     respx.get(f"{service.AGT01_BASE_URL}/profile/user_ck").mock(
         return_value=httpx.Response(200, json={"cold_start_flag": False})
     )
@@ -525,6 +553,9 @@ async def test_start_session_stores_clerk_user_id(monkeypatch):
     )
     respx.post(f"{service.AGT06_BASE_URL}/sessions/ck_sess/state").mock(return_value=httpx.Response(204))
     respx.post(f"{service.AGT06_BASE_URL}/sessions/ck_sess/context").mock(return_value=httpx.Response(204))
+    meta_route = respx.post(f"{service.AGT06_BASE_URL}/sessions/ck_sess/meta").mock(
+        return_value=httpx.Response(204)
+    )
 
     async def fake_emit(topic, payload, agent_id, key=None):
         pass
@@ -533,7 +564,9 @@ async def test_start_session_stores_clerk_user_id(monkeypatch):
 
     await service.start_session("user_ck", "SPEAKING", "ck_sess")
 
-    assert service._SESSION_PROFILES["ck_sess"]["clerk_user_id"] == "user_ck"
+    assert meta_route.called
+    sent_body = json.loads(meta_route.calls.last.request.content)
+    assert sent_body["clerk_user_id"] == "user_ck"
 
 
 # ---------------------------------------------------------------------------
