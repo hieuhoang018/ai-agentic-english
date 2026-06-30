@@ -8,11 +8,12 @@ import logging
 from datetime import datetime, timezone
 from agents.agt07_review.sm2 import compute_retrievability, next_review_date_stub, update_stability_stub
 from agents.agt07_review.test_builder import compose_test_stub
+from agents.shared.config import settings
 from agents.shared.db.postgres import fetchrow, execute
 
 logger = logging.getLogger(__name__)
 
-AGT06_BASE = "http://agt06-memory:8106"
+AGT06_BASE = settings.AGT06_BASE_URL
 
 
 async def get_due_items(clerk_user_id: str) -> list[dict]:

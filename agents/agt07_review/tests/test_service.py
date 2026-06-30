@@ -10,9 +10,10 @@ from agents.agt07_review.sm2 import (
     update_stability_stub,
     STUB_INTERVALS,
 )
+from agents.shared.config import settings as _settings
 
-AGT06_VOCAB_URL = "http://agt06-memory:8106/ltm/user_test/vocabulary"
-AGT06_ERRORS_URL = "http://agt06-memory:8106/ltm/user_test/errors"
+AGT06_VOCAB_URL = f"{_settings.AGT06_BASE_URL}/ltm/user_test/vocabulary"
+AGT06_ERRORS_URL = f"{_settings.AGT06_BASE_URL}/ltm/user_test/errors"
 
 VOCAB_RESPONSE = [
     {
