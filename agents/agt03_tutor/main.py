@@ -1,6 +1,6 @@
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, WebSocket
 
 from agents.shared.db.postgres import get_pool, close_pool
 from agents.shared.db.redis_client import get_redis, close_redis
@@ -11,6 +11,7 @@ from agents.agt03_tutor.models import (
     TurnRequest, TurnResponse,
     EndSessionRequest, EndSessionResponse,
 )
+from agents.agt03_tutor.websocket_handler import handle_session
 
 
 @asynccontextmanager
@@ -53,3 +54,8 @@ async def end_session(body: EndSessionRequest):
 @app.get("/sessions/{session_id}/state")
 async def session_state(session_id: str):
     return await service.get_session_state(session_id)
+
+
+@app.websocket("/ws/sessions/{session_id}")
+async def websocket_session(websocket: WebSocket, session_id: str):
+    await handle_session(websocket, session_id)
