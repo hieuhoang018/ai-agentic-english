@@ -16,6 +16,7 @@ Contracts under test:
 """
 
 import json
+import time
 import pytest
 import respx
 import httpx
@@ -31,9 +32,9 @@ _COLD_START_PROFILE = {"cold_start_flag": True, "irt_theta": {"L": 0.0, "S": Non
 _WARM_PROFILE = {"cold_start_flag": False, "irt_theta": {"L": 0.0, "S": None, "R": 0.0, "W": 0.0}}
 
 _MODULES = [
-    {"id": "m1", "title": "Module A", "skillDomain": "READING", "cefrLevel": "B1"},
-    {"id": "m2", "title": "Module B", "skillDomain": "WRITING", "cefrLevel": "A2"},
-    {"id": "m3", "title": "Module C", "skillDomain": "LISTENING", "cefrLevel": "B2"},
+    {"id": "m1", "title": "Module A", "skillFocus": "READING", "cefrLevel": "B1"},
+    {"id": "m2", "title": "Module B", "skillFocus": "WRITING", "cefrLevel": "A2"},
+    {"id": "m3", "title": "Module C", "skillFocus": "LISTENING", "cefrLevel": "B2"},
 ]
 
 
@@ -80,9 +81,9 @@ async def test_cold_start_items_have_cold_start_flag(fake_redis):
 @respx.mock
 async def test_cold_start_uses_real_module_ids_when_lms_reachable(fake_redis):
     real_modules = [
-        {"id": "mod-uuid-001", "title": "Module 1", "skillDomain": "READING", "cefrLevel": "A1"},
-        {"id": "mod-uuid-002", "title": "Module 2", "skillDomain": "WRITING", "cefrLevel": "B1"},
-        {"id": "mod-uuid-003", "title": "Module 3", "skillDomain": "LISTENING", "cefrLevel": "A2"},
+        {"id": "mod-uuid-001", "title": "Module 1", "skillFocus": "READING", "cefrLevel": "A1"},
+        {"id": "mod-uuid-002", "title": "Module 2", "skillFocus": "WRITING", "cefrLevel": "B1"},
+        {"id": "mod-uuid-003", "title": "Module 3", "skillFocus": "LISTENING", "cefrLevel": "A2"},
     ]
     respx.get(f"{AGT01_URL}/profile/user-new").mock(
         return_value=httpx.Response(200, json=_COLD_START_PROFILE)
@@ -101,7 +102,7 @@ async def test_cold_start_uses_real_module_ids_when_lms_reachable(fake_redis):
 
 @respx.mock
 async def test_cold_start_fewer_than_3_modules_returns_all_available(fake_redis):
-    one_module = [{"id": "mod-only-one", "title": "Only Module", "skillDomain": "SPEAKING", "cefrLevel": "B2"}]
+    one_module = [{"id": "mod-only-one", "title": "Only Module", "skillFocus": "SPEAKING", "cefrLevel": "B2"}]
     respx.get(f"{AGT01_URL}/profile/user-new2").mock(
         return_value=httpx.Response(200, json=_COLD_START_PROFILE)
     )
@@ -195,6 +196,145 @@ async def test_warm_profile_items_have_rationale(fake_redis):
     result = await svc.get_recommendations("user-warm")
     for item in result:
         assert "rationale" in item
+
+
+@respx.mock
+async def test_warm_profile_uses_cefr_derived_difficulty_not_constant(fake_redis):
+    # _MODULES has cefrLevel B1 (m1), A2 (m2), B2 (m3) — a real per-item
+    # difficulty derived from cefrLevel must differ across items, not the
+    # old hardcoded constant 0.5 for every candidate.
+    respx.get(f"{AGT01_URL}/profile/user-warm-diff").mock(
+        return_value=httpx.Response(200, json=_WARM_PROFILE)
+    )
+    respx.get(f"{LMS_URL}/modules").mock(
+        return_value=httpx.Response(200, json=_MODULES)
+    )
+
+    result = await svc.get_recommendations("user-warm-diff")
+    difficulties = {item["id"]: item["difficulty"] for item in result}
+    assert len(set(difficulties.values())) > 1
+
+
+@respx.mock
+async def test_warm_profile_reads_skill_focus_field_from_lms(fake_redis):
+    # Real LMS /modules DTO field is "skillFocus", not "skillDomain".
+    modules = [
+        {"id": "sf-1", "title": "Speak Up", "skillFocus": "SPEAKING", "cefrLevel": "B1"},
+    ]
+    respx.get(f"{AGT01_URL}/profile/user-warm-sf").mock(
+        return_value=httpx.Response(200, json=_WARM_PROFILE)
+    )
+    respx.get(f"{LMS_URL}/modules").mock(
+        return_value=httpx.Response(200, json=modules)
+    )
+
+    result = await svc.get_recommendations("user-warm-sf")
+    assert result[0]["skillDomain"] == "SPEAKING"
+
+
+# ── recently-seen novelty filter ──────────────────────────────────────────────
+
+_R1_PROFILE = {"cold_start_flag": False, "irt_theta": {"L": 0.0, "S": 0.0, "R": 1.0, "W": 0.0}}
+_FIVE_READING_MODULES = [
+    {"id": "a1", "title": "A1 mod", "skillFocus": "READING", "cefrLevel": "A1"},
+    {"id": "a2", "title": "A2 mod", "skillFocus": "READING", "cefrLevel": "A2"},
+    {"id": "b1", "title": "B1 mod", "skillFocus": "READING", "cefrLevel": "B1"},
+    {"id": "b2", "title": "B2 mod", "skillFocus": "READING", "cefrLevel": "B2"},
+    {"id": "c1", "title": "C1 mod", "skillFocus": "READING", "cefrLevel": "C1"},
+]
+
+
+@respx.mock
+async def test_items_recommended_recently_are_excluded_next_time(fake_redis):
+    respx.get(f"{AGT01_URL}/profile/user-novelty").mock(
+        return_value=httpx.Response(200, json=_R1_PROFILE)
+    )
+    respx.get(f"{LMS_URL}/modules").mock(
+        return_value=httpx.Response(200, json=_FIVE_READING_MODULES)
+    )
+
+    first = await svc.get_recommendations("user-novelty")
+    first_ids = {item["id"] for item in first}
+    assert first_ids == {"c1", "b2", "b1"}  # highest-scoring 3 (theta_R=1.0)
+
+    await svc.invalidate_cache("user-novelty")
+    second = await svc.get_recommendations("user-novelty")
+    second_ids = {item["id"] for item in second}
+
+    assert second_ids.isdisjoint(first_ids)
+    assert second_ids == {"a2", "a1"}
+
+
+@respx.mock
+async def test_items_seen_more_than_14_days_ago_are_eligible_again_but_recent_ones_are_not(fake_redis):
+    stale_ts = time.time() - (15 * 86400)
+    recent_ts = time.time() - 3600
+    await fake_redis.zadd("reco:seen:user-stale", {"a1": stale_ts, "b2": recent_ts})
+
+    two_modules = [_FIVE_READING_MODULES[0], _FIVE_READING_MODULES[3]]  # a1, b2
+    respx.get(f"{AGT01_URL}/profile/user-stale").mock(
+        return_value=httpx.Response(200, json=_R1_PROFILE)
+    )
+    respx.get(f"{LMS_URL}/modules").mock(
+        return_value=httpx.Response(200, json=two_modules)
+    )
+
+    result = await svc.get_recommendations("user-stale")
+    ids = {item["id"] for item in result}
+    assert ids == {"a1"}  # a1's 15-day-old entry has expired; b2's 1h-old entry has not
+
+
+class _FlakyNoveltyRedis:
+    """Wraps a real redis client but simulates the sorted-set novelty calls failing."""
+
+    def __init__(self, real):
+        self._real = real
+
+    def __getattr__(self, name):
+        return getattr(self._real, name)
+
+    async def zremrangebyscore(self, *args, **kwargs):
+        raise ConnectionError("redis down")
+
+    async def zadd(self, *args, **kwargs):
+        raise ConnectionError("redis down")
+
+
+@respx.mock
+async def test_novelty_redis_failure_degrades_gracefully_instead_of_crashing(monkeypatch, fake_redis):
+    flaky = _FlakyNoveltyRedis(fake_redis)
+
+    async def _get_flaky_redis():
+        return flaky
+
+    monkeypatch.setattr(svc, "get_redis", _get_flaky_redis)
+
+    respx.get(f"{AGT01_URL}/profile/user-flaky").mock(
+        return_value=httpx.Response(200, json=_WARM_PROFILE)
+    )
+    respx.get(f"{LMS_URL}/modules").mock(
+        return_value=httpx.Response(200, json=_MODULES)
+    )
+
+    # Must not raise — a Redis hiccup on the novelty filter should degrade to
+    # "no recently-seen data", not take down the whole recommendation flow.
+    result = await svc.get_recommendations("user-flaky")
+    assert len(result) > 0
+    assert not any(item.get("cold_start") is True for item in result)
+
+
+@respx.mock
+async def test_recording_seen_items_sets_14_day_ttl(fake_redis):
+    respx.get(f"{AGT01_URL}/profile/user-ttl").mock(
+        return_value=httpx.Response(200, json=_R1_PROFILE)
+    )
+    respx.get(f"{LMS_URL}/modules").mock(
+        return_value=httpx.Response(200, json=_FIVE_READING_MODULES)
+    )
+
+    await svc.get_recommendations("user-ttl")
+    ttl = await fake_redis.ttl("reco:seen:user-ttl")
+    assert 0 < ttl <= 14 * 86400
 
 
 # ── Redis cache ───────────────────────────────────────────────────────────────

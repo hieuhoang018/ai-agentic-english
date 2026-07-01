@@ -26,8 +26,10 @@ def score_items(
 ) -> list[dict]:
     """
     Stub: score candidates by difficulty proximity to current theta.
-    Returns top 3 per skill domain with placeholder rationale.
-    TODO Phase 8+: implement full composite formula.
+    Filters recently-seen items, then selects the top 3 with at least one
+    item per skill domain represented when possible.
+    TODO Phase 8+: implement full composite formula (weakness_alignment,
+    content_quality, skill_diversity_bonus multiplier).
     """
     theta = profile.get("irt_theta", {})
     seen_set = set(recently_seen_ids)
@@ -37,7 +39,9 @@ def score_items(
     scored = []
     for item in filtered:
         skill = item.get("skillDomain", "READING")
-        t = theta.get(skill[0], 0.0) if skill else 0.0
+        t = theta.get(skill[0]) if skill else None
+        if t is None:
+            t = 0.0
         diff = item.get("difficulty", 0.5)
         score = 1.0 - abs(diff - ((t + 2.0) / 4.0))  # normalise theta to [0,1]
         scored.append({
@@ -48,5 +52,32 @@ def score_items(
 
     scored.sort(key=lambda x: -x["_score"])
 
-    # Top 3 overall (stub — Phase 8+: top 3 per skill with diversity enforcement)
-    return scored[:3]
+    return _select_top_with_diversity(scored)
+
+
+def _select_top_with_diversity(scored: list[dict], top_n: int = 3) -> list[dict]:
+    """
+    Select top_n items from a score-descending list, guaranteeing at least one
+    item per distinct skill domain before filling remaining slots by score.
+    """
+    selected: list[dict] = []
+    seen_domains: set[str] = set()
+
+    for item in scored:
+        if len(selected) >= top_n:
+            break
+        domain = item.get("skillDomain", "READING")
+        if domain not in seen_domains:
+            selected.append(item)
+            seen_domains.add(domain)
+
+    if len(selected) < top_n:
+        chosen_ids = {id(item) for item in selected}
+        for item in scored:
+            if len(selected) >= top_n:
+                break
+            if id(item) not in chosen_ids:
+                selected.append(item)
+
+    selected.sort(key=lambda x: -x["_score"])
+    return selected
