@@ -81,6 +81,64 @@ async def test_exercise_unavailable_returns_unscored(mock_exercise, mock_record_
     assert mock_record_error.call_count == 0
 
 
+async def test_response_missing_answer_key_scores_incorrect(mock_exercise, mock_record_error):
+    mock_exercise({"answerKey": {"answer": "3 PM"}})
+    from agents.agt04_feedback.service import score_comprehension
+    result = await score_comprehension(
+        responses=[{"question": "q1"}],
+        exercise_id="ex-1", session_id="sess-1", clerk_user_id="user-1",
+    )
+    assert result["scored"] is True
+    assert result["score"] == 0.0
+    assert result["responses"][0]["answer"] == ""
+    assert result["responses"][0]["correct"] is False
+    assert result["correct_count"] == 0
+    assert mock_record_error.call_count == 1
+
+
+async def test_malformed_answer_key_none_degrades_to_empty_string(mock_exercise, mock_record_error):
+    mock_exercise({"answerKey": None})
+    from agents.agt04_feedback.service import score_comprehension
+    result = await score_comprehension(
+        responses=[{"question": "q1", "answer": "anything"}],
+        exercise_id="ex-1", session_id="sess-1", clerk_user_id="user-1",
+    )
+    assert result["scored"] is True
+    assert result["score"] == 0.0
+    assert result["responses"][0]["correct"] is False
+    assert result["correct_count"] == 0
+    assert mock_record_error.call_count == 1
+
+
+async def test_missing_answer_key_field_degrades_to_empty_string(mock_exercise, mock_record_error):
+    mock_exercise({})
+    from agents.agt04_feedback.service import score_comprehension
+    result = await score_comprehension(
+        responses=[{"question": "q1", "answer": "anything"}],
+        exercise_id="ex-1", session_id="sess-1", clerk_user_id="user-1",
+    )
+    assert result["scored"] is True
+    assert result["score"] == 0.0
+    assert result["responses"][0]["correct"] is False
+    assert result["correct_count"] == 0
+    assert mock_record_error.call_count == 1
+
+
+async def test_empty_responses_list_scores_zero_without_division_error(mock_exercise, mock_record_error):
+    mock_exercise({"answerKey": {"answer": "3 PM"}})
+    from agents.agt04_feedback.service import score_comprehension
+    result = await score_comprehension(
+        responses=[],
+        exercise_id="ex-1", session_id="sess-1", clerk_user_id="user-1",
+    )
+    assert result["scored"] is True
+    assert result["score"] == 0.0
+    assert result["total_responses"] == 0
+    assert result["correct_count"] == 0
+    assert result["responses"] == []
+    assert mock_record_error.call_count == 0
+
+
 async def test_comprehension_endpoint_returns_score(monkeypatch):
     from httpx import AsyncClient, ASGITransport
     monkeypatch.setattr("agents.agt04_feedback.main.close_producer", AsyncMock())
