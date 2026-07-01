@@ -1,6 +1,6 @@
-import type { CefrLevel, OnboardingRequest } from '@/lib/api/types'
+import type { CefrLevel, OnboardingRequest, SkillEstimateKey, SkillEstimates } from '@/lib/api/types'
 
-import { placementSkillIds, type OnboardingProfile, type SkillId } from '../_types/onboarding'
+import { placementSkillIds, type OnboardingProfile, type PlacementSkillId, type SkillId } from '../_types/onboarding'
 
 const cefrLevelsByScore: CefrLevel[] = ['A1', 'A2', 'A2', 'B1', 'B1', 'B2', 'B2', 'C1', 'C1', 'C2', 'C2']
 const scoreByCefrLevel: Record<CefrLevel, number> = {
@@ -10,6 +10,19 @@ const scoreByCefrLevel: Record<CefrLevel, number> = {
   B2: 6,
   C1: 8,
   C2: 10,
+}
+const skillEstimateByCefrLevel: Record<CefrLevel, number> = {
+  A1: -2,
+  A2: -1,
+  B1: 0,
+  B2: 1,
+  C1: 2,
+  C2: 3,
+}
+const skillEstimateKeyBySkill: Record<PlacementSkillId, SkillEstimateKey> = {
+  reading: 'R',
+  listening: 'L',
+  writing: 'W',
 }
 
 export function levelScoreToCefrLevel(levelScore: number): CefrLevel {
@@ -39,8 +52,22 @@ export function normalizeAssessmentLevels(levels: Partial<Record<SkillId, CefrLe
   }, {})
 }
 
+export function assessmentLevelsToSkillEstimates(levels: Partial<Record<SkillId, CefrLevel>> | undefined): SkillEstimates | undefined {
+  if (!levels) return undefined
+
+  const estimates: SkillEstimates = {}
+  for (const skill of placementSkillIds) {
+    const level = levels[skill]
+    if (level) {
+      estimates[skillEstimateKeyBySkill[skill]] = skillEstimateByCefrLevel[level]
+    }
+  }
+
+  return Object.keys(estimates).length > 0 ? estimates : undefined
+}
+
 function getCurrentLevelScore(profile: Partial<OnboardingProfile>) {
-  if (profile.assessmentMethod === 'test' && profile.assessmentLevels) {
+  if (profile.assessmentLevels) {
     return assessmentLevelsToScore(profile.assessmentLevels)
   }
 
@@ -52,11 +79,13 @@ export function toOnboardingRequest(
   profile: Partial<OnboardingProfile>,
 ): OnboardingRequest {
   const goalId = profile.goalId ?? 'conversation'
+  const skillEstimates = assessmentLevelsToSkillEstimates(profile.assessmentLevels)
 
   return {
     userId,
     currentLevel: levelScoreToCefrLevel(getCurrentLevelScore(profile)),
     dailyTimeBudgetMinutes: profile.dailyMinutes ?? 15,
     goals: [goalId, ...(profile.prioritySkills ?? [])],
+    ...(skillEstimates ? { skillEstimates } : {}),
   }
 }

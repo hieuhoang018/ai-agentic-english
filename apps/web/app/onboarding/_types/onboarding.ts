@@ -5,7 +5,7 @@ export type AssessmentMethod = 'test' | 'selfAssessment'
 export type SkillId = 'listening' | 'speaking' | 'reading' | 'writing'
 export type PlacementSkillId = Exclude<SkillId, 'speaking'>
 
-export const placementSkillIds = ['reading', 'writing', 'listening'] as const satisfies readonly PlacementSkillId[]
+export const placementSkillIds = ['reading', 'listening', 'writing'] as const satisfies readonly PlacementSkillId[]
 
 export interface OnboardingProfile {
   goalId: LearningGoalId

@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 
 import httpx
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from agents.shared.events.producer import close_producer, emit, emit_ts_event, get_producer
 
@@ -30,7 +30,8 @@ class OnboardingRequest(BaseModel):
     userId: str
     currentLevel: str = "A1"
     dailyTimeBudgetMinutes: int = 15
-    goals: list[str] = []
+    goals: list[str] = Field(default_factory=list)
+    skillEstimates: dict[str, float] | None = None
 
 
 class GradingRequest(BaseModel):
@@ -103,7 +104,7 @@ async def orchestrate_onboarding(body: OnboardingRequest):
             r2 = await client.post(
                 f"{AGT02_BASE_URL}/plans/{body.userId}/generate",
                 json={
-                    "skill_estimates": None,
+                    "skill_estimates": body.skillEstimates,
                     "daily_minutes": body.dailyTimeBudgetMinutes,
                     "goals": body.goals,
                 },

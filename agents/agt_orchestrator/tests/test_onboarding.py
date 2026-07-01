@@ -1,4 +1,5 @@
-from unittest.mock import AsyncMock, call
+import json
+from unittest.mock import AsyncMock
 import pytest
 import respx
 import httpx
@@ -80,6 +81,39 @@ async def test_onboarding_happy_path(monkeypatch):
         {"userId": "user_test", "pathId": "plan-uuid-123"},
         key="user_test",
     )
+
+
+@respx.mock
+async def test_onboarding_forwards_skill_estimates_to_agt02(monkeypatch):
+    monkeypatch.setattr("agents.agt_orchestrator.main.emit_ts_event", AsyncMock())
+
+    respx.post("http://agt01-profiling:8101/profile/user_test").mock(
+        return_value=httpx.Response(201, json={"clerk_user_id": "user_test"})
+    )
+    agt02_route = respx.post("http://agt02-learning-path:8102/plans/user_test/generate").mock(
+        return_value=httpx.Response(201, json=PLAN_STUB)
+    )
+
+    skill_estimates = {"R": 0.0, "L": 1.0, "W": -1.0}
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.post(
+            "/orchestrate/onboarding",
+            json={
+                "userId": "user_test",
+                "currentLevel": "B1",
+                "dailyTimeBudgetMinutes": 20,
+                "goals": ["business"],
+                "skillEstimates": skill_estimates,
+            },
+        )
+
+    assert resp.status_code == 201
+    assert agt02_route.called
+    agt02_payload = json.loads(agt02_route.calls[0].request.content)
+    assert agt02_payload["skill_estimates"] == skill_estimates
+    assert agt02_payload["daily_minutes"] == 20
+    assert agt02_payload["goals"] == ["business"]
 
 
 @respx.mock

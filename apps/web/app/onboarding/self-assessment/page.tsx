@@ -1,13 +1,39 @@
 'use client'
 
 import { useEffect } from 'react'
-import LevelScale from '../_components/LevelScale'
+import type { CefrLevel } from '@/lib/api/types'
+
 import OnboardingShell from '../_components/OnboardingShell'
 import { useOnboarding } from '../_components/OnboardingProvider'
+import { placementSkillIds, type PlacementSkillId, type SkillId } from '../_types/onboarding'
+import { assessmentLevelsToScore, normalizeAssessmentLevels } from '../_utils/onboarding-request'
 import { onboardingRoutes } from '../_utils/onboarding-routes'
+
+const cefrLevels: CefrLevel[] = ['A1', 'A2', 'B1', 'B2']
+
+const skillDetails: Record<PlacementSkillId, { label: string; icon: string; caption: string }> = {
+  reading: {
+    label: 'Reading',
+    icon: 'menu_book',
+    caption: 'Hiểu văn bản, email, tài liệu và ngữ cảnh chuyên môn.',
+  },
+  writing: {
+    label: 'Writing',
+    icon: 'edit_note',
+    caption: 'Viết câu, đoạn văn, email và phản hồi có cấu trúc.',
+  },
+  listening: {
+    label: 'Listening',
+    icon: 'headphones',
+    caption: 'Nghe hội thoại, bài nói, cuộc họp và nội dung âm thanh.',
+  },
+}
 
 export default function SelfAssessmentPage() {
   const { profile, updateProfile } = useOnboarding()
+  const assessmentLevels = normalizeAssessmentLevels(profile.assessmentLevels ?? {})
+  const completedSkillCount = placementSkillIds.filter((skill) => assessmentLevels[skill]).length
+  const isComplete = completedSkillCount === placementSkillIds.length
 
   useEffect(() => {
     if (profile.assessmentMethod !== 'selfAssessment') {
@@ -15,38 +41,84 @@ export default function SelfAssessmentPage() {
     }
   }, [profile.assessmentMethod, updateProfile])
 
+  const selectLevel = (skill: PlacementSkillId, level: CefrLevel) => {
+    const nextAssessmentLevels = normalizeAssessmentLevels({
+      ...(profile.assessmentLevels ?? {}),
+      [skill]: level,
+    } as Partial<Record<SkillId, CefrLevel>>)
+
+    updateProfile({
+      assessmentMethod: 'selfAssessment',
+      assessmentLevels: nextAssessmentLevels,
+      levelScore: assessmentLevelsToScore(nextAssessmentLevels),
+    })
+  }
+
   return (
     <OnboardingShell
       step={2}
       title="Tự đánh giá năng lực"
-      description="Hãy chọn mức độ bạn tự tin nhất với khả năng tiếng Anh hiện tại của mình. Điều này giúp Wise Mentor cá nhân hóa lộ trình học tập tối ưu cho bạn."
+      description="Chọn mức CEFR hiện tại cho từng kỹ năng để Wise Mentor cá nhân hóa lộ trình học tập."
       backHref={onboardingRoutes.level}
       nextHref={onboardingRoutes.preferences}
+      nextDisabled={!isComplete}
       showFooterBack={false}
       wide
     >
-      <LevelScale />
-      <section className="mt-12 grid gap-8 rounded-lg border border-outline-variant bg-surface p-5 md:p-6 lg:grid-cols-[1fr_1.05fr]">
-        <div className="flex min-h-64 items-center justify-center rounded-lg bg-linear-to-br from-blue-100 to-emerald-100 text-primary">
-          <div className="text-center">
-            <span className="material-symbols-outlined text-5xl">psychology</span>
-            <p className="mt-3 font-bold">AI Analysis Visualization</p>
+      <section className="grid gap-4">
+        {placementSkillIds.map((skill) => {
+          const detail = skillDetails[skill]
+          const selectedLevel = assessmentLevels[skill]
+
+          return (
+            <article key={skill} className="rounded-lg border border-outline-variant bg-white p-5">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="flex items-start gap-3">
+                  <span className="material-symbols-outlined rounded-lg bg-primary-container p-2 text-white">{detail.icon}</span>
+                  <div>
+                    <h2 className="text-xl font-bold text-on-surface">{detail.label}</h2>
+                    <p className="mt-1 text-sm leading-6 text-on-surface-variant">{detail.caption}</p>
+                  </div>
+                </div>
+                {selectedLevel ? (
+                  <span className="rounded-full bg-emerald-50 px-3 py-1 text-sm font-bold text-emerald-800">CEFR {selectedLevel}</span>
+                ) : (
+                  <span className="rounded-full bg-surface px-3 py-1 text-sm font-bold text-on-surface-variant">Chưa chọn</span>
+                )}
+              </div>
+              <div className="mt-5 grid grid-cols-3 gap-2 sm:grid-cols-6">
+                {cefrLevels.map((level) => {
+                  const isSelected = selectedLevel === level
+
+                  return (
+                    <button
+                      key={level}
+                      type="button"
+                      onClick={() => selectLevel(skill, level)}
+                      aria-pressed={isSelected}
+                      className={`h-11 rounded-lg border text-sm font-bold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ${
+                        isSelected
+                          ? 'border-primary bg-primary text-white shadow-sm'
+                          : 'border-outline-variant bg-surface text-on-surface hover:border-primary hover:bg-blue-50'
+                      }`}
+                    >
+                      {level}
+                    </button>
+                  )
+                })}
+              </div>
+            </article>
+          )
+        })}
+      </section>
+
+      <section className="mt-6 rounded-lg border border-on-surface/20 bg-surface-container-highest p-5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="font-bold text-primary">CEFR self-assessment</h2>
+            <p className="mt-1 text-sm text-on-surface">{completedSkillCount} / {placementSkillIds.length} kỹ năng đã chọn</p>
           </div>
-        </div>
-        <div className="flex flex-col justify-center">
-          <h2 className="text-2xl font-bold text-on-surface">Vì sao bước này quan trọng?</h2>
-          <div className="mt-5 space-y-4 text-on-surface-variant">
-            {[
-              'Việc trung thực về trình độ hiện tại giúp tránh bài học quá dễ gây nhàm chán hoặc quá khó gây nản lòng.',
-              'Bài tập sẽ sát với thực tế và tối ưu hóa thời gian học.',
-              'Wise Mentor có thể đề xuất tài liệu thông minh, cá nhân hóa theo tiến độ.',
-            ].map((item) => (
-              <p key={item} className="flex gap-3 leading-7">
-                <span className="material-symbols-outlined mt-0.5 text-secondary">check_circle</span>
-                {item}
-              </p>
-            ))}
-          </div>
+          <span className="material-symbols-outlined text-primary">{isComplete ? 'check_circle' : 'circle'}</span>
         </div>
       </section>
     </OnboardingShell>
