@@ -16,7 +16,7 @@ import math
 import numpy as np
 import ruptures as rpt
 
-_PLATEAU_SLOPE_THRESHOLD = 0.1  # per docstring spec: "delta_theta < 0.1 SD"
+_PLATEAU_SLOPE_THRESHOLD = 0.1  # per docstring spec: "delta_theta < 0.1 SD" (raw slope value here, not SD-standardized)
 
 
 def detect_plateau(
@@ -50,6 +50,15 @@ def detect_plateau(
 
     is_plateau = False
     if len(final_segment) >= min_sessions:
+        # Endpoint-to-endpoint slope (last - first, divided by length), per the
+        # plan's original design — not average step-slope or a linear
+        # regression fit over the segment. Known limitation: a long,
+        # steadily-but-modestly-improving tail can compute a low slope this
+        # way and be misclassified as a plateau (false positive), even though
+        # the student is genuinely still improving. A future revisit should
+        # consider average consecutive-step slope or linear regression slope
+        # over the segment, which would be more robust than a pure endpoint
+        # delta.
         segment_slope = abs(final_segment[-1] - final_segment[0]) / len(final_segment)
         is_plateau = segment_slope < _PLATEAU_SLOPE_THRESHOLD
 
