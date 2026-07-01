@@ -72,11 +72,16 @@ async def test_empty_sessions_does_not_crash(monkeypatch):
     assert "risk_score" in result
 
 
-async def test_plateau_reaches_stub_when_5_or_more_sessions(monkeypatch):
+async def test_plateau_reaches_real_detection_when_5_or_more_sessions(monkeypatch):
     """
-    With >= 5 sessions, plateau detection must reach changepoint.py's stub:True
-    branch — NOT return insufficient_data:True.
+    With >= 5 sessions, plateau detection must reach changepoint.py's real
+    PELT-based branch — NOT return insufficient_data:True.
     This test FAILS before the fix because theta_series is hardcoded to [].
+
+    Updated for Task C3 (real ruptures PELT implementation replacing the
+    always-plateau:False stub): the stub-era "stub":True marker no longer
+    exists, so this now asserts on the "changepoints" key that the real
+    implementation always includes once it reaches that branch.
     """
     sessions = [_make_session(i * 3) for i in range(6)]  # 6 sessions, every 3 days
     _make_http_client_mock(sessions, monkeypatch)
@@ -85,7 +90,7 @@ async def test_plateau_reaches_stub_when_5_or_more_sessions(monkeypatch):
     result = await run_analysis("user-plateau-fix")
 
     assert result["plateau"].get("insufficient_data") is not True, (
-        "Expected plateau to reach stub branch for 6 sessions, "
+        "Expected plateau to reach real detection branch for 6 sessions, "
         f"but got insufficient_data=True. Full result: {result}"
     )
-    assert result["plateau"].get("stub") is True
+    assert "changepoints" in result["plateau"]
