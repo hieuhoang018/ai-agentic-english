@@ -138,7 +138,8 @@ async def _fetch_grammar_feedback(
 ) -> dict | None:
     """
     Call AGT-04 for grammar/fluency feedback. Best-effort — returns None on failure.
-    READING sessions skip feedback (comprehension scoring is a separate stub endpoint).
+    READING sessions skip feedback (comprehension scoring goes through AGT-04's
+    /feedback/comprehension endpoint directly, not this call).
     SPEAKING and LISTENING → /feedback/speaking; WRITING → /feedback/writing.
     """
     if skill_focus == "READING":

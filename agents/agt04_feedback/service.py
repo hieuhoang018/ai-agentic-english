@@ -237,3 +237,96 @@ async def analyze_writing(
         "grammar_errors": grammar_errors,
         "total_errors": len(grammar_errors),
     }
+
+
+async def _fetch_exercise_answer(exercise_id: str) -> dict | None:
+    """
+    Fetch an exercise's answer key from the Learning Materials Service.
+    Returns None if the exercise is missing or the service is unreachable —
+    callers must treat that as "cannot score", never as "all wrong".
+    """
+    try:
+        async with httpx.AsyncClient(timeout=8.0) as client:
+            resp = await client.get(
+                f"{settings.LMS_BASE_URL}/internal/exercises/{exercise_id}",
+                headers={"x-internal-secret": settings.INTERNAL_SECRET},
+            )
+            if resp.status_code == 404:
+                return None
+            resp.raise_for_status()
+            return resp.json()
+    except Exception as exc:
+        logger.warning("comprehension scoring: LMS exercise fetch failed for %s: %s", exercise_id, exc)
+        return None
+
+
+async def score_comprehension(
+    responses: list[dict],
+    exercise_id: str,
+    session_id: str,
+    clerk_user_id: str,
+    skill_domain: str = "READING",
+) -> dict:
+    """
+    Score comprehension responses against the exercise's LMS answer key.
+
+    Scope: correctness-only (case-insensitive exact match against
+    answerKey.answer), matching the LMS's current single-question
+    listening-comprehension schema (one answerKey per exercise_id). Does NOT
+    implement "barrier-type detection" — no taxonomy for that exists in this
+    codebase; left for a future phase.
+    """
+    exercise = await _fetch_exercise_answer(exercise_id)
+    if exercise is None:
+        return {
+            "session_id": session_id,
+            "score": None,
+            "scored": False,
+            "reason": "exercise_unavailable",
+            "responses": [],
+            "total_responses": len(responses),
+            "correct_count": 0,
+        }
+
+    correct_answer = str((exercise.get("answerKey") or {}).get("answer", ""))
+    scored_responses = []
+    correct_count = 0
+    for r in responses:
+        given = str(r.get("answer", ""))
+        is_correct = given.strip().lower() == correct_answer.strip().lower()
+        if is_correct:
+            correct_count += 1
+        scored_responses.append({
+            "question": r.get("question"),
+            "answer": given,
+            "correct": is_correct,
+        })
+
+    score = round(correct_count / len(responses), 4) if responses else 0.0
+
+    error_events = [
+        {
+            "error_type": "comprehension_incorrect",
+            "skill_domain": skill_domain,
+            "severity": 1,
+            "context_excerpt": str(sr.get("question", ""))[:100],
+        }
+        for sr in scored_responses if not sr["correct"]
+    ]
+    if error_events:
+        results = await asyncio.gather(
+            *[record_error(session_id, clerk_user_id, ev) for ev in error_events],
+            return_exceptions=True,
+        )
+        stm_failures = [r for r in results if isinstance(r, Exception)]
+        if stm_failures:
+            raise stm_failures[0]
+
+    return {
+        "session_id": session_id,
+        "score": score,
+        "scored": True,
+        "responses": scored_responses,
+        "total_responses": len(responses),
+        "correct_count": correct_count,
+    }
