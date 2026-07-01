@@ -58,3 +58,37 @@ def test_upsert_vocab_increments_sm_retrievability():
     assert "sm_retrievability - 0.05" not in source, (
         "Found decrement direction (- 0.05) — must be increment"
     )
+
+
+@pytest.mark.asyncio
+async def test_get_assessment_history_returns_ordered_theta_series(monkeypatch):
+    rows = [
+        {"irt_score": 0.5, "assessed_at": "2026-06-01T10:00:00+00:00", "skill_domain": "READING"},
+        {"irt_score": 0.8, "assessed_at": "2026-06-15T10:00:00+00:00", "skill_domain": "READING"},
+    ]
+
+    async def fake_fetch(query, *args):
+        return rows
+
+    monkeypatch.setattr("agents.agt06_memory.ltm.fetch", fake_fetch)
+
+    from agents.agt06_memory.ltm import get_assessment_history
+    result = await get_assessment_history("user1", "READING")
+
+    assert result == [
+        {"irt_score": 0.5, "assessed_at": "2026-06-01T10:00:00+00:00", "skill_domain": "READING"},
+        {"irt_score": 0.8, "assessed_at": "2026-06-15T10:00:00+00:00", "skill_domain": "READING"},
+    ]
+
+
+@pytest.mark.asyncio
+async def test_get_assessment_history_empty_when_no_rows(monkeypatch):
+    async def fake_fetch(query, *args):
+        return []
+
+    monkeypatch.setattr("agents.agt06_memory.ltm.fetch", fake_fetch)
+
+    from agents.agt06_memory.ltm import get_assessment_history
+    result = await get_assessment_history("user1", "WRITING")
+
+    assert result == []

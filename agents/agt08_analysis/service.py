@@ -1,7 +1,8 @@
 """
 Progress Analysis Agent service.
 Runs nightly analysis and emits pattern events to Kafka.
-All analysis algorithms are stubs — see individual files for TODO specs.
+CUSUM (cusum.py), PELT plateau detection (changepoint.py, per skill domain)
+and the multi-signal risk score (risk_model.py) are all real implementations.
 """
 
 import httpx
@@ -17,12 +18,29 @@ logger = logging.getLogger(__name__)
 AGT06_BASE = "http://agt06-memory:8106"
 AGT01_BASE = "http://agt01-profiling:8101"
 
+# SPEAKING is never CAT-assessed (see migration 009's CHECK constraint and
+# AGT-05's own rejection of SPEAKING requests), so it has no theta history.
+ASSESSMENT_SKILL_DOMAINS = ["LISTENING", "READING", "WRITING"]
+
+
+async def _fetch_theta_history(client: httpx.AsyncClient, clerk_user_id: str, skill_domain: str) -> list[float]:
+    try:
+        r = await client.get(
+            f"{AGT06_BASE}/ltm/{clerk_user_id}/assessment-history",
+            params={"skill_domain": skill_domain},
+        )
+        r.raise_for_status()
+        rows = r.json()
+        return [row["irt_score"] for row in rows if row.get("irt_score") is not None]
+    except Exception as exc:
+        logger.warning("Theta history fetch failed for %s/%s: %s", clerk_user_id, skill_domain, exc)
+        return []
+
 
 async def run_analysis(clerk_user_id: str) -> dict:
     """
     Run all analysis algorithms for a user and emit any detected pattern events.
     Returns analysis summary dict.
-    At scaffold: all algorithms return empty/stub results.
     """
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
@@ -39,6 +57,11 @@ async def run_analysis(clerk_user_id: str) -> dict:
             errors = errors_r.json()
             sessions = sessions_r.json()
             profile = profile_r.json()
+
+            theta_histories = {
+                skill: await _fetch_theta_history(client, clerk_user_id, skill)
+                for skill in ASSESSMENT_SKILL_DOMAINS
+            }
     except Exception as exc:
         logger.warning("Analysis data fetch failed for %s: %s", clerk_user_id, exc)
         return {"clerk_user_id": clerk_user_id, "error": str(exc), "patterns": []}
@@ -46,9 +69,8 @@ async def run_analysis(clerk_user_id: str) -> dict:
     # CUSUM: persistent error detection
     persistent = detect_persistent_errors(errors, min_sessions=5)
 
-    # Plateau detection
-    theta_series = [0.0] * len(sessions)  # proxy count; Phase 8+ will extract real theta values
-    plateau_result = detect_plateau(theta_series)
+    # Plateau detection: one real PELT result per assessed skill domain.
+    plateau_by_skill = {skill: detect_plateau(history) for skill, history in theta_histories.items()}
 
     # Behavioural risk
     behavioral = profile.get("behavioral_profile", {})
@@ -60,7 +82,7 @@ async def run_analysis(clerk_user_id: str) -> dict:
             days_since = (datetime.now(timezone.utc) - last_dt).days
         except Exception:
             days_since = 0
-    risk = compute_risk_score(behavioral, days_since)
+    risk = compute_risk_score(behavioral, days_since, sessions)
 
     # Emit events for detected patterns
     for pattern in persistent:
@@ -80,8 +102,7 @@ async def run_analysis(clerk_user_id: str) -> dict:
     return {
         "clerk_user_id": clerk_user_id,
         "patterns": persistent,
-        "plateau": plateau_result,
-        "risk_score": risk,
+        "plateau_by_skill": plateau_by_skill,
+        "risk_score": round(risk, 4),
         "insufficient_data": len(sessions) < 5,
-        "stub": True,
     }

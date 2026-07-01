@@ -1,5 +1,6 @@
 -r ../requirements-base.txt
-# Phase 8+ only — uncomment when implementing CUSUM, PELT, risk model
+ruptures>=1.1.9
+# Still deferred — not needed by this plan's risk_model upgrade (Task C4 uses
+# a transparent weighted-signal score, not a trained model; see Finding 3).
 # scikit-learn>=1.4.0
-# ruptures>=1.1.9
 # statsmodels>=0.14.0

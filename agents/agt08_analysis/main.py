@@ -28,9 +28,13 @@ async def health():
 @app.post("/analysis/{clerk_user_id}/run")
 async def run(clerk_user_id: str):
     """
-    Run all analysis algorithms for a user.
-    All algorithms are stubs at scaffold — returns empty pattern list.
-    TODO Phase 8+: CUSUM, PELT changepoint, logistic regression risk model.
+    Run all analysis algorithms for a user and return the results.
+
+    Runs a CUSUM control chart (cusum.py) for persistent error detection, a
+    PELT changepoint algorithm (changepoint.py) per assessed skill domain for
+    plateau detection, and a multi-signal weighted risk score (risk_model.py)
+    for disengagement prediction. See those modules for implementation
+    details. Detected patterns and high-risk scores are also emitted to Kafka.
     """
     return await run_analysis(clerk_user_id)
 
@@ -39,7 +43,11 @@ async def run(clerk_user_id: str):
 async def latest(clerk_user_id: str):
     """
     Return the latest analysis results for a user.
-    TODO Phase 8+: read from cached analysis results in LTM.
+
+    Not yet implemented: there is no persistence layer for analysis results,
+    so this always returns an empty placeholder rather than real data. Use
+    POST /analysis/{clerk_user_id}/run to get a real, freshly computed
+    result. TODO Phase 8+: read from cached analysis results in LTM.
     """
     return {
         "clerk_user_id": clerk_user_id,
@@ -47,5 +55,5 @@ async def latest(clerk_user_id: str):
         "velocity": {},
         "forecast": {},
         "insufficient_data": True,
-        "stub": True,
+        "not_implemented": True,
     }
