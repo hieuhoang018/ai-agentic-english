@@ -84,3 +84,39 @@ def test_multiple_persistent_types_independent_skill_domains():
     types_found = {(r["error_type"], r["skill_domain"]) for r in result}
     assert ("grammar", "SPEAKING") in types_found
     assert ("punctuation", "WRITING") in types_found
+
+
+def test_duplicate_errors_within_one_session_count_once_not_twice():
+    """Occurrence/rate is presence-based per session, not count-based. Two
+    error events of the same (error_type, skill_domain) landing in the same
+    session must produce an identical result to a single occurrence in that
+    session -- the rate series is boolean-collapsed (1.0 if present, else
+    0.0), so duplicates within a session must not inflate the rate to 2.0
+    or otherwise change the CUSUM outcome."""
+    errors_single = [
+        _make_error(f"sess-{i}", "verb_tense", "SPEAKING", days_ago=6 - i) for i in range(6)
+    ]
+    result_single = detect_persistent_errors(errors_single, min_sessions=5)
+
+    errors_duplicated = errors_single + [
+        _make_error("sess-0", "verb_tense", "SPEAKING", days_ago=6)
+    ]
+    result_duplicated = detect_persistent_errors(errors_duplicated, min_sessions=5)
+
+    assert len(result_single) == 1
+    assert len(result_duplicated) == 1
+    assert result_single[0]["count"] == result_duplicated[0]["count"]
+    assert result_single[0]["cusum_statistic"] == result_duplicated[0]["cusum_statistic"]
+
+
+def test_exact_min_sessions_boundary_is_not_suppressed():
+    """The suppression check is `if len(sessions_seen) < min_sessions: return
+    []`, so exactly len(sessions_seen) == min_sessions must NOT be
+    suppressed (5 < 5 is False). With exactly 5 distinct sessions and
+    min_sessions=5, an error type present in all 5 (>= 3 occurrences) must
+    still produce a non-empty, alerting result."""
+    errors = [_make_error(f"sess-{i}", "grammar", "WRITING", days_ago=5 - i) for i in range(5)]
+    result = detect_persistent_errors(errors, min_sessions=5)
+    types_found = {r["error_type"] for r in result}
+    assert result != []
+    assert "grammar" in types_found
