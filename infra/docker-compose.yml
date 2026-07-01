@@ -354,6 +354,7 @@ services:
       LANGUAGETOOL_URL: http://languagetool:8010/v2
       AGT06_BASE_URL: http://agt06-memory:8106
       AGT11_BASE_URL: http://agt11-translation:8111
+      LMS_BASE_URL: http://learning-materials-service:4002
       INFERENCE_MODE: mock
     depends_on:
       postgres-agents:
@@ -363,6 +364,8 @@ services:
       agt06-memory:
         condition: service_started
       agt11-translation:
+        condition: service_started
+      learning-materials-service:
         condition: service_started
 
   agt05-assessment:
