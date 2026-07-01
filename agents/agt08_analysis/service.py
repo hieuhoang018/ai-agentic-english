@@ -60,7 +60,7 @@ async def run_analysis(clerk_user_id: str) -> dict:
             days_since = (datetime.now(timezone.utc) - last_dt).days
         except Exception:
             days_since = 0
-    risk = compute_risk_score(behavioral, days_since)
+    risk = compute_risk_score(behavioral, days_since, sessions)
 
     # Emit events for detected patterns
     for pattern in persistent:

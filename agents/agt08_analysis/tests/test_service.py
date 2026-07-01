@@ -43,14 +43,29 @@ def _make_http_client_mock(sessions: list[dict], monkeypatch):
     return mock_client
 
 
-async def test_risk_score_above_threshold_when_session_8_days_ago(monkeypatch):
-    _make_http_client_mock([_make_session(8)], monkeypatch)
+async def test_risk_score_above_threshold_for_long_absence_with_declining_engagement(monkeypatch):
+    """
+    The risk model's days-absent signal now saturates at 14 days (not 7) as
+    part of the multi-signal weighted score in risk_model.py — see that
+    module's docstring for the full rationale. Days-absence alone caps its
+    contribution at exactly 0.7 (the alert threshold itself), so it can never
+    strictly exceed 0.7 without at least some trend signal too. A user who is
+    both long-absent AND has widening session gaps (declining engagement
+    frequency leading up to that absence) realistically crosses the
+    threshold and should trigger the AGT-10 behavioral_risk_event alert
+    (service.py's `if risk > 0.7` check).
+    """
+    sessions = [
+        _make_session(60), _make_session(58), _make_session(56),  # old: every 2 days
+        _make_session(40), _make_session(30), _make_session(20),  # recent: widening gaps
+    ]
+    _make_http_client_mock(sessions, monkeypatch)
 
     from agents.agt08_analysis.service import run_analysis
 
     result = await run_analysis("user-001")
     assert result["risk_score"] > 0.7, (
-        f"Expected risk_score > 0.7 for 8-day absence, got {result['risk_score']}"
+        f"Expected risk_score > 0.7 for long absence + declining engagement, got {result['risk_score']}"
     )
 
 
