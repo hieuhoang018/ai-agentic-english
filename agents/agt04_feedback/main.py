@@ -1,6 +1,6 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException
-from agents.agt04_feedback.service import analyze_speaking_turn, analyze_writing
+from agents.agt04_feedback.service import analyze_speaking_turn, analyze_writing, summarize_session
 from agents.agt04_feedback.models import (
     SpeakingFeedbackRequest, WritingFeedbackRequest,
     ComprehensionFeedbackRequest, SessionEndRequest,
@@ -73,6 +73,5 @@ async def session_end_feedback(body: SessionEndRequest):
     """
     Generate end-of-session feedback summary per skill.
     Reads full STM error log from AGT-06 and computes per-skill breakdown.
-    TODO Phase 4: implement full session summary computation.
     """
-    raise HTTPException(status_code=501, detail="Not implemented (Phase 4)")
+    return await summarize_session(body.session_id, body.clerk_user_id)

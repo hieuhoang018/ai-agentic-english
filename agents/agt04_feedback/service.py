@@ -97,6 +97,38 @@ async def _get_bilingual_explanation(
         return None
 
 
+async def _stm_get_errors(session_id: str) -> list[dict]:
+    """Read the full STM error log for a session from AGT-06."""
+    async with httpx.AsyncClient(timeout=8.0) as client:
+        resp = await client.get(f"{AGT06_BASE}/sessions/{session_id}/errors")
+        resp.raise_for_status()
+        return resp.json()
+
+
+async def summarize_session(session_id: str, clerk_user_id: str) -> dict:
+    """
+    Compute an end-of-session feedback summary from the STM error log.
+    Groups errors by skill_domain, tallying total count and per-error-type
+    counts within each skill.
+    """
+    errors = await _stm_get_errors(session_id)
+
+    by_skill: dict[str, dict] = {}
+    for err in errors:
+        skill = err.get("skill_domain", "UNKNOWN")
+        bucket = by_skill.setdefault(skill, {"total_errors": 0, "error_type_counts": {}})
+        bucket["total_errors"] += 1
+        etype = err.get("error_type", "unknown")
+        bucket["error_type_counts"][etype] = bucket["error_type_counts"].get(etype, 0) + 1
+
+    return {
+        "session_id": session_id,
+        "clerk_user_id": clerk_user_id,
+        "total_errors": len(errors),
+        "by_skill": by_skill,
+    }
+
+
 async def analyze_speaking_turn(
     transcript: str,
     session_id: str,
