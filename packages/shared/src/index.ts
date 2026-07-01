@@ -5,7 +5,6 @@ export * from './auth/extractUserId';
 export * from './dto/user';
 export * from './dto/learning-materials';
 export * from './dto/memory-progress';
-export * from './dto/offline';
 export * from './env';
 export * from './events/achievementUnlocked';
 export * from './events/createEvent';
