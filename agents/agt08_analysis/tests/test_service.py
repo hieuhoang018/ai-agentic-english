@@ -2,6 +2,7 @@
 Tests for AGT-08 run_analysis — specifically the days_since computation.
 """
 
+import httpx
 import pytest
 from datetime import datetime, timezone, timedelta
 from unittest.mock import AsyncMock, MagicMock
@@ -156,6 +157,65 @@ async def test_run_analysis_uses_real_theta_history_per_skill(monkeypatch):
     assert result["plateau_by_skill"]["READING"]["plateau"] is True
     assert result["plateau_by_skill"]["LISTENING"]["insufficient_data"] is True
     assert result["plateau_by_skill"]["WRITING"]["insufficient_data"] is True
+
+
+async def test_run_analysis_isolates_single_skill_theta_history_fetch_failure(monkeypatch):
+    """
+    Task C5 regression: _fetch_theta_history wraps its HTTP call in its own
+    try/except and returns [] on failure, so that if ONE skill's
+    assessment-history fetch blows up (AGT-06 hiccup, timeout, etc.) the
+    other two skills' plateau detection still completes normally instead of
+    aborting the whole analysis. Here WRITING's fetch raises; LISTENING and
+    READING succeed with real flat theta series (a genuine plateau).
+    """
+    sessions = [_make_session(1)]
+    good_history = [
+        {"irt_score": 1.0, "assessed_at": f"2026-06-{i:02d}T00:00:00+00:00"} for i in range(1, 7)
+    ]
+
+    def make_resp(data):
+        resp = MagicMock()
+        resp.raise_for_status = MagicMock()
+        resp.json.return_value = data
+        return resp
+
+    async def mock_get(url, **kwargs):
+        if "/assessment-history" in url:
+            params = kwargs.get("params", {})
+            skill = params.get("skill_domain", "")
+            if skill == "WRITING":
+                raise httpx.ConnectTimeout("simulated AGT-06 timeout for WRITING")
+            return make_resp(good_history)
+        if "/errors" in url:
+            return make_resp([])
+        if "/sessions" in url:
+            return make_resp(sessions)
+        if "/profile" in url:
+            return make_resp({"behavioral_profile": {}})
+        return make_resp({})
+
+    mock_client = MagicMock()
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=False)
+    mock_client.get = mock_get
+
+    monkeypatch.setattr("agents.agt08_analysis.service.httpx.AsyncClient", lambda **kw: mock_client)
+    monkeypatch.setattr("agents.agt08_analysis.service.emit", AsyncMock())
+
+    from agents.agt08_analysis.service import run_analysis
+
+    # Must not raise/propagate the simulated WRITING fetch failure.
+    result = await run_analysis("user-partial-failure")
+
+    # The failed skill degrades gracefully to the empty-history shape.
+    assert result["plateau_by_skill"]["WRITING"] == {"plateau": False, "insufficient_data": True}
+
+    # The other two skills are computed normally from their real mocked data,
+    # not also degraded by WRITING's failure.
+    assert result["plateau_by_skill"]["LISTENING"]["insufficient_data"] is False
+    assert result["plateau_by_skill"]["LISTENING"]["plateau"] is True
+    assert result["plateau_by_skill"]["READING"]["insufficient_data"] is False
+    assert result["plateau_by_skill"]["READING"]["plateau"] is True
 
 
 async def test_run_analysis_passes_sessions_to_risk_model(monkeypatch):
