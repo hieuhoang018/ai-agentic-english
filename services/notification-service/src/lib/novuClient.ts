@@ -23,5 +23,9 @@ export function createLiveNovuClient(secretKey: string): NovuClient {
         payload: trigger.payload ?? {},
       });
     },
+
+    async deleteSubscriber(subscriberId: string): Promise<void> {
+      await novu.subscribers.delete(subscriberId);
+    },
   };
 }
