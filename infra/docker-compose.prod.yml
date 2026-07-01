@@ -7,9 +7,16 @@
 # default) to INFERENCE_MODE=live, and passes through the LLM provider API
 # keys those agents read via agents/shared/config.py's Settings class.
 #
-# GROQ_API_KEY and OPENROUTER_API_KEY have no default — if unset, live-mode
-# LLM calls fail loudly (401/403) instead of silently degrading to mock
-# responses. Set real values in a gitignored infra/.env (see .env.example).
+# GROQ_API_KEY and OPENROUTER_API_KEY have no default — if unset, Compose
+# substitutes an empty string. This does NOT fail loudly: the openai SDK
+# raises at client construction on an empty key, which agents/shared/llm/
+# router.py's per-tier exception handling catches and silently falls
+# through to the next tier — with both keys empty, every LLM call quietly
+# lands on the Ollama backstop (no API key required) instead of erroring.
+# That looks like normal operation in logs (warning-level only) while
+# actually running local CPU inference instead of the intended provider.
+# Set real values in a gitignored infra/.env (see .env.example) and verify
+# they're picked up — don't rely on a loud failure to catch a missing key.
 # Ollama (Tier 3 backstop) needs no API key — only OLLAMA_BASE_URL, already
 # set per-service in the base file.
 
