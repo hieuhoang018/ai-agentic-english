@@ -14,12 +14,14 @@ export interface NovuTriggerPayload {
 export interface NovuClient {
   upsertSubscriber(subscriber: NovuSubscriberPayload): Promise<void>;
   triggerNotification(trigger: NovuTriggerPayload): Promise<void>;
+  deleteSubscriber(subscriberId: string): Promise<void>;
 }
 
 /** Records calls in memory instead of calling Novu. Default runtime implementation until a real NOVU_API_KEY is wired up. */
 export class MockNovuClient implements NovuClient {
   readonly upsertedSubscribers: NovuSubscriberPayload[] = [];
   readonly triggeredNotifications: NovuTriggerPayload[] = [];
+  readonly deletedSubscribers: string[] = [];
 
   async upsertSubscriber(subscriber: NovuSubscriberPayload): Promise<void> {
     this.upsertedSubscribers.push(subscriber);
@@ -27,5 +29,9 @@ export class MockNovuClient implements NovuClient {
 
   async triggerNotification(trigger: NovuTriggerPayload): Promise<void> {
     this.triggeredNotifications.push(trigger);
+  }
+
+  async deleteSubscriber(subscriberId: string): Promise<void> {
+    this.deletedSubscribers.push(subscriberId);
   }
 }

@@ -1,29 +1,11 @@
-import { USER_UPSERTED_TOPIC, UserUpsertedEvent, createEvent } from '@ai-agentic-english/shared';
+import {
+  USER_DELETED_TOPIC,
+  USER_UPSERTED_TOPIC,
+  UserDeletedEvent,
+  UserUpsertedEvent,
+  createEvent,
+} from '@ai-agentic-english/shared';
 import type { EventBus } from '@ai-agentic-english/shared';
-
-export interface UserSyncedPayload {
-  userId: string;
-  clerkUserId: string;
-  email: string;
-}
-
-export const USER_EVENTS_TOPIC = 'user-events';
-
-export function publishUserCreated(eventBus: EventBus, payload: UserSyncedPayload) {
-  return eventBus.publish(
-    USER_EVENTS_TOPIC,
-    { type: 'user.created', occurredAt: new Date().toISOString(), payload },
-    payload.userId,
-  );
-}
-
-export function publishUserUpdated(eventBus: EventBus, payload: UserSyncedPayload) {
-  return eventBus.publish(
-    USER_EVENTS_TOPIC,
-    { type: 'user.updated', occurredAt: new Date().toISOString(), payload },
-    payload.userId,
-  );
-}
 
 export function publishUserUpserted(
   eventBus: EventBus,
@@ -40,9 +22,9 @@ export function publishUserUpserted(
 }
 
 export function publishUserDeleted(eventBus: EventBus, payload: { clerkUserId: string }) {
-  return eventBus.publish(
-    USER_EVENTS_TOPIC,
-    { type: 'user.deleted', occurredAt: new Date().toISOString(), payload },
-    payload.clerkUserId,
-  );
+  const event = createEvent<UserDeletedEvent>({
+    type: 'user.deleted',
+    userId: payload.clerkUserId,
+  });
+  return eventBus.publish(USER_DELETED_TOPIC, { type: event.type, occurredAt: event.occurredAt, payload: event }, payload.clerkUserId);
 }
