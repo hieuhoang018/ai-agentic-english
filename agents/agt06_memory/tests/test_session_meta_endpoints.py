@@ -68,3 +68,15 @@ async def test_get_turn_count_endpoint_reflects_increments():
         await client.post("/sessions/sessD/meta/increment-turn")
         resp = await client.get("/sessions/sessD/meta/turn-count")
         assert resp.json() == {"turn_count": 2}
+
+
+async def test_assessment_history_endpoint_returns_theta_series(monkeypatch):
+    async def fake_get_history(clerk_user_id, skill_domain, limit=50):
+        return [{"irt_score": 0.5, "assessed_at": "2026-06-01T10:00:00+00:00", "skill_domain": "READING"}]
+
+    monkeypatch.setattr("agents.agt06_memory.main.ltm.get_assessment_history", fake_get_history)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.get("/ltm/user1/assessment-history", params={"skill_domain": "READING"})
+        assert resp.status_code == 200
+        assert resp.json() == [{"irt_score": 0.5, "assessed_at": "2026-06-01T10:00:00+00:00", "skill_domain": "READING"}]

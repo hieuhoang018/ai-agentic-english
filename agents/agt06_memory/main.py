@@ -192,6 +192,11 @@ async def get_conversations(clerk_user_id: str, limit: int = 20):
     return await ltm.get_conversations(clerk_user_id, limit)
 
 
+@app.get("/ltm/{clerk_user_id}/assessment-history")
+async def get_assessment_history_endpoint(clerk_user_id: str, skill_domain: str, limit: int = 50):
+    return await ltm.get_assessment_history(clerk_user_id, skill_domain, limit)
+
+
 # ── Review Center ─────────────────────────────────────────────────────────────
 
 @app.get("/review-center/{clerk_user_id}")

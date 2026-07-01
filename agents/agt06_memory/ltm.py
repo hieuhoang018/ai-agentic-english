@@ -251,3 +251,23 @@ async def get_conversations(clerk_user_id: str, limit: int = 20) -> list[dict]:
         clerk_user_id, limit,
     )
     return [dict(r) for r in rows]
+
+
+# ── assessment_history ────────────────────────────────────────────────────────
+
+async def get_assessment_history(clerk_user_id: str, skill_domain: str, limit: int = 50) -> list[dict]:
+    """
+    Ordered (oldest-first) theta history for one skill domain — the real data
+    source for AGT-08's plateau detection. Most users will have very few rows
+    (often just one, from one-time onboarding placement) until a periodic
+    reassessment feature exists or a user retakes the assessment naturally.
+    """
+    rows = await fetch(
+        """
+        SELECT irt_score, assessed_at, skill_domain FROM assessment_history
+        WHERE clerk_user_id = $1 AND skill_domain = $2 AND irt_score IS NOT NULL
+        ORDER BY assessed_at ASC LIMIT $3
+        """,
+        clerk_user_id, skill_domain, limit,
+    )
+    return [dict(r) for r in rows]
