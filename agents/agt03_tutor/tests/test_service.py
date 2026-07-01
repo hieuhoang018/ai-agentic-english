@@ -263,9 +263,15 @@ async def test_end_session_handles_naive_start_time_without_crashing(monkeypatch
     """If AGT-06 session meta somehow holds a naive (no-tz) or malformed start_time
     (e.g. written by an unvalidated caller of POST /sessions/{id}/meta), end_session
     must degrade gracefully instead of raising ValueError/TypeError."""
+    from datetime import datetime, timezone, timedelta
+
+    # Naive (no tzinfo) but representing real UTC wall-clock time 90s ago —
+    # end_session coerces naive datetimes to UTC, so this must actually BE
+    # UTC or the computed duration would be off by the local UTC offset.
+    naive_past_start = (datetime.now(timezone.utc) - timedelta(seconds=90)).replace(tzinfo=None).isoformat()
     respx.get(f"{service.AGT06_BASE_URL}/sessions/abc/meta").mock(
         return_value=httpx.Response(200, json={
-            "start_time": "2026-07-01T10:00:00",  # naive — no timezone offset
+            "start_time": naive_past_start,  # naive — no timezone offset
             "clerk_user_id": "user1",
             "skill_focus": "SPEAKING", "profile": {}, "profile_loaded": True,
         })
@@ -286,8 +292,10 @@ async def test_end_session_handles_naive_start_time_without_crashing(monkeypatch
     result = await service.end_session("abc", "user1", "SPEAKING")
 
     # Naive datetime is treated as UTC rather than crashing — duration is computed
-    # normally (not forced to 0.0) since the parse itself succeeds.
-    assert isinstance(result["duration_minutes"], float)
+    # normally (a small positive value matching the mocked ~90s gap, not forced
+    # to 0.0 as the malformed-string fallback path would produce).
+    assert 0 < result["duration_minutes"] < 5
+    assert result["turns_completed"] == 2
     assert result["session_id"] == "abc"
 
 
