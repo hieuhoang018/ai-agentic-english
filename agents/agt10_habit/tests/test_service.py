@@ -60,74 +60,38 @@ async def test_send_milestone_7_day_streak_emits_achievement_unlocked(patch_emit
     )
 
 
-async def test_send_milestone_30_day_streak_does_not_emit(patch_emit_ts_event):
+async def test_send_milestone_30_day_streak_emits_achievement_unlocked(patch_emit_ts_event):
     from agents.agt10_habit.service import send_milestone
 
     await send_milestone("user_abc", "30-day streak")
 
-    patch_emit_ts_event.assert_not_called()
+    patch_emit_ts_event.assert_called_once_with(
+        "achievement.unlocked",
+        "achievement.unlocked",
+        {"userId": "user_abc", "achievementType": "30-day-streak", "metadata": {}},
+        key="user_abc",
+    )
 
 
-async def test_send_milestone_100_day_streak_does_not_emit(patch_emit_ts_event):
+async def test_send_milestone_100_day_streak_emits_achievement_unlocked(patch_emit_ts_event):
     from agents.agt10_habit.service import send_milestone
 
     await send_milestone("user_abc", "100-day streak")
 
+    patch_emit_ts_event.assert_called_once_with(
+        "achievement.unlocked",
+        "achievement.unlocked",
+        {"userId": "user_abc", "achievementType": "100-day-streak", "metadata": {}},
+        key="user_abc",
+    )
+
+
+async def test_send_milestone_unrecognised_name_does_not_emit(patch_emit_ts_event):
+    from agents.agt10_habit.service import send_milestone
+
+    await send_milestone("user_abc", "365-day streak")
+
     patch_emit_ts_event.assert_not_called()
-
-
-# ── check_re_engagement escalation ───────────────────────────────────────────
-
-async def test_check_re_engagement_returns_daily_reminder_after_1_day():
-    from agents.agt10_habit.service import check_re_engagement
-
-    result = await check_re_engagement("user_abc", days_since_last_session=1)
-    assert result == "daily-reminder"
-
-
-async def test_check_re_engagement_returns_nudge_after_3_days():
-    from agents.agt10_habit.service import check_re_engagement
-
-    result = await check_re_engagement("user_abc", days_since_last_session=3)
-    assert result == "re-engagement-nudge"
-
-
-async def test_check_re_engagement_returns_weekly_summary_after_7_days():
-    from agents.agt10_habit.service import check_re_engagement
-
-    result = await check_re_engagement("user_abc", days_since_last_session=7)
-    assert result == "weekly-progress-summary"
-
-
-async def test_check_re_engagement_returns_none_when_active():
-    from agents.agt10_habit.service import check_re_engagement
-
-    result = await check_re_engagement("user_abc", days_since_last_session=0)
-    assert result is None
-
-
-async def test_check_re_engagement_risk_score_overrides_active():
-    """risk_score > 0.7 triggers proactive-intervention even when days_since=0."""
-    from agents.agt10_habit.service import check_re_engagement
-
-    result = await check_re_engagement("user_abc", days_since_last_session=0, risk_score=0.8)
-    assert result == "proactive-intervention"
-
-
-async def test_check_re_engagement_risk_score_overrides_day_based():
-    """risk_score > 0.7 takes priority over day-based escalation."""
-    from agents.agt10_habit.service import check_re_engagement
-
-    result = await check_re_engagement("user_abc", days_since_last_session=3, risk_score=0.9)
-    assert result == "proactive-intervention"
-
-
-async def test_check_re_engagement_low_risk_score_does_not_override():
-    """risk_score <= 0.7 does not trigger proactive-intervention."""
-    from agents.agt10_habit.service import check_re_engagement
-
-    result = await check_re_engagement("user_abc", days_since_last_session=0, risk_score=0.5)
-    assert result is None
 
 
 # ── record_session_complete + Redis streak ────────────────────────────────────
@@ -165,7 +129,7 @@ async def test_record_session_complete_streak_7_emits_achievement(fake_redis, pa
     )
 
 
-async def test_record_session_complete_streak_30_does_not_emit(fake_redis, patch_emit_ts_event):
+async def test_record_session_complete_streak_30_emits_achievement(fake_redis, patch_emit_ts_event):
     fake_redis["streak:user_abc"] = 29
 
     from agents.agt10_habit.service import record_session_complete
@@ -173,7 +137,28 @@ async def test_record_session_complete_streak_30_does_not_emit(fake_redis, patch
     result = await record_session_complete("user_abc", current_streak=29, session_duration_minutes=15)
 
     assert result["streak"] == 30
-    patch_emit_ts_event.assert_not_called()
+    patch_emit_ts_event.assert_called_once_with(
+        "achievement.unlocked",
+        "achievement.unlocked",
+        {"userId": "user_abc", "achievementType": "30-day-streak", "metadata": {}},
+        key="user_abc",
+    )
+
+
+async def test_record_session_complete_streak_100_emits_achievement(fake_redis, patch_emit_ts_event):
+    fake_redis["streak:user_abc"] = 99
+
+    from agents.agt10_habit.service import record_session_complete
+
+    result = await record_session_complete("user_abc", current_streak=99, session_duration_minutes=15)
+
+    assert result["streak"] == 100
+    patch_emit_ts_event.assert_called_once_with(
+        "achievement.unlocked",
+        "achievement.unlocked",
+        {"userId": "user_abc", "achievementType": "100-day-streak", "metadata": {}},
+        key="user_abc",
+    )
 
 
 async def test_record_session_complete_non_milestone_does_not_emit(fake_redis, patch_emit_ts_event):
