@@ -214,6 +214,31 @@ async def test_onboarding_missing_userid():
 
 
 @respx.mock
+async def test_onboarding_agt02_response_missing_plan_id(monkeypatch):
+    """AGT-02 returning a 2xx body without plan_id must return 502, not crash with KeyError."""
+    mock_emit_ts = AsyncMock()
+    monkeypatch.setattr("agents.agt_orchestrator.main.emit_ts_event", mock_emit_ts)
+    plan_without_plan_id = {key: value for key, value in PLAN_STUB.items() if key != "plan_id"}
+
+    respx.post("http://agt01-profiling:8101/profile/user_test").mock(
+        return_value=httpx.Response(201, json={"clerk_user_id": "user_test"})
+    )
+    respx.post("http://agt02-learning-path:8102/plans/user_test/generate").mock(
+        return_value=httpx.Response(201, json=plan_without_plan_id)
+    )
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.post(
+            "/orchestrate/onboarding",
+            json={"userId": "user_test"},
+        )
+
+    assert resp.status_code == 502
+    assert "AGT-02" in resp.json()["detail"]
+    mock_emit_ts.assert_not_awaited()
+
+
+@respx.mock
 async def test_onboarding_agt01_unreachable(monkeypatch):
     """Connection error to AGT-01 must return 502."""
     monkeypatch.setattr("agents.agt_orchestrator.main.emit_ts_event", AsyncMock())
