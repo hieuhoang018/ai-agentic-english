@@ -51,8 +51,8 @@ def _p_correct(theta: float, difficulty: float) -> float:
 def _likelihood(theta: float, responses: list[dict]) -> float:
     likelihood = 1.0
     for r in responses:
-        p = _p_correct(theta, r["difficulty_param"])
-        likelihood *= p if r["correct"] else (1.0 - p)
+        p = _p_correct(theta, r.get("difficulty_param", 0.0))
+        likelihood *= p if r.get("correct") else (1.0 - p)
     return likelihood
 
 
@@ -126,6 +126,6 @@ def should_terminate_eap(
     if len(responses) >= effective_max:
         return True
 
-    administered_difficulties = [r["difficulty_param"] for r in responses]
+    administered_difficulties = [r.get("difficulty_param", 0.0) for r in responses]
     se = _standard_error(theta, administered_difficulties)
     return se < _SE_TERMINATION_THRESHOLD

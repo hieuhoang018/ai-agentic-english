@@ -75,11 +75,13 @@ async def test_record_response_attaches_difficulty_to_current_item_before_eap(ca
         skill_domain="READING",
         clerk_user_id="test-user",
     )
-    # Not terminated yet (4 of 12 answered); current_theta must be a real EAP
-    # value, not 0.0 (which would indicate the current item's difficulty was
-    # silently dropped, e.g. by a KeyError being swallowed somewhere).
+    # Not terminated yet (4 of 12 answered). Pin the exact EAP theta computed
+    # from the real engine with the current item's real difficulty attached —
+    # a weaker `!= 0.0` check would still pass even if the current item's
+    # difficulty were silently replaced by the 0.0 fallback, because the
+    # prior responses alone already push theta away from 0.0.
     assert result["terminated"] is False
-    assert result["current_theta"] != 0.0
+    assert result["current_theta"] == pytest.approx(0.1661, abs=0.001)
 
 
 async def test_assessment_id_and_skill_domain_returned_unchanged(capture_execute, mock_item_bank):
@@ -333,6 +335,37 @@ async def test_start_assessment_model_rejects_speaking():
         StartAssessmentRequest(clerk_user_id="user-001", skill_domain="SPEAKING")
 
 
+async def test_respond_model_rejects_prior_response_missing_difficulty_param():
+    """A client that echoes prior_responses without difficulty_param must be rejected
+    at the API boundary, not crash the service with a bare-dict KeyError."""
+    from agents.agt05_assessment.models import RespondRequest
+    import pytest
+    with pytest.raises(Exception):
+        RespondRequest(
+            clerk_user_id="user-001",
+            assessment_id="test-assessment",
+            item_id="item-1",
+            correct=True,
+            prior_responses=[{"item_id": "item-0", "correct": True}],
+            skill_domain="READING",
+        )
+
+
+async def test_respond_model_accepts_prior_response_with_difficulty_param():
+    from agents.agt05_assessment.models import RespondRequest
+    request = RespondRequest(
+        clerk_user_id="user-001",
+        assessment_id="test-assessment",
+        item_id="item-1",
+        correct=True,
+        prior_responses=[
+            {"item_id": "item-0", "difficulty_param": -0.5, "correct": True}
+        ],
+        skill_domain="READING",
+    )
+    assert request.prior_responses[0].difficulty_param == -0.5
+
+
 # ── D9: Postgres error handling ───────────────────────────────────────────────
 
 async def test_postgres_error_does_not_propagate_on_termination(monkeypatch, mock_item_bank):
@@ -372,8 +405,12 @@ async def test_postgres_error_result_has_correct_cefr(monkeypatch, mock_item_ban
         skill_domain="READING",
         clerk_user_id="user-pg",
     )
-    assert "cefr_band" in result
-    assert result["cefr_band"] in {"A1", "A2", "B1", "B2", "C1", "C2"}
+    # 9/11 prior correct + 1 more correct = 10/12 total; under EAP this
+    # computes to theta ~= 0.748, which maps to CEFR band B2 (not the old
+    # hardcoded "B1" that was correct only under the previous
+    # proportion-correct formula).
+    assert result["final_theta"] == pytest.approx(0.748, abs=0.001)
+    assert result["cefr_band"] == "B2"
 
 
 # ── D10: early-exhaustion response shape ─────────────────────────────────────

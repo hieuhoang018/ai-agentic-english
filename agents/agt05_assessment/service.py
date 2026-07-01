@@ -110,10 +110,26 @@ async def record_response(
     item_bank = await _fetch_item_bank(skill_domain)
     current_difficulty = next(
         (i["difficulty_param"] for i in item_bank if i["item_id"] == item_id),
-        0.0,  # fallback: item not found in current bank fetch (e.g. cache raced
-              # with a bank update) — 0.0 is the prior mean, a neutral default
-              # rather than crashing the whole assessment turn.
+        None,
     )
+    if current_difficulty is None:
+        # Item not found in current bank fetch (e.g. cache raced with a bank
+        # update, or the client sent a stale/unknown item_id). Fall back to
+        # 0.0 (the prior mean) — a neutral default rather than crashing the
+        # whole assessment turn — but this should not happen in normal
+        # operation, so log it for visibility into cache races / bank drift.
+        logger.warning(
+            "Item %s not found in item bank for skill %s (%d items) — "
+            "falling back to difficulty_param=0.0",
+            item_id, skill_domain, len(item_bank),
+        )
+        current_difficulty = 0.0
+
+    # Contract: each prior_responses entry must carry difficulty_param,
+    # echoed back by the client from a prior `current_item` response. This is
+    # now enforced at the API boundary by the PriorResponse Pydantic model
+    # (models.py) — a request missing difficulty_param is rejected with 422
+    # before it ever reaches this function.
     responses = prior_responses + [
         {"item_id": item_id, "difficulty_param": current_difficulty, "correct": correct}
     ]

@@ -15,10 +15,22 @@ class StartAssessmentRequest(BaseModel):
         return self
 
 
+class PriorResponse(BaseModel):
+    """
+    A single previously-answered item, echoed back by the client from an
+    earlier `current_item` response. `difficulty_param` is required so the
+    EAP engine (cat_engine.py) can compute likelihood/information without
+    silently falling back to a neutral default.
+    """
+    item_id: str
+    difficulty_param: float
+    correct: bool
+
+
 class RespondRequest(BaseModel):
     clerk_user_id: str
     assessment_id: str
     item_id: str
     correct: bool
-    prior_responses: list[dict] = []
+    prior_responses: list[PriorResponse] = []
     skill_domain: str
