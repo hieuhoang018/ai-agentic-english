@@ -124,4 +124,4 @@ def compute_risk_score(
         + _GAP_TREND_WEIGHT * gap_component
         + _LENGTH_TREND_WEIGHT * length_component
     )
-    return round(max(0.0, min(1.0, score)), 4)
+    return max(0.0, min(1.0, score))

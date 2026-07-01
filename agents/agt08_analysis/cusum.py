@@ -67,11 +67,12 @@ def detect_persistent_errors(
 
     results = []
     for (etype, skill), events in by_key.items():
-        occurrence_count = sum(1 for s in ordered_sessions if _session_has_error(events, s))
+        session_ids_with_error = {e.get("session_id") for e in events}
+        occurrence_count = sum(1 for s in ordered_sessions if s in session_ids_with_error)
         if occurrence_count < 3:
             continue  # same minimum-occurrence floor as the original frequency stub
 
-        rates = [1.0 if _session_has_error(events, s) else 0.0 for s in ordered_sessions]
+        rates = [1.0 if s in session_ids_with_error else 0.0 for s in ordered_sessions]
         # Baseline is fixed at 0 (the "no errors" ideal), not the series' own mean.
         # A self-referential mean baseline (mu_0 = mean(rates)) is mathematically
         # inert against a constant-rate series: every x_i - mu_0 term is 0, so the
@@ -97,10 +98,6 @@ def detect_persistent_errors(
             })
 
     return results
-
-
-def _session_has_error(events: list[dict], session_id: str) -> bool:
-    return any(e.get("session_id") == session_id for e in events)
 
 
 def _earliest_time_for_session(error_history: list[dict], session_id: str) -> str:

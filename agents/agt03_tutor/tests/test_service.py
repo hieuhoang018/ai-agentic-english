@@ -259,6 +259,67 @@ async def test_end_session_handles_agt06_unreachable(monkeypatch):
 
 
 @respx.mock
+async def test_end_session_handles_naive_start_time_without_crashing(monkeypatch):
+    """If AGT-06 session meta somehow holds a naive (no-tz) or malformed start_time
+    (e.g. written by an unvalidated caller of POST /sessions/{id}/meta), end_session
+    must degrade gracefully instead of raising ValueError/TypeError."""
+    respx.get(f"{service.AGT06_BASE_URL}/sessions/abc/meta").mock(
+        return_value=httpx.Response(200, json={
+            "start_time": "2026-07-01T10:00:00",  # naive — no timezone offset
+            "clerk_user_id": "user1",
+            "skill_focus": "SPEAKING", "profile": {}, "profile_loaded": True,
+        })
+    )
+    respx.get(f"{service.AGT06_BASE_URL}/sessions/abc/meta/turn-count").mock(
+        return_value=httpx.Response(200, json={"turn_count": 2})
+    )
+    respx.delete(f"{service.AGT06_BASE_URL}/sessions/abc/meta").mock(return_value=httpx.Response(204))
+    respx.post(f"{service.AGT06_BASE_URL}/sessions/abc/consolidate").mock(
+        return_value=httpx.Response(200, json={"consolidated": True, "session_id": "abc"})
+    )
+
+    async def fake_emit(topic, payload, agent_id, key=None):
+        pass
+
+    monkeypatch.setattr(service, "emit", fake_emit)
+
+    result = await service.end_session("abc", "user1", "SPEAKING")
+
+    # Naive datetime is treated as UTC rather than crashing — duration is computed
+    # normally (not forced to 0.0) since the parse itself succeeds.
+    assert isinstance(result["duration_minutes"], float)
+    assert result["session_id"] == "abc"
+
+
+@respx.mock
+async def test_end_session_handles_invalid_start_time_string(monkeypatch):
+    """An outright invalid start_time string must not crash end_session — it
+    should fall back to the same degraded path as a missing start_time."""
+    respx.get(f"{service.AGT06_BASE_URL}/sessions/abc/meta").mock(
+        return_value=httpx.Response(200, json={
+            "start_time": "not-a-date",
+            "clerk_user_id": "user1",
+            "skill_focus": "SPEAKING", "profile": {}, "profile_loaded": True,
+        })
+    )
+    respx.delete(f"{service.AGT06_BASE_URL}/sessions/abc/meta").mock(return_value=httpx.Response(204))
+    respx.post(f"{service.AGT06_BASE_URL}/sessions/abc/consolidate").mock(
+        return_value=httpx.Response(200, json={"consolidated": True, "session_id": "abc"})
+    )
+
+    async def fake_emit(topic, payload, agent_id, key=None):
+        pass
+
+    monkeypatch.setattr(service, "emit", fake_emit)
+
+    result = await service.end_session("abc", "user1", "SPEAKING")
+
+    assert result["duration_minutes"] == 0.0
+    assert result["turns_completed"] == 0
+    assert result["session_id"] == "abc"
+
+
+@respx.mock
 async def test_get_session_state_returns_none_on_404():
     respx.get(f"{service.AGT06_BASE_URL}/sessions/abc/state").mock(return_value=httpx.Response(404))
 

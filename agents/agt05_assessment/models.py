@@ -1,4 +1,4 @@
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, Field, model_validator
 
 
 class StartAssessmentRequest(BaseModel):
@@ -32,5 +32,5 @@ class RespondRequest(BaseModel):
     assessment_id: str
     item_id: str
     correct: bool
-    prior_responses: list[PriorResponse] = []
+    prior_responses: list[PriorResponse] = Field(default_factory=list)
     skill_domain: str

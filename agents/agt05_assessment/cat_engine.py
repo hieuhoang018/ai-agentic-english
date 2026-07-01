@@ -32,8 +32,6 @@ Deliberately out of scope:
 
 import math
 
-from agents.shared.config import settings
-
 _QUADRATURE_POINTS = [round(-4.0 + 0.1 * i, 2) for i in range(81)]  # -4.0 to 4.0 step 0.1
 
 

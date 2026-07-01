@@ -371,9 +371,16 @@ async def end_session(session_id: str, clerk_user_id: str, skill_focus: str) -> 
         duration_minutes = 0.0
         turns_completed = 0
     else:
-        start_dt = datetime.fromisoformat(start_time_iso)
-        duration_minutes = round((datetime.now(timezone.utc) - start_dt).total_seconds() / 60.0, 4)
-        turns_completed = await _stm_get_turn_count(session_id)
+        try:
+            start_dt = datetime.fromisoformat(start_time_iso)
+            if start_dt.tzinfo is None:
+                start_dt = start_dt.replace(tzinfo=timezone.utc)  # treat naive as UTC rather than crashing
+            duration_minutes = round((datetime.now(timezone.utc) - start_dt).total_seconds() / 60.0, 4)
+            turns_completed = await _stm_get_turn_count(session_id)
+        except (ValueError, TypeError) as exc:
+            logger.warning("end_session: malformed start_time for session %s: %s", session_id, exc)
+            duration_minutes = 0.0
+            turns_completed = 0
 
     await _stm_delete_meta(session_id)
 

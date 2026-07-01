@@ -103,6 +103,6 @@ async def run_analysis(clerk_user_id: str) -> dict:
         "clerk_user_id": clerk_user_id,
         "patterns": persistent,
         "plateau_by_skill": plateau_by_skill,
-        "risk_score": risk,
+        "risk_score": round(risk, 4),
         "insufficient_data": len(sessions) < 5,
     }

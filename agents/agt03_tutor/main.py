@@ -49,7 +49,10 @@ async def turn(body: TurnRequest):
 
 @app.post("/sessions/end", response_model=EndSessionResponse)
 async def end_session(body: EndSessionRequest):
-    return await service.end_session(body.session_id, body.clerk_user_id, body.skill_focus)
+    try:
+        return await service.end_session(body.session_id, body.clerk_user_id, body.skill_focus)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
 
 
 @app.get("/sessions/{session_id}/state")
