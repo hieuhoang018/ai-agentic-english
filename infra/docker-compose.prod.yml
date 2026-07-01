@@ -1,0 +1,81 @@
+# Production override for infra/docker-compose.yml.
+#
+# Usage:
+#   docker compose -f infra/docker-compose.yml -f infra/docker-compose.prod.yml up -d
+#
+# Switches every agent service from INFERENCE_MODE=mock (the base file's dev
+# default) to INFERENCE_MODE=live, and passes through the LLM provider API
+# keys those agents read via agents/shared/config.py's Settings class.
+#
+# GROQ_API_KEY and OPENROUTER_API_KEY have no default — if unset, live-mode
+# LLM calls fail loudly (401/403) instead of silently degrading to mock
+# responses. Set real values in a gitignored infra/.env (see .env.example).
+# Ollama (Tier 3 backstop) needs no API key — only OLLAMA_BASE_URL, already
+# set per-service in the base file.
+
+services:
+  agt01-profiling:
+    environment:
+      INFERENCE_MODE: live
+      GROQ_API_KEY: ${GROQ_API_KEY}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
+
+  agt02-learning-path:
+    environment:
+      INFERENCE_MODE: live
+      GROQ_API_KEY: ${GROQ_API_KEY}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
+
+  agt03-tutor:
+    environment:
+      INFERENCE_MODE: live
+      GROQ_API_KEY: ${GROQ_API_KEY}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
+
+  agt04-feedback:
+    environment:
+      INFERENCE_MODE: live
+      GROQ_API_KEY: ${GROQ_API_KEY}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
+
+  agt05-assessment:
+    environment:
+      INFERENCE_MODE: live
+      GROQ_API_KEY: ${GROQ_API_KEY}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
+
+  agt06-memory:
+    environment:
+      INFERENCE_MODE: live
+      GROQ_API_KEY: ${GROQ_API_KEY}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
+
+  agt07-review:
+    environment:
+      INFERENCE_MODE: live
+      GROQ_API_KEY: ${GROQ_API_KEY}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
+
+  agt08-analysis:
+    environment:
+      INFERENCE_MODE: live
+      GROQ_API_KEY: ${GROQ_API_KEY}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
+
+  agt09-recommendation:
+    environment:
+      INFERENCE_MODE: live
+      GROQ_API_KEY: ${GROQ_API_KEY}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
+
+  agt10-habit:
+    environment:
+      INFERENCE_MODE: live
+      GROQ_API_KEY: ${GROQ_API_KEY}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
+
+  agt11-translation:
+    environment:
+      INFERENCE_MODE: live
+      GROQ_API_KEY: ${GROQ_API_KEY}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
