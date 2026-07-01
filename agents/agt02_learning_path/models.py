@@ -11,6 +11,7 @@ class GeneratePlanRequest(BaseModel):
 
 class PlanActivity(BaseModel):
     activity_id: str
+    module_id: str | None = None
     skill_domain: str  # LISTENING | SPEAKING | READING | WRITING
     activity_type: str
     title: str
@@ -26,6 +27,7 @@ class LearningPlan(BaseModel):
     version: int = 1
     skill_allocation: dict[str, float]
     activities: list[PlanActivity] = Field(default_factory=list)
+    path_definition: dict | None = None
     rationale: str = ""
     is_active: bool = True
 

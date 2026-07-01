@@ -1,4 +1,4 @@
-import type { CefrLevel as SharedCefrLevel } from '@ai-agentic-english/shared';
+import type { CefrLevel as SharedCefrLevel, PathDefinition } from '@ai-agentic-english/shared';
 
 export type {
   AssessmentQuestionDto,
@@ -25,22 +25,13 @@ export type OnboardingRequest = {
   goals: string[];
 };
 
-export type OnboardingActivity = {
-  activity_id: string;
-  skill_domain: string;
-  activity_type: string;
-  title: string;
-  estimated_minutes: number;
-  difficulty: string;
-  completed: boolean;
-};
+export type OnboardingActivity = NonNullable<PathDefinition['activities']>[number];
 
 export type OnboardingResponse = {
   id: string;
+  learningPathId?: string;
   userId: string;
-  pathDefinition: {
-    activities: OnboardingActivity[];
-  };
+  pathDefinition: PathDefinition;
   createdAt: string;
 };
 

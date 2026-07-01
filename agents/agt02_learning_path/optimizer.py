@@ -96,13 +96,11 @@ def select_daily_activities(
             item = pool[pool_idx % len(pool)]
             est = item.get("estimated_minutes", 5)
             if est <= remaining or added_for_skill == 0:
-                activities.append({
-                    "skill_domain": skill,
-                    "activity_type": item["activity_type"],
-                    "title": item["title"],
-                    "estimated_minutes": est,
-                    "difficulty": item.get("difficulty", "B1"),
-                })
+                activity = dict(item)
+                activity["skill_domain"] = skill
+                activity.setdefault("estimated_minutes", est)
+                activity.setdefault("difficulty", "B1")
+                activities.append(activity)
                 remaining -= est
                 added_for_skill += 1
             pool_idx += 1

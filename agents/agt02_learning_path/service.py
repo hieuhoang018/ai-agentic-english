@@ -43,7 +43,7 @@ LM_INTERNAL_SECRET = os.environ.get("LM_INTERNAL_SECRET", "dev-internal-secret")
 # learning-materials-service's Module.skillFocus values -> optimizer skill codes (L/S/R/W).
 _SKILL_FOCUS_TO_CODE = {"listening": "L", "speaking": "S", "reading": "R", "writing": "W"}
 
-CATALOG_CACHE_KEY = "catalog:summary"
+CATALOG_CACHE_KEY = "catalog:summary:v2"
 CATALOG_CACHE_TTL = 3600  # 1 hour
 
 _COLD_START_PROFILE = {
@@ -72,17 +72,67 @@ def _modules_to_skill_catalog(modules: list[dict]) -> dict[str, list[dict]]:
     """
     catalog: dict[str, list[dict]] = {}
     for module in modules:
-        skill = _SKILL_FOCUS_TO_CODE.get(module.get("skillFocus"))
-        if not skill:
+        skill_focus = module.get("skillFocus")
+        skill = _SKILL_FOCUS_TO_CODE.get(skill_focus)
+        module_id = module.get("id")
+        title = module.get("title")
+        if not skill or not module_id or not title:
             continue
         lesson_count = module.get("lessonCount") or 1
+        lessons = [
+            {
+                "lessonId": lesson["id"],
+                "exerciseIds": list(lesson.get("exerciseIds") or []),
+            }
+            for lesson in (module.get("lessons") or [])
+            if isinstance(lesson, dict) and lesson.get("id")
+        ]
         catalog.setdefault(skill, []).append({
-            "activity_type": f"{module['skillFocus']}_module",
-            "title": module["title"],
+            "module_id": module_id,
+            "path_module": {"moduleId": module_id, "lessons": lessons},
+            "activity_type": f"{skill_focus}_module",
+            "title": title,
             "estimated_minutes": min(max(lesson_count * 5, 5), 20),
             "difficulty": module.get("cefrLevel", "B1"),
         })
     return catalog
+
+
+def _build_path_definition(activities: list[dict]) -> dict:
+    """
+    Convert selected activities into the Learning Materials pathDefinition.
+    path_module is an internal selection hint; module_id stays on activities
+    so downstream UI can link activities back to database modules.
+    """
+    modules: list[dict] = []
+    seen_module_ids: set[str] = set()
+    cleaned_activities: list[dict] = []
+
+    for activity in activities:
+        path_module = activity.get("path_module")
+        if isinstance(path_module, dict):
+            module_id = path_module.get("moduleId")
+            if isinstance(module_id, str) and module_id and module_id not in seen_module_ids:
+                modules.append({
+                    "moduleId": module_id,
+                    "lessons": [
+                        {
+                            "lessonId": lesson["lessonId"],
+                            "exerciseIds": list(lesson.get("exerciseIds") or []),
+                        }
+                        for lesson in (path_module.get("lessons") or [])
+                        if isinstance(lesson, dict) and lesson.get("lessonId")
+                    ],
+                })
+                seen_module_ids.add(module_id)
+
+        cleaned_activities.append({
+            key: value
+            for key, value in activity.items()
+            if key != "path_module"
+        })
+
+    return {"modules": modules, "activities": cleaned_activities}
 
 
 async def _fetch_catalog_summary() -> dict:
@@ -112,8 +162,8 @@ async def _fetch_catalog_summary() -> dict:
     return catalog
 
 
-async def _sync_learning_path(clerk_user_id: str, activities: list[dict]) -> str:
-    """Persist the generated activities in Learning Materials without blocking plan creation."""
+async def _sync_learning_path(clerk_user_id: str, path_definition: dict) -> str:
+    """Persist the generated path definition in Learning Materials without blocking plan creation."""
     fallback_path_id = str(uuid.uuid4())
 
     try:
@@ -123,7 +173,7 @@ async def _sync_learning_path(clerk_user_id: str, activities: list[dict]) -> str
                 headers={"x-internal-secret": LM_INTERNAL_SECRET},
                 json={
                     "userId": clerk_user_id,
-                    "pathDefinition": {"modules": [], "activities": activities},
+                    "pathDefinition": path_definition,
                 },
             )
     except httpx.HTTPError as exc:
@@ -197,7 +247,9 @@ async def generate_plan(clerk_user_id: str, request: dict) -> dict:
         {**activity, "activity_id": str(uuid.uuid4()), "completed": False}
         for activity in raw_activities
     ]
-    lm_plan_id = await _sync_learning_path(clerk_user_id, activities)
+    path_definition = _build_path_definition(activities)
+    activities = path_definition["activities"]
+    lm_plan_id = await _sync_learning_path(clerk_user_id, path_definition)
 
     pool = await get_pool()
     async with pool.acquire() as conn:
@@ -230,6 +282,7 @@ async def generate_plan(clerk_user_id: str, request: dict) -> dict:
             )
 
     plan = _row_to_plan(row)
+    plan["path_definition"] = path_definition
 
     await emit(
         "agent.plan.events",

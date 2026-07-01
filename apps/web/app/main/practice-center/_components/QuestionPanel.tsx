@@ -3,6 +3,7 @@
 import { useAuth } from '@clerk/nextjs';
 import { useState } from 'react';
 
+import { usePresignedAudioUrl } from '@/lib/audio';
 import { isApiError } from '@/lib/api/client';
 import type { GradingRequest, GradingResponse } from '@/lib/api/types';
 
@@ -24,9 +25,16 @@ export default function QuestionPanel({ question }: QuestionPanelProps) {
   const [selectedOptionId, setSelectedOptionId] = useState<string | null>(null);
   const [textAnswer, setTextAnswer] = useState('');
   const [grading, setGrading] = useState<GradingState>({ status: 'idle' });
+  const audio = usePresignedAudioUrl(question.audioBucket, question.audioKey);
 
   const selectedOption = question.options?.find((option) => option.id === selectedOptionId);
   const attemptedAnswer = question.type === 'mcq' ? (selectedOption?.label ?? '') : textAnswer;
+  const shouldHideSourceText = Boolean(
+    question.sourceText &&
+      question.audioBucket &&
+      audio.status !== 'error' &&
+      grading.status !== 'success',
+  );
 
   const submitAnswer = async () => {
     if (!userId) {
@@ -94,7 +102,44 @@ export default function QuestionPanel({ question }: QuestionPanelProps) {
         Câu hỏi thực hành
       </h2>
 
-      {question.sourceText ? (
+      {question.audioBucket ? (
+        <section className="mb-6 rounded-lg border border-outline-variant/50 bg-surface p-4">
+          <div className="flex items-center gap-2 font-bold text-on-surface">
+            <span className="material-symbols-outlined text-primary">headphones</span>
+            Listening audio
+          </div>
+          {audio.status === 'ready' ? (
+            <audio
+              controls
+              preload="metadata"
+              src={audio.url}
+              onError={audio.markPlaybackFailed}
+              className="mt-3 w-full"
+            />
+          ) : (
+            <div className="mt-3 flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                onClick={() => void audio.load()}
+                disabled={audio.status === 'loading'}
+                className="inline-flex h-10 items-center gap-2 rounded-lg bg-primary px-4 text-sm font-semibold text-white transition-colors hover:bg-[#0047bb] disabled:cursor-wait disabled:opacity-70"
+              >
+                <span className="material-symbols-outlined text-base">
+                  {audio.status === 'loading' ? 'progress_activity' : 'play_arrow'}
+                </span>
+                {audio.status === 'loading' ? 'Loading audio...' : 'Load audio'}
+              </button>
+              {audio.status === 'error' ? (
+                <p className="text-sm text-error" role="alert">
+                  {audio.message}
+                </p>
+              ) : null}
+            </div>
+          )}
+        </section>
+      ) : null}
+
+      {question.sourceText && !shouldHideSourceText ? (
         <div className="mb-6 rounded-lg border border-outline-variant/50 bg-surface p-4 leading-7 text-on-surface">
           <p className="mb-2 font-semibold">{question.sourceLabel}</p>
           <p>{question.sourceText}</p>
@@ -103,7 +148,10 @@ export default function QuestionPanel({ question }: QuestionPanelProps) {
 
       {question.context ? (
         <div className="mb-6 rounded-lg border-l-4 border-primary bg-surface p-4 text-on-surface-variant">
-          {question.context}
+          {question.contextLabel ? (
+            <p className="mb-2 text-sm font-semibold text-on-surface">{question.contextLabel}</p>
+          ) : null}
+          <p>{question.context}</p>
         </div>
       ) : null}
 

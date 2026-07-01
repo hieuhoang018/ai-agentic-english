@@ -5,6 +5,7 @@ import { serverApiFetch } from '@/lib/api/server';
 import type { ExerciseDto, LessonDto, ModuleDto } from '@/lib/api/types';
 
 import ExerciseWorkspace from '../../../_components/ExerciseWorkspace';
+import { getActivePathModuleIds, isModuleInActivePath } from '../../../_lib/active-path';
 import { isPracticeSkillId } from '../../../_lib/practice-catalog';
 
 type ModuleExercisePageProps = {
@@ -35,9 +36,11 @@ export default async function ModuleExercisePage({
 }: ModuleExercisePageProps) {
   const { skill, moduleId } = await params;
   if (!isPracticeSkillId(skill)) notFound();
+  const activePathModuleIds = await getActivePathModuleIds();
+  if (!isModuleInActivePath(moduleId, activePathModuleIds)) notFound();
 
-  const module = await getRequired<ModuleDto>(`/modules/${moduleId}`);
-  if (module.skillFocus !== skill) notFound();
+  const practiceModule = await getRequired<ModuleDto>(`/modules/${moduleId}`);
+  if (practiceModule.skillFocus !== skill) notFound();
 
   const lessons = await getRequired<LessonDto[]>(`/modules/${moduleId}/lessons`);
   const requestedSelection = await searchParams;
@@ -54,7 +57,7 @@ export default async function ModuleExercisePage({
   }
 
   const lesson = await getRequired<LessonDto>(`/lessons/${lessonId}`);
-  if (lesson.moduleId !== module.id) notFound();
+  if (lesson.moduleId !== practiceModule.id) notFound();
 
   const exercises = await getRequired<ExerciseDto[]>(`/lessons/${lesson.id}/exercises`);
   const exerciseId = exercises.some((exercise) => exercise.id === requestedSelection.exercise)
@@ -75,7 +78,7 @@ export default async function ModuleExercisePage({
   return (
     <ExerciseWorkspace
       skill={skill}
-      module={module}
+      module={practiceModule}
       lessons={lessons}
       lesson={lesson}
       exercises={exercises}

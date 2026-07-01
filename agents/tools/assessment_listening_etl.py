@@ -37,6 +37,7 @@ its `prompt` JSON rather than a dedicated column (no AssessmentQuestion schema c
 """
 import html as htmlmod
 import json
+import os
 import re
 import urllib.parse
 import urllib.request
@@ -52,11 +53,14 @@ BASE = "https://www.manythings.org/voa/words/"
 SOURCE = "VOA Special English — Words and Their Stories (archived, mirrored at manythings.org/voa/words)"
 LICENSE = "U.S. government work — public domain (17 U.S.C. §105)"
 
-MINIO_ENDPOINT = "http://localhost:9000"
-MINIO_ACCESS_KEY = "minioadmin"
-MINIO_SECRET_KEY = "minioadmin"
+MINIO_ENDPOINT = os.getenv("MINIO_ENDPOINT", "http://127.0.0.1:9000")
+MINIO_ACCESS_KEY = os.getenv("MINIO_ACCESS_KEY", "minioadmin")
+MINIO_SECRET_KEY = os.getenv("MINIO_SECRET_KEY", "minioadmin")
 BUCKET = "assessment-audio"
-OUT = "assessment_listening_seed.jsonl"
+OUT = os.getenv(
+    "ASSESSMENT_LISTENING_OUT",
+    os.path.join(os.path.dirname(__file__), "assessment_listening_seed.jsonl"),
+)
 
 # (episode number on manythings.org, hand-assigned CEFR level — see module docstring)
 EPISODES = [

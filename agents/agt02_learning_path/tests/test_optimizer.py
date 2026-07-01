@@ -57,6 +57,36 @@ def test_select_daily_activities_uses_catalog_when_provided():
     assert any(a["activity_type"] == "custom_listen" for a in activities)
 
 
+def test_select_daily_activities_preserves_catalog_metadata():
+    allocation = {"L": 1.0, "S": 0.0, "R": 0.0, "W": 0.0}
+    path_module = {"moduleId": "mod-1", "lessons": [{"lessonId": "les-1", "exerciseIds": ["ex-1"]}]}
+    catalog = {
+        "L": [
+            {
+                "module_id": "mod-1",
+                "path_module": path_module,
+                "activity_type": "listening_module",
+                "title": "Custom Listening",
+                "estimated_minutes": 10,
+            },
+        ],
+    }
+
+    activities = select_daily_activities(allocation, daily_minutes=10, catalog=catalog)
+
+    assert activities == [
+        {
+            "module_id": "mod-1",
+            "path_module": path_module,
+            "activity_type": "listening_module",
+            "title": "Custom Listening",
+            "estimated_minutes": 10,
+            "skill_domain": "L",
+            "difficulty": "B1",
+        },
+    ]
+
+
 def test_select_daily_activities_zero_minutes_returns_empty():
     allocation = {"L": 0.25, "S": 0.25, "R": 0.25, "W": 0.25}
 

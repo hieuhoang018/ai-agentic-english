@@ -193,7 +193,22 @@ async def test_generate_plan_creates_active_plan_with_activities(monkeypatch):
         })
     )
     respx.get(f"{service.LM_SERVICE_BASE_URL}/internal/catalog/summary").mock(
-        return_value=httpx.Response(404)
+        return_value=httpx.Response(200, json={
+            "modules": [
+                {
+                    "id": "mod-speaking-1",
+                    "title": "Client calls",
+                    "cefrLevel": "B1",
+                    "skillFocus": "speaking",
+                    "lessonCount": 3,
+                    "exerciseCount": 2,
+                    "lessons": [{"id": "les-speaking-1", "exerciseIds": ["ex-speaking-1", "ex-speaking-2"]}],
+                },
+            ],
+            "totalModules": 1,
+            "totalLessons": 1,
+            "totalExercises": 2,
+        })
     )
     learning_path_route = respx.post(f"{service.LM_SERVICE_BASE_URL}/internal/learning-paths").mock(
         return_value=httpx.Response(201, json={"id": "lm-path-1"})
@@ -218,7 +233,16 @@ async def test_generate_plan_creates_active_plan_with_activities(monkeypatch):
     assert learning_path_route.called
     request_body = json.loads(learning_path_route.calls[0].request.content)
     assert request_body["userId"] == clerk_id
+    assert request_body["pathDefinition"]["modules"] == [
+        {
+            "moduleId": "mod-speaking-1",
+            "lessons": [{"lessonId": "les-speaking-1", "exerciseIds": ["ex-speaking-1", "ex-speaking-2"]}],
+        },
+    ]
     assert request_body["pathDefinition"]["activities"] == plan["activities"]
+    assert request_body["pathDefinition"] == plan["path_definition"]
+    assert any(a.get("module_id") == "mod-speaking-1" for a in plan["activities"])
+    assert all("path_module" not in a for a in plan["activities"])
     assert emitted == [("agent.plan.events", {"planId": plan["plan_id"], "clerkUserId": clerk_id, "version": 1}, "AGT02")]
 
 
@@ -267,7 +291,7 @@ async def test_generate_plan_falls_back_when_agt01_unreachable(monkeypatch):
 
     respx.get(f"{service.AGT01_BASE_URL}/profile/{clerk_id}").mock(side_effect=httpx.ConnectError("refused"))
     respx.get(f"{service.LM_SERVICE_BASE_URL}/internal/catalog/summary").mock(side_effect=httpx.ConnectError("refused"))
-    respx.post(f"{service.LM_SERVICE_BASE_URL}/internal/learning-paths").mock(
+    learning_path_route = respx.post(f"{service.LM_SERVICE_BASE_URL}/internal/learning-paths").mock(
         return_value=httpx.Response(200)
     )
 
@@ -281,6 +305,10 @@ async def test_generate_plan_falls_back_when_agt01_unreachable(monkeypatch):
     # cold-start allocation: all four skills equal
     for skill in ("L", "S", "R", "W"):
         assert abs(plan["skill_allocation"][skill] - 0.25) < 0.02
+    request_body = json.loads(learning_path_route.calls[0].request.content)
+    assert request_body["pathDefinition"]["modules"] == []
+    assert request_body["pathDefinition"] == plan["path_definition"]
+    assert all("path_module" not in a for a in request_body["pathDefinition"]["activities"])
 
 
 @respx.mock
@@ -288,8 +316,24 @@ async def test_fetch_catalog_summary_groups_modules_by_skill_code(monkeypatch, p
     respx.get(f"{service.LM_SERVICE_BASE_URL}/internal/catalog/summary").mock(
         return_value=httpx.Response(200, json={
             "modules": [
-                {"id": "m1", "title": "Client calls", "cefrLevel": "B1", "skillFocus": "speaking", "lessonCount": 3, "exerciseCount": 9},
-                {"id": "m2", "title": "Follow-up emails", "cefrLevel": "B2", "skillFocus": "writing", "lessonCount": 2, "exerciseCount": 6},
+                {
+                    "id": "m1",
+                    "title": "Client calls",
+                    "cefrLevel": "B1",
+                    "skillFocus": "speaking",
+                    "lessonCount": 3,
+                    "exerciseCount": 9,
+                    "lessons": [{"id": "l1", "exerciseIds": ["e1"]}],
+                },
+                {
+                    "id": "m2",
+                    "title": "Follow-up emails",
+                    "cefrLevel": "B2",
+                    "skillFocus": "writing",
+                    "lessonCount": 2,
+                    "exerciseCount": 6,
+                    "lessons": [{"id": "l2", "exerciseIds": ["e2", "e3"]}],
+                },
             ],
             "totalModules": 2,
             "totalLessons": 5,
@@ -300,8 +344,26 @@ async def test_fetch_catalog_summary_groups_modules_by_skill_code(monkeypatch, p
     catalog = await service._fetch_catalog_summary()
 
     assert catalog == {
-        "S": [{"activity_type": "speaking_module", "title": "Client calls", "estimated_minutes": 15, "difficulty": "B1"}],
-        "W": [{"activity_type": "writing_module", "title": "Follow-up emails", "estimated_minutes": 10, "difficulty": "B2"}],
+        "S": [
+            {
+                "module_id": "m1",
+                "path_module": {"moduleId": "m1", "lessons": [{"lessonId": "l1", "exerciseIds": ["e1"]}]},
+                "activity_type": "speaking_module",
+                "title": "Client calls",
+                "estimated_minutes": 15,
+                "difficulty": "B1",
+            },
+        ],
+        "W": [
+            {
+                "module_id": "m2",
+                "path_module": {"moduleId": "m2", "lessons": [{"lessonId": "l2", "exerciseIds": ["e2", "e3"]}]},
+                "activity_type": "writing_module",
+                "title": "Follow-up emails",
+                "estimated_minutes": 10,
+                "difficulty": "B2",
+            },
+        ],
     }
 
 
@@ -314,6 +376,49 @@ async def test_fetch_catalog_summary_falls_back_to_empty_on_404(monkeypatch, pat
     catalog = await service._fetch_catalog_summary()
 
     assert catalog == {}
+
+
+def test_build_path_definition_collects_unique_modules_and_strips_internal_metadata():
+    path_module = {"moduleId": "m1", "lessons": [{"lessonId": "l1", "exerciseIds": ["e1"]}]}
+    activities = [
+        {
+            "activity_id": "a1",
+            "module_id": "m1",
+            "path_module": path_module,
+            "skill_domain": "R",
+            "activity_type": "reading_module",
+            "title": "Read a project update",
+            "estimated_minutes": 10,
+            "difficulty": "B1",
+            "completed": False,
+        },
+        {
+            "activity_id": "a2",
+            "module_id": "m1",
+            "path_module": path_module,
+            "skill_domain": "R",
+            "activity_type": "reading_module",
+            "title": "Read another project update",
+            "estimated_minutes": 10,
+            "difficulty": "B1",
+            "completed": False,
+        },
+        {
+            "activity_id": "a3",
+            "skill_domain": "W",
+            "activity_type": "writing_email",
+            "title": "Write a follow-up email",
+            "estimated_minutes": 10,
+            "difficulty": "B1",
+            "completed": False,
+        },
+    ]
+
+    path_definition = service._build_path_definition(activities)
+
+    assert path_definition["modules"] == [path_module]
+    assert [activity.get("module_id") for activity in path_definition["activities"]] == ["m1", "m1", None]
+    assert all("path_module" not in activity for activity in path_definition["activities"])
 
 
 @respx.mock

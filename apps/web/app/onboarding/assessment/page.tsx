@@ -7,7 +7,7 @@ export default function AssessmentPage() {
     <OnboardingShell
       step={2}
       title="Làm bài test trình độ"
-      description="Trả lời 4 câu hỏi ngẫu nhiên cho mỗi kỹ năng từ kho học liệu để Wise Mentor ước tính trình độ hiện tại của bạn."
+      description="Trả lời bộ câu hỏi đọc, viết và nghe từ kho học liệu để Wise Mentor ước tính trình độ hiện tại của bạn."
       backHref={onboardingRoutes.level}
       wide
     >
