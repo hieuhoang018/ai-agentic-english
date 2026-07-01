@@ -42,6 +42,14 @@ async def test_summary_includes_session_and_user_ids(mock_stm_errors):
     assert result["clerk_user_id"] == "user-99"
 
 
+async def test_summary_missing_keys_fall_back_to_unknown(mock_stm_errors):
+    mock_stm_errors([{}])
+    from agents.agt04_feedback.service import summarize_session
+    result = await summarize_session("sess-1", "user-1")
+    assert result["by_skill"]["UNKNOWN"]["total_errors"] == 1
+    assert result["by_skill"]["UNKNOWN"]["error_type_counts"]["unknown"] == 1
+
+
 async def test_session_end_endpoint_returns_summary(monkeypatch):
     from httpx import AsyncClient, ASGITransport
     from unittest.mock import AsyncMock as AM

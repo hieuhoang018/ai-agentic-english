@@ -115,10 +115,10 @@ async def summarize_session(session_id: str, clerk_user_id: str) -> dict:
 
     by_skill: dict[str, dict] = {}
     for err in errors:
-        skill = err.get("skill_domain", "UNKNOWN")
+        skill = err.get("skill_domain") or "UNKNOWN"
         bucket = by_skill.setdefault(skill, {"total_errors": 0, "error_type_counts": {}})
         bucket["total_errors"] += 1
-        etype = err.get("error_type", "unknown")
+        etype = err.get("error_type") or "unknown"
         bucket["error_type_counts"][etype] = bucket["error_type_counts"].get(etype, 0) + 1
 
     return {
