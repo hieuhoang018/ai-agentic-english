@@ -23,13 +23,17 @@
 # INTERNAL_SECRET/LM_INTERNAL_SECRET also have no default here, for the same
 # "required in prod" reasons as the API keys above — BUT unlike the API-key
 # case, a missing/default value for this one does not merely degrade to a
-# fallback: agents/shared/security.py's assert_internal_secret_is_safe (wired
-# into agents/shared/config.py's Settings, agt_orchestrator/main.py, and
-# packages/shared's createInternalMiddleware/createInternalHttpClient) makes
+# fallback: agents/shared/security.py's assert_internal_secret_is_safe makes
 # every affected service refuse to start when INFERENCE_MODE=live (Python) or
 # DEPLOY_ENV=production (the 3 Node services below) and the secret is still
-# "dev-internal-secret" or empty. That's the actual enforcement — this file
-# just declares the requirement, consistent with the GROQ/OPENROUTER pattern.
+# "dev-internal-secret" or empty. It's wired into agents/shared/config.py's
+# Settings (covers most agents via the shared settings singleton),
+# agt_orchestrator/main.py and agt02_learning_path/service.py (both read
+# their own env vars directly rather than through Settings, so each has its
+# own separate call to the guard), and packages/shared's
+# createInternalMiddleware/createInternalHttpClient (the 3 Node services).
+# That's the actual enforcement — this file just declares the requirement,
+# consistent with the GROQ/OPENROUTER pattern.
 
 services:
   agt01-profiling:
