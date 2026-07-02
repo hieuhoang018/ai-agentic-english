@@ -7,13 +7,17 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
 from agents.shared.events.producer import close_producer, emit, emit_ts_event, get_producer
+from agents.shared.security import assert_internal_secret_is_safe
 
 logger = logging.getLogger(__name__)
 
 AGT01_BASE_URL = os.environ.get("AGT01_BASE_URL", "http://agt01-profiling:8101")
 AGT02_BASE_URL = os.environ.get("AGT02_BASE_URL", "http://agt02-learning-path:8102")
 LM_SERVICE_BASE_URL = os.environ.get("LM_SERVICE_BASE_URL", "http://learning-materials-service:4002")
+INFERENCE_MODE = os.environ.get("INFERENCE_MODE", "mock")
 INTERNAL_SECRET = os.environ.get("INTERNAL_SECRET", "dev-internal-secret")
+
+assert_internal_secret_is_safe(INTERNAL_SECRET, INFERENCE_MODE)
 
 
 @asynccontextmanager
