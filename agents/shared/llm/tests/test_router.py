@@ -86,3 +86,12 @@ async def test_async_agent_falls_back_to_ollama_on_openrouter_404():
 async def test_agt02_agt07_agt09_no_longer_reference_retired_model():
     for agent in (AgentID.AGT02, AgentID.AGT07, AgentID.AGT09):
         assert OPENROUTER_MODELS[agent] != "deepseek/deepseek-chat-v3.1:free"
+
+
+async def test_agt11_no_longer_references_retired_model():
+    """Regression: qwen/qwen3-235b-a22b:free was retired by OpenRouter (404,
+    paid-only) — confirmed live against a real API key during production
+    validation. This pinned the retired string as a canary; it doesn't (and
+    can't) verify the replacement is itself still live, since OpenRouter's
+    free-tier catalog changes over time independent of this codebase."""
+    assert OPENROUTER_MODELS[AgentID.AGT11] != "qwen/qwen3-235b-a22b:free"
