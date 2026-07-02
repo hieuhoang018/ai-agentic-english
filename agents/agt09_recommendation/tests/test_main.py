@@ -11,6 +11,7 @@ from fastapi.testclient import TestClient
 
 import agents.agt09_recommendation.service as svc
 from agents.agt09_recommendation.main import app
+from agents.shared.testing import auth_header
 
 client = TestClient(app)
 
@@ -47,10 +48,20 @@ def test_recommendations_endpoint_strips_internal_score_field(monkeypatch):
         ])
     )
 
-    resp = client.get("/recommendations/user-http")
+    resp = client.get("/recommendations/user-http", headers=auth_header("user-http"))
 
     assert resp.status_code == 200
     data = resp.json()
     assert len(data) == 1
     assert data[0]["id"] == "m1"
     assert "_score" not in data[0]
+
+
+def test_recommendations_endpoint_requires_bearer_token():
+    resp = client.get("/recommendations/user-http")
+    assert resp.status_code == 401
+
+
+def test_recommendations_endpoint_rejects_mismatched_user():
+    resp = client.get("/recommendations/user-http", headers=auth_header("someone-else"))
+    assert resp.status_code == 403
