@@ -32,13 +32,17 @@ from agents.shared.db.postgres import get_pool, fetchrow
 from agents.shared.db.redis_client import get_redis
 from agents.shared.events.producer import emit
 from agents.shared.llm.router import call_llm, AgentID
+from agents.shared.security import assert_internal_secret_is_safe
 from agents.agt02_learning_path import optimizer
 
 logger = logging.getLogger(__name__)
 
 AGT01_BASE_URL = os.environ.get("AGT01_BASE_URL", "http://agt01-profiling:8101")
 LM_SERVICE_BASE_URL = os.environ.get("LM_SERVICE_BASE_URL", "http://learning-materials-service:4002")
+INFERENCE_MODE = os.environ.get("INFERENCE_MODE", "mock")
 LM_INTERNAL_SECRET = os.environ.get("LM_INTERNAL_SECRET", "dev-internal-secret")
+
+assert_internal_secret_is_safe(LM_INTERNAL_SECRET, INFERENCE_MODE)
 
 # learning-materials-service's Module.skillFocus values -> optimizer skill codes (L/S/R/W).
 _SKILL_FOCUS_TO_CODE = {"listening": "L", "speaking": "S", "reading": "R", "writing": "W"}
