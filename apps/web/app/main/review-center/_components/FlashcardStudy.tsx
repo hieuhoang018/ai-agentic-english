@@ -60,9 +60,9 @@ export default function FlashcardStudy({ cards }: FlashcardStudyProps) {
               {card.definition ?? 'Definition unavailable.'}
             </h1>
             {card.example ? (
-              <p className="mt-6 max-w-xl text-lg leading-8 text-on-surface-variant">{card.example}</p>
+              <p className="mt-6 text-lg leading-8 text-on-surface-variant">{card.example}</p>
             ) : (
-              <p className="mt-6 max-w-xl text-lg leading-8 text-on-surface-variant">
+              <p className="mt-6 text-lg leading-8 text-on-surface-variant">
                 No example sentence is available for this catalog entry.
               </p>
             )}
