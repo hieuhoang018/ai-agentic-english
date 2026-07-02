@@ -1,6 +1,7 @@
 import asyncio
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
+from agents.shared.auth import require_matching_user
 from agents.shared.db.redis_client import get_redis, close_redis
 from agents.agt09_recommendation.service import get_recommendations, invalidate_cache
 from agents.agt09_recommendation.consumers import start_consumers
@@ -30,7 +31,7 @@ async def health():
 
 
 @app.get("/recommendations/{clerk_user_id}", response_model=list[RecommendationItem])
-async def recommendations(clerk_user_id: str):
+async def recommendations(clerk_user_id: str, _: str = Depends(require_matching_user)):
     """
     Return cached recommendations for a user.
     Cold-start: popularity fallback when cold_start_flag=True.

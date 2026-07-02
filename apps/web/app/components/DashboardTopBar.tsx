@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 
+import NotificationInbox from './NotificationInbox'
+
 type Crumb = {
   label: string
   href?: string
@@ -235,10 +237,7 @@ export default function DashboardTopBar() {
       </div>
 
       <div className="flex items-center gap-3">
-        <button className="relative flex h-10 w-10 items-center justify-center rounded-full text-on-surface-variant transition-colors hover:bg-surface-container" aria-label="Thông báo">
-          <span className="material-symbols-outlined">notifications</span>
-          <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-error ring-2 ring-surface" />
-        </button>
+        <NotificationInbox />
         <Link href="/main/settings" className="flex h-10 w-10 items-center justify-center rounded-full text-on-surface-variant transition-colors hover:bg-surface-container" aria-label="Cài đặt">
           <span className="material-symbols-outlined">settings</span>
         </Link>

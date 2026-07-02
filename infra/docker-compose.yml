@@ -209,6 +209,7 @@ services:
       USER_SERVICE_URL: http://user-service:4001
       REVIEW_AGENT_URL: http://agt07-review:8107
       INTERNAL_SECRET: dev-internal-secret
+      NOVU_API_KEY: ${NOVU_API_KEY}
     depends_on:
       postgres-notification:
         condition: service_healthy

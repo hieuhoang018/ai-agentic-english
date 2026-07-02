@@ -221,6 +221,54 @@ services:
               claims_to_verify:
                 - exp
 
+  - name: agt10-library
+    url: http://agt10-habit:8110/library
+    routes:
+      - name: agt10-library-route
+        paths:
+          - /api/habit/library
+        strip_path: true
+        methods:
+          - GET
+          - OPTIONS
+        plugins:
+          - name: jwt
+            config:
+              claims_to_verify:
+                - exp
+
+  - name: agt10-streak
+    url: http://agt10-habit:8110/streak
+    routes:
+      - name: agt10-streak-route
+        paths:
+          - /api/habit/streak
+        strip_path: true
+        methods:
+          - GET
+          - OPTIONS
+        plugins:
+          - name: jwt
+            config:
+              claims_to_verify:
+                - exp
+
+  - name: agt09-recommendations
+    url: http://agt09-recommendation:8109/recommendations
+    routes:
+      - name: agt09-recommendations-route
+        paths:
+          - /api/recommendations
+        strip_path: true
+        methods:
+          - GET
+          - OPTIONS
+        plugins:
+          - name: jwt
+            config:
+              claims_to_verify:
+                - exp
+
   - name: notification-service
     url: http://notification-service:4005/health
     routes:
