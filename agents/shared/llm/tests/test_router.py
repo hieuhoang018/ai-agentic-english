@@ -6,7 +6,15 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from agents.shared.config import settings
-from agents.shared.llm.router import AgentID, OPENROUTER_MODELS, call_llm
+from agents.shared.llm.router import (
+    AgentID,
+    ASYNC_AGENTS,
+    GROQ_MODELS,
+    OLLAMA_MODELS,
+    OPENROUTER_MODELS,
+    REALTIME_AGENTS,
+    call_llm,
+)
 
 
 def _fake_client(content: str | None = None, error: Exception | None = None) -> MagicMock:
@@ -83,9 +91,8 @@ async def test_async_agent_falls_back_to_ollama_on_openrouter_404():
     assert result == "ollama reply"
 
 
-async def test_agt02_agt07_agt09_no_longer_reference_retired_model():
-    for agent in (AgentID.AGT02, AgentID.AGT07, AgentID.AGT09):
-        assert OPENROUTER_MODELS[agent] != "deepseek/deepseek-chat-v3.1:free"
+async def test_agt02_no_longer_references_retired_model():
+    assert OPENROUTER_MODELS[AgentID.AGT02] != "deepseek/deepseek-chat-v3.1:free"
 
 
 async def test_agt11_no_longer_references_retired_model():
@@ -95,3 +102,15 @@ async def test_agt11_no_longer_references_retired_model():
     can't) verify the replacement is itself still live, since OpenRouter's
     free-tier catalog changes over time independent of this codebase."""
     assert OPENROUTER_MODELS[AgentID.AGT11] != "qwen/qwen3-235b-a22b:free"
+
+
+async def test_pure_algorithm_agents_are_not_routed():
+    """AGT-05/07/08/09 are pure-algorithm services with no LLM calls anywhere
+    in their own code (confirmed via grep — no call_llm invocation, no import
+    of agents.shared.llm) — they must not appear in any router tier."""
+    for agent in (AgentID.AGT05, AgentID.AGT07, AgentID.AGT08, AgentID.AGT09):
+        assert agent not in REALTIME_AGENTS
+        assert agent not in ASYNC_AGENTS
+        assert agent not in GROQ_MODELS
+        assert agent not in OPENROUTER_MODELS
+        assert agent not in OLLAMA_MODELS
