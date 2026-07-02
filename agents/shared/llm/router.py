@@ -74,7 +74,15 @@ OPENROUTER_MODELS: dict[AgentID, str] = {
     AgentID.AGT07: "openai/gpt-oss-20b:free",          # review generation
     AgentID.AGT08: "deepseek/deepseek-r1:free",         # analysis (chain-of-thought)
     AgentID.AGT09: "openai/gpt-oss-20b:free",          # recommendation rationale
-    AgentID.AGT11: "qwen/qwen3-235b-a22b:free",         # EN-VI translation (best Vietnamese)
+    # qwen/qwen3-235b-a22b:free (originally chosen for best Vietnamese quality) was
+    # also retired by OpenRouter (404, paid-only now) — confirmed live against a real
+    # API key. openai/gpt-oss-20b:free is reused here since it was independently
+    # confirmed reachable (no rate-limit) in that same live test, while every other
+    # free-tier alternative checked (qwen3-next-80b, llama-3.3-70b, gemma-4-31b,
+    # hermes-3-405b) was upstream-rate-limited at the time. Translation quality is
+    # acceptable but noticeably less idiomatic than the retired Qwen model — worth
+    # revisiting if a more reliable Vietnamese-tuned free model becomes available.
+    AgentID.AGT11: "openai/gpt-oss-20b:free",           # EN-VI translation
     AgentID.CONTENT_GEN: "openai/gpt-oss-20b:free",
 }
 
