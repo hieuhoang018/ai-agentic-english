@@ -2,7 +2,7 @@ import { BaseEvent } from './base';
 
 export const ACHIEVEMENT_UNLOCKED_TOPIC = 'achievement.unlocked';
 
-export type AchievementType = 'first-lesson' | '7-day-streak' | 'level-up';
+export type AchievementType = 'first-lesson' | '7-day-streak' | '30-day-streak' | '100-day-streak' | 'level-up';
 
 export interface AchievementUnlockedEvent extends BaseEvent {
   type: 'achievement.unlocked';

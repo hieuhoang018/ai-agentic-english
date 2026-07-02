@@ -1,6 +1,8 @@
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException
-from agents.agt04_feedback.service import analyze_speaking_turn, analyze_writing
+from fastapi import FastAPI
+from agents.agt04_feedback.service import (
+    analyze_speaking_turn, analyze_writing, summarize_session, score_comprehension,
+)
 from agents.agt04_feedback.models import (
     SpeakingFeedbackRequest, WritingFeedbackRequest,
     ComprehensionFeedbackRequest, SessionEndRequest,
@@ -60,12 +62,17 @@ async def writing_feedback(body: WritingFeedbackRequest):
 @app.post("/feedback/comprehension")
 async def comprehension_feedback(body: ComprehensionFeedbackRequest):
     """
-    Score listening/reading comprehension responses.
-    TODO Phase 4: implement full comprehension scoring with barrier-type detection.
-    Returns 0.5 (neutral) until Phase 4 — callers must not use this score to
-    drive difficulty adaptation before Phase 4 is implemented.
+    Score listening/reading comprehension responses against the exercise's
+    LMS answer key. Correctness-only — does not implement barrier-type
+    detection (see service.score_comprehension docstring for scope).
     """
-    raise HTTPException(status_code=501, detail="Not implemented (Phase 4)")
+    return await score_comprehension(
+        responses=body.responses,
+        exercise_id=body.exercise_id,
+        session_id=body.session_id,
+        clerk_user_id=body.clerk_user_id,
+        skill_domain=body.skill_domain,
+    )
 
 
 @app.post("/feedback/session-end")
@@ -73,6 +80,5 @@ async def session_end_feedback(body: SessionEndRequest):
     """
     Generate end-of-session feedback summary per skill.
     Reads full STM error log from AGT-06 and computes per-skill breakdown.
-    TODO Phase 4: implement full session summary computation.
     """
-    raise HTTPException(status_code=501, detail="Not implemented (Phase 4)")
+    return await summarize_session(body.session_id, body.clerk_user_id)

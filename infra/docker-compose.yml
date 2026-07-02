@@ -301,10 +301,13 @@ services:
       INFERENCE_MODE: mock
       LM_SERVICE_BASE_URL: http://learning-materials-service:4002
       LM_INTERNAL_SECRET: dev-internal-secret
+      OLLAMA_BASE_URL: http://ollama:11434
     depends_on:
       postgres-agents:
         condition: service_healthy
       learning-materials-service:
+        condition: service_started
+      ollama:
         condition: service_started
 
   agt03-tutor:
@@ -326,6 +329,7 @@ services:
       AGT06_BASE_URL: http://agt06-memory:8106
       AGT07_BASE_URL: http://agt07-review:8107
       AGT11_BASE_URL: http://agt11-translation:8111
+      OLLAMA_BASE_URL: http://ollama:11434
     depends_on:
       postgres-agents:
         condition: service_healthy
@@ -338,6 +342,8 @@ services:
       agt07-review:
         condition: service_started
       agt11-translation:
+        condition: service_started
+      ollama:
         condition: service_started
 
   agt04-feedback:
@@ -354,6 +360,8 @@ services:
       LANGUAGETOOL_URL: http://languagetool:8010/v2
       AGT06_BASE_URL: http://agt06-memory:8106
       AGT11_BASE_URL: http://agt11-translation:8111
+      LMS_BASE_URL: http://learning-materials-service:4002
+      OLLAMA_BASE_URL: http://ollama:11434
       INFERENCE_MODE: mock
     depends_on:
       postgres-agents:
@@ -363,6 +371,10 @@ services:
       agt06-memory:
         condition: service_started
       agt11-translation:
+        condition: service_started
+      learning-materials-service:
+        condition: service_started
+      ollama:
         condition: service_started
 
   agt05-assessment:
@@ -377,11 +389,14 @@ services:
       REDIS_URL: redis://redis:6379
       KAFKA_BROKERS: kafka:9092
       LMS_BASE_URL: http://learning-materials-service:4002
+      OLLAMA_BASE_URL: http://ollama:11434
       INFERENCE_MODE: mock
     depends_on:
       postgres-agents:
         condition: service_healthy
       learning-materials-service:
+        condition: service_started
+      ollama:
         condition: service_started
 
   agt06-memory:
@@ -420,10 +435,13 @@ services:
       INFERENCE_MODE: mock
       INTERNAL_SECRET: dev-internal-secret
       AGT06_BASE_URL: http://agt06-memory:8106
+      OLLAMA_BASE_URL: http://ollama:11434
     depends_on:
       postgres-agents:
         condition: service_healthy
       agt06-memory:
+        condition: service_started
+      ollama:
         condition: service_started
 
   agt08-analysis:
@@ -438,9 +456,12 @@ services:
       REDIS_URL: redis://redis:6379
       KAFKA_BROKERS: kafka:9092
       INFERENCE_MODE: mock
+      OLLAMA_BASE_URL: http://ollama:11434
     depends_on:
       postgres-agents:
         condition: service_healthy
+      ollama:
+        condition: service_started
 
   agt09-recommendation:
     build:
@@ -454,9 +475,12 @@ services:
       REDIS_URL: redis://redis:6379
       KAFKA_BROKERS: kafka:9092
       INFERENCE_MODE: mock
+      OLLAMA_BASE_URL: http://ollama:11434
     depends_on:
       postgres-agents:
         condition: service_healthy
+      ollama:
+        condition: service_started
 
   agt10-habit:
     build:

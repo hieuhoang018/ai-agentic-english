@@ -18,10 +18,12 @@ Session lifecycle:
     (idempotent), and emit session.end with durationMinutes — this is
     what AGT-01's handle_session_end consumer reacts to.
 
-pipeline.py and websocket_handler.py remain stubs this sprint; main.py calls
-this module directly over plain HTTP endpoints. process_turn calls AGT-04
-(grammar feedback) and AGT-11 (translation) concurrently via asyncio.gather,
-both best-effort — failures return None and never block the turn response.
+pipeline.py wraps process_turn as the single turn-processing path shared by
+both the HTTP route (POST /sessions/turn) and the WebSocket route
+(websocket_handler.py, /ws/sessions/{session_id} — text-only, client-side
+SpeechSynthesis TTS). process_turn calls AGT-04 (grammar feedback) and AGT-11
+(translation) concurrently via asyncio.gather, both best-effort — failures
+return None and never block the turn response.
 """
 
 from __future__ import annotations
@@ -136,7 +138,8 @@ async def _fetch_grammar_feedback(
 ) -> dict | None:
     """
     Call AGT-04 for grammar/fluency feedback. Best-effort — returns None on failure.
-    READING sessions skip feedback (comprehension scoring is a separate stub endpoint).
+    READING sessions skip feedback (comprehension scoring goes through AGT-04's
+    /feedback/comprehension endpoint directly, not this call).
     SPEAKING and LISTENING → /feedback/speaking; WRITING → /feedback/writing.
     """
     if skill_focus == "READING":

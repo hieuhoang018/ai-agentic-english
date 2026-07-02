@@ -4,6 +4,7 @@ from fastapi import FastAPI
 from agents.shared.db.redis_client import get_redis, close_redis
 from agents.agt09_recommendation.service import get_recommendations, invalidate_cache
 from agents.agt09_recommendation.consumers import start_consumers
+from agents.agt09_recommendation.models import RecommendationItem
 
 
 @asynccontextmanager
@@ -28,12 +29,12 @@ async def health():
     return {"status": "ok", "agent": "AGT-09", "name": "Recommendation"}
 
 
-@app.get("/recommendations/{clerk_user_id}")
+@app.get("/recommendations/{clerk_user_id}", response_model=list[RecommendationItem])
 async def recommendations(clerk_user_id: str):
     """
     Return cached recommendations for a user.
     Cold-start: popularity fallback when cold_start_flag=True.
-    TODO Phase 8+: composite multi-factor scoring with skill diversity enforcement.
+    TODO Phase 8+: full composite multi-factor scoring formula.
     """
     return await get_recommendations(clerk_user_id)
 

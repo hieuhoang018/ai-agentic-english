@@ -32,10 +32,6 @@ class Settings(BaseSettings):
     # Container-internal URL (container port 8110, no host conflict with AGT-10)
     LANGUAGETOOL_URL: str = "http://languagetool:8010/v2"
 
-    # Novu — notification delivery (AGT-10 only)
-    NOVU_API_KEY: str = ""
-    NOVU_APP_ID: str = ""
-
     # Inference mode: "mock" uses stub responses, "live" uses real APIs
     # Default is "mock" — all phases work without API keys in mock mode
     INFERENCE_MODE: str = "mock"

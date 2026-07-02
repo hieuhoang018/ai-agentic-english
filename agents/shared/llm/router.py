@@ -66,14 +66,15 @@ GROQ_MODELS: dict[AgentID, str] = {
 
 OPENROUTER_MODELS: dict[AgentID, str] = {
     AgentID.AGT03: "google/gemini-2.0-flash-exp:free",  # conversation fallback
-    AgentID.AGT02: "deepseek/deepseek-chat-v3.1:free",  # plan generation
-    AgentID.AGT07: "deepseek/deepseek-chat-v3.1:free",  # review generation
+    # deepseek/deepseek-chat-v3.1:free (originally chosen for AGT02/07/09/CONTENT_GEN)
+    # was retired by OpenRouter (404, paid-only now) as of this writing —
+    # openai/gpt-oss-20b:free is free, not upstream-rate-limited, and confirmed to
+    # follow strict-JSON instructions.
+    AgentID.AGT02: "openai/gpt-oss-20b:free",          # plan generation
+    AgentID.AGT07: "openai/gpt-oss-20b:free",          # review generation
     AgentID.AGT08: "deepseek/deepseek-r1:free",         # analysis (chain-of-thought)
-    AgentID.AGT09: "deepseek/deepseek-chat-v3.1:free",  # recommendation rationale
+    AgentID.AGT09: "openai/gpt-oss-20b:free",          # recommendation rationale
     AgentID.AGT11: "qwen/qwen3-235b-a22b:free",         # EN-VI translation (best Vietnamese)
-    # deepseek/deepseek-chat-v3.1:free (originally chosen to match AGT02/07/09) was
-    # retired by OpenRouter (404, paid-only now) as of this writing — openai/gpt-oss-20b:free
-    # is free, not upstream-rate-limited, and confirmed to follow strict-JSON instructions.
     AgentID.CONTENT_GEN: "openai/gpt-oss-20b:free",
 }
 
@@ -117,7 +118,7 @@ async def call_llm(
     Route an LLM call through three tiers.
 
     In mock mode: returns a deterministic stub response immediately.
-    In live mode: Groq -> OpenRouter -> Ollama with 429-based fallthrough.
+    In live mode: Groq -> OpenRouter -> Ollama, falling through to the next tier on any failure.
 
     kwargs are passed through to the completion API (e.g. temperature, max_tokens).
     """
@@ -136,11 +137,9 @@ async def call_llm(
             )
             return resp.choices[0].message.content or ""
         except Exception as exc:
-            if "429" not in str(exc):
-                raise
-            logger.warning("Groq rate-limited for %s, falling to OpenRouter", agent_id)
+            logger.warning("Groq unavailable for %s (%s), falling to OpenRouter", agent_id, exc)
 
-    # OpenRouter tier (async agents start here; real-time agents fall here on 429)
+    # OpenRouter tier (async agents start here; real-time agents fall here on any Groq failure)
     if agent_id in OPENROUTER_MODELS:
         try:
             client = _openrouter_client()
@@ -151,9 +150,7 @@ async def call_llm(
             )
             return resp.choices[0].message.content or ""
         except Exception as exc:
-            if "429" not in str(exc):
-                raise
-            logger.warning("OpenRouter rate-limited for %s, falling to Ollama", agent_id)
+            logger.warning("OpenRouter unavailable for %s (%s), falling to Ollama", agent_id, exc)
 
     # Tier 3: Ollama — always available, unlimited, CPU-only
     model = OLLAMA_MODELS.get(agent_id, "llama3.1:8b")

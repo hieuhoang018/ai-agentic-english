@@ -141,8 +141,71 @@ def test_missing_theta_defaults_to_zero():
     assert result[0]["_score"] == pytest.approx(1.0, abs=0.001)
 
 
+def test_explicit_none_theta_value_defaults_to_zero():
+    # irt_theta can hold an explicit None for a skill not yet assessed
+    # (e.g. {"S": None} before any speaking assessment) — must not crash.
+    items = [_make_item("a", skill="SPEAKING", difficulty=0.5)]
+    profile = {"irt_theta": {"L": 0.0, "S": None, "R": 0.0, "W": 0.0}}
+    result = score_items(items, profile, [])
+    assert len(result) == 1
+    assert result[0]["_score"] == pytest.approx(1.0, abs=0.001)
+
+
 def test_single_candidate_always_returned():
     items = [_make_item("only")]
     result = score_items(items, _make_profile(), [])
     assert len(result) == 1
     assert result[0]["id"] == "only"
+
+
+# ── skill diversity enforcement ───────────────────────────────────────────────
+
+def test_top3_includes_at_least_one_item_per_skill_domain_when_available():
+    # 3 READING items would win on pure score, but WRITING and LISTENING
+    # candidates exist and must each get at least one of the 3 slots.
+    items = [
+        _make_item("read-1", skill="READING", difficulty=0.5),  # score 1.0
+        _make_item("read-2", skill="READING", difficulty=0.6),  # score 0.9
+        _make_item("read-3", skill="READING", difficulty=0.7),  # score 0.8
+        _make_item("write-1", skill="WRITING", difficulty=0.9),  # score 0.6
+        _make_item("listen-1", skill="LISTENING", difficulty=1.0),  # score 0.5
+    ]
+    result = score_items(items, _make_profile(), [])
+    domains = {r["skillDomain"] for r in result}
+    assert domains == {"READING", "WRITING", "LISTENING"}
+    assert len(result) == 3
+
+
+def test_diversity_pick_per_domain_is_highest_scoring_in_that_domain():
+    items = [
+        _make_item("read-1", skill="READING", difficulty=0.5),  # score 1.0 (best overall)
+        _make_item("read-2", skill="READING", difficulty=0.6),  # score 0.9
+        _make_item("write-1", skill="WRITING", difficulty=0.9),  # score 0.6
+        _make_item("listen-1", skill="LISTENING", difficulty=1.0),  # score 0.5
+    ]
+    result = score_items(items, _make_profile(), [])
+    ids = {r["id"] for r in result}
+    assert ids == {"read-1", "write-1", "listen-1"}
+    assert "read-2" not in ids
+
+
+def test_diversity_result_still_sorted_by_score_descending():
+    items = [
+        _make_item("read-1", skill="READING", difficulty=0.5),
+        _make_item("read-2", skill="READING", difficulty=0.6),
+        _make_item("write-1", skill="WRITING", difficulty=0.9),
+        _make_item("listen-1", skill="LISTENING", difficulty=1.0),
+    ]
+    result = score_items(items, _make_profile(), [])
+    scores = [r["_score"] for r in result]
+    assert scores == sorted(scores, reverse=True)
+
+
+def test_single_domain_candidates_fill_remaining_slots_by_score():
+    # Only one skill domain present — diversity has nothing to diversify,
+    # top 3 by score should be returned same as before.
+    items = [_make_item(str(i), difficulty=i * 0.1) for i in range(10)]
+    result = score_items(items, _make_profile(), [])
+    assert len(result) == 3
+    scores = [r["_score"] for r in result]
+    assert scores == sorted(scores, reverse=True)
