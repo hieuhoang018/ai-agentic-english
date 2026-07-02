@@ -19,6 +19,17 @@
 # they're picked up — don't rely on a loud failure to catch a missing key.
 # Ollama (Tier 3 backstop) needs no API key — only OLLAMA_BASE_URL, already
 # set per-service in the base file.
+#
+# INTERNAL_SECRET/LM_INTERNAL_SECRET also have no default here, for the same
+# "required in prod" reasons as the API keys above — BUT unlike the API-key
+# case, a missing/default value for this one does not merely degrade to a
+# fallback: agents/shared/security.py's assert_internal_secret_is_safe (wired
+# into agents/shared/config.py's Settings, agt_orchestrator/main.py, and
+# packages/shared's createInternalMiddleware/createInternalHttpClient) makes
+# every affected service refuse to start when INFERENCE_MODE=live (Python) or
+# DEPLOY_ENV=production (the 3 Node services below) and the secret is still
+# "dev-internal-secret" or empty. That's the actual enforcement — this file
+# just declares the requirement, consistent with the GROQ/OPENROUTER pattern.
 
 services:
   agt01-profiling:
@@ -32,6 +43,7 @@ services:
       INFERENCE_MODE: live
       GROQ_API_KEY: ${GROQ_API_KEY}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
+      LM_INTERNAL_SECRET: ${INTERNAL_SECRET}
 
   agt03-tutor:
     environment:
@@ -62,6 +74,7 @@ services:
       INFERENCE_MODE: live
       GROQ_API_KEY: ${GROQ_API_KEY}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
+      INTERNAL_SECRET: ${INTERNAL_SECRET}
 
   agt08-analysis:
     environment:
@@ -86,3 +99,23 @@ services:
       INFERENCE_MODE: live
       GROQ_API_KEY: ${GROQ_API_KEY}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
+
+  agt-orchestrator:
+    environment:
+      INFERENCE_MODE: live
+      INTERNAL_SECRET: ${INTERNAL_SECRET}
+
+  user-service:
+    environment:
+      DEPLOY_ENV: production
+      INTERNAL_SECRET: ${INTERNAL_SECRET}
+
+  learning-materials-service:
+    environment:
+      DEPLOY_ENV: production
+      INTERNAL_SECRET: ${INTERNAL_SECRET}
+
+  notification-service:
+    environment:
+      DEPLOY_ENV: production
+      INTERNAL_SECRET: ${INTERNAL_SECRET}
