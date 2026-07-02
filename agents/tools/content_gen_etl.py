@@ -372,6 +372,45 @@ NEW_READING_BATCHES = [
     },
 ]
 
+# New batch (2026-07-02): B1 — the only CEFR level with zero generated
+# reading/listening modules despite having a full 13-passage pool (VOA
+# "Explorations: Space" + a couple standalone articles, all with MinIO
+# audio). Reading and listening draw non-overlapping passages out of the
+# same 13, same convention as every other reading/listening pair above.
+B1_READING_BATCHES = [
+    {
+        "module_id": "mod-gen-reading-b1",
+        "title": "Reading Practice — B1 (Generated)",
+        "description": (
+            "LLM-generated reading-comprehension drills based on VOA Learning "
+            "English 'Explorations: Space' articles (B1)."
+        ),
+        "skill": "reading",
+        "cefr_level": "B1",
+        "order": 22,
+        "passages_offset": 0,
+        "passages_limit": 3,
+        "exercises_per_passage": 5,
+    },
+]
+
+B1_LISTENING_BATCHES = [
+    {
+        "module_id": "mod-gen-listening-b1",
+        "title": "Listening Practice — B1 (Generated)",
+        "description": (
+            "LLM-generated listening-comprehension drills based on VOA Learning "
+            "English 'Explorations: Space' articles, with matching audio (B1)."
+        ),
+        "skill": "listening",
+        "cefr_level": "B1",
+        "order": 23,
+        "passages_offset": 3,
+        "passages_limit": 3,
+        "exercises_per_passage": 5,
+    },
+]
+
 NEW_LISTENING_BATCHES = [
     {
         "module_id": "mod-gen-listening-b2",
@@ -1165,8 +1204,8 @@ async def main() -> None:
 
     # Combine original + new batches. Existing module IDs are skipped so this
     # script is safe to re-run — it only generates and appends missing modules.
-    all_reading = READING_BATCHES + NEW_READING_BATCHES
-    all_listening = LISTENING_BATCHES + NEW_LISTENING_BATCHES
+    all_reading = READING_BATCHES + NEW_READING_BATCHES + B1_READING_BATCHES
+    all_listening = LISTENING_BATCHES + NEW_LISTENING_BATCHES + B1_LISTENING_BATCHES
     all_writing = WRITING_BATCHES + NEW_WRITING_BATCHES
 
     async with httpx.AsyncClient(timeout=60.0) as client:
