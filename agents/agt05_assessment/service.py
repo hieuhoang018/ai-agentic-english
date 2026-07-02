@@ -2,8 +2,9 @@
 Assessment Agent service layer.
 Manages CAT sessions: start, respond, terminate, produce results.
 
-At scaffold: sequential item delivery with stub theta estimation.
-Full 3PL IRT + Fisher information maximisation deferred to Phase 8+.
+Theta estimation, item selection, and termination are delegated to the real
+1PL (Rasch) EAP psychometrics in cat_engine.py. True 3PL IRT (discrimination
+and guessing parameters) remains deferred to Phase 8+ pending calibration data.
 """
 
 import json
@@ -11,7 +12,7 @@ import uuid
 import httpx
 import logging
 from agents.agt05_assessment.cat_engine import (
-    estimate_theta_stub, select_next_item_stub, should_terminate
+    estimate_theta_eap, select_next_item_eap, should_terminate_eap
 )
 from agents.shared.config import settings
 from agents.shared.db.postgres import execute
@@ -82,8 +83,8 @@ async def start_assessment(clerk_user_id: str, skill_domain: str) -> dict:
             "skill_domain": skill_domain,
         }
 
-    theta = 0.0  # start at midpoint
-    first_item = select_next_item_stub(theta, [], item_bank)
+    theta = 0.0  # start at midpoint, matches the EAP prior mean
+    first_item = select_next_item_eap(theta, [], item_bank)
     if not first_item:
         return {"error": "No items available", "skill_domain": skill_domain}
 
@@ -106,18 +107,42 @@ async def record_response(
     clerk_user_id: str,
 ) -> dict:
     """Record a response and return the next item or termination result."""
-    responses = prior_responses + [{"item_id": item_id, "correct": correct}]
-    theta = estimate_theta_stub(responses)
+    item_bank = await _fetch_item_bank(skill_domain)
+    current_difficulty = next(
+        (i["difficulty_param"] for i in item_bank if i["item_id"] == item_id),
+        None,
+    )
+    if current_difficulty is None:
+        # Item not found in current bank fetch (e.g. cache raced with a bank
+        # update, or the client sent a stale/unknown item_id). Fall back to
+        # 0.0 (the prior mean) — a neutral default rather than crashing the
+        # whole assessment turn — but this should not happen in normal
+        # operation, so log it for visibility into cache races / bank drift.
+        logger.warning(
+            "Item %s not found in item bank for skill %s (%d items) — "
+            "falling back to difficulty_param=0.0",
+            item_id, skill_domain, len(item_bank),
+        )
+        current_difficulty = 0.0
 
-    if should_terminate(responses):
+    # Contract: each prior_responses entry must carry difficulty_param,
+    # echoed back by the client from a prior `current_item` response. This is
+    # now enforced at the API boundary by the PriorResponse Pydantic model
+    # (models.py) — a request missing difficulty_param is rejected with 422
+    # before it ever reaches this function.
+    responses = prior_responses + [
+        {"item_id": item_id, "difficulty_param": current_difficulty, "correct": correct}
+    ]
+    theta = estimate_theta_eap(responses)
+
+    if should_terminate_eap(responses, theta, item_bank_size=len(item_bank)):
         return await _terminate(assessment_id, clerk_user_id, skill_domain, responses, theta)
 
-    item_bank = await _fetch_item_bank(skill_domain)
     answered_ids = [r["item_id"] for r in responses]
-    next_item = select_next_item_stub(theta, answered_ids, item_bank)
+    next_item = select_next_item_eap(theta, answered_ids, item_bank)
 
     if next_item is None:
-        # Item bank exhausted before 30-item threshold — still a terminal state.
+        # Item bank exhausted before the SE/max_items threshold — still terminal.
         return await _terminate(assessment_id, clerk_user_id, skill_domain, responses, theta)
 
     return {

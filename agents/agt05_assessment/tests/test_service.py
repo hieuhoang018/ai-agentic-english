@@ -4,14 +4,6 @@ from unittest.mock import AsyncMock, patch
 from agents.agt05_assessment.service import record_response
 
 
-def _build_prior(correct_count: int, total: int = 29) -> list[dict]:
-    """Build prior_responses: first `correct_count` items are correct."""
-    return [
-        {"item_id": f"item-{i}", "correct": i <= correct_count}
-        for i in range(1, total + 1)
-    ]
-
-
 @pytest.fixture
 def capture_execute(monkeypatch):
     """Capture all calls to the postgres execute function."""
@@ -29,7 +21,7 @@ def mock_item_bank(monkeypatch):
     """Return a non-empty item bank so the non-termination path gets a next item."""
     items = [
         {"item_id": f"item-{i}", "difficulty_param": round(i / 15.0 - 1.0, 3)}
-        for i in range(1, 31)
+        for i in range(1, 13)  # 12 items — matches the real LMS bank size, not 30
     ]
 
     async def fake_fetch(skill_domain: str) -> list[dict]:
@@ -41,88 +33,63 @@ def mock_item_bank(monkeypatch):
     return items
 
 
+def _build_prior_with_difficulty(correct_count: int, total: int, items: list[dict]) -> list[dict]:
+    """Build prior_responses carrying difficulty_param, as the real client contract requires."""
+    return [
+        {"item_id": items[i - 1]["item_id"], "difficulty_param": items[i - 1]["difficulty_param"],
+         "correct": i <= correct_count}
+        for i in range(1, total + 1)
+    ]
+
+
 # ── termination path ──────────────────────────────────────────────────────────
 
-async def test_terminates_at_30_items(capture_execute):
-    prior = _build_prior(correct_count=16, total=29)
+async def test_terminates_at_item_bank_size_not_fixed_30(capture_execute, mock_item_bank):
+    """With a 12-item bank, the session must terminate at item 12, not 30 —
+    this is the regression test for the item-bank-size cap fixed in Task B3."""
+    prior = _build_prior_with_difficulty(correct_count=6, total=11, items=mock_item_bank)
+    last_item = mock_item_bank[11]
     result = await record_response(
-        assessment_id="test-001",
-        item_id="item-30",
+        assessment_id="test-cap",
+        item_id=last_item["item_id"],
         correct=True,
         prior_responses=prior,
         skill_domain="READING",
         clerk_user_id="test-user",
     )
     assert result["terminated"] is True
-    assert result["items_answered"] == 30
+    assert result["items_answered"] == 12
 
 
-async def test_cefr_b1_for_17_of_30(capture_execute):
-    # 16 correct in prior + 1 correct = 17/30 → theta ≈ 0.267 → B1
-    prior = _build_prior(correct_count=16, total=29)
+async def test_record_response_attaches_difficulty_to_current_item_before_eap(capture_execute, mock_item_bank):
+    """The difficulty of the item being answered right now must be looked up
+    from the item bank and included when computing theta — not just the
+    difficulties of items already in prior_responses."""
+    prior = _build_prior_with_difficulty(correct_count=2, total=3, items=mock_item_bank)
+    current = mock_item_bank[3]
     result = await record_response(
-        assessment_id="test-001",
-        item_id="item-30",
+        assessment_id="test-difficulty",
+        item_id=current["item_id"],
         correct=True,
         prior_responses=prior,
         skill_domain="READING",
         clerk_user_id="test-user",
     )
-    assert result["cefr_band"] == "B1"
-    assert result["final_theta"] == pytest.approx(0.267, abs=0.001)
+    # Not terminated yet (4 of 12 answered). Pin the exact EAP theta computed
+    # from the real engine with the current item's real difficulty attached —
+    # a weaker `!= 0.0` check would still pass even if the current item's
+    # difficulty were silently replaced by the 0.0 fallback, because the
+    # prior responses alone already push theta away from 0.0.
+    assert result["terminated"] is False
+    assert result["current_theta"] == pytest.approx(0.1661, abs=0.001)
 
 
-async def test_cefr_a2_for_10_of_30(capture_execute):
-    # 9 correct in prior + 1 correct = 10/30 → theta ≈ -0.667 → A2
-    prior = _build_prior(correct_count=9, total=29)
-    result = await record_response(
-        assessment_id="test-002",
-        item_id="item-30",
-        correct=True,
-        prior_responses=prior,
-        skill_domain="READING",
-        clerk_user_id="test-user",
-    )
-    assert result["cefr_band"] == "A2"
-    assert result["final_theta"] == pytest.approx(-0.667, abs=0.001)
-
-
-async def test_cefr_b2_for_23_of_30(capture_execute):
-    # 22 correct in prior + 1 correct = 23/30 → theta ≈ 1.067 → B2
-    prior = _build_prior(correct_count=22, total=29)
-    result = await record_response(
-        assessment_id="test-003",
-        item_id="item-30",
-        correct=True,
-        prior_responses=prior,
-        skill_domain="READING",
-        clerk_user_id="test-user",
-    )
-    assert result["cefr_band"] == "B2"
-    assert result["final_theta"] == pytest.approx(1.067, abs=0.001)
-
-
-async def test_confidence_interval_is_theta_plus_minus_half(capture_execute):
-    prior = _build_prior(correct_count=16, total=29)
-    result = await record_response(
-        assessment_id="test-001",
-        item_id="item-30",
-        correct=True,
-        prior_responses=prior,
-        skill_domain="READING",
-        clerk_user_id="test-user",
-    )
-    theta = result["final_theta"]
-    ci = result["confidence_interval"]
-    assert ci[0] == pytest.approx(theta - 0.5, abs=0.001)
-    assert ci[1] == pytest.approx(theta + 0.5, abs=0.001)
-
-
-async def test_assessment_id_and_skill_domain_returned_unchanged(capture_execute):
-    prior = _build_prior(correct_count=16, total=29)
+async def test_assessment_id_and_skill_domain_returned_unchanged(capture_execute, mock_item_bank):
+    prior = _build_prior_with_difficulty(correct_count=10, total=11, items=mock_item_bank)
+    last_item = mock_item_bank[11]
     result = await record_response(
         assessment_id="custom-id-xyz",
-        item_id="item-30",
+        item_id=last_item["item_id"],
         correct=True,
         prior_responses=prior,
         skill_domain="SPEAKING",
@@ -134,11 +101,12 @@ async def test_assessment_id_and_skill_domain_returned_unchanged(capture_execute
 
 # ── postgres write verification ───────────────────────────────────────────────
 
-async def test_terminates_writes_exactly_one_postgres_row(capture_execute):
-    prior = _build_prior(correct_count=16, total=29)
+async def test_terminates_writes_exactly_one_postgres_row(capture_execute, mock_item_bank):
+    prior = _build_prior_with_difficulty(correct_count=6, total=11, items=mock_item_bank)
+    last_item = mock_item_bank[11]
     await record_response(
         assessment_id="test-001",
-        item_id="item-30",
+        item_id=last_item["item_id"],
         correct=True,
         prior_responses=prior,
         skill_domain="READING",
@@ -147,11 +115,12 @@ async def test_terminates_writes_exactly_one_postgres_row(capture_execute):
     assert len(capture_execute) == 1
 
 
-async def test_postgres_args_clerk_user_id(capture_execute):
-    prior = _build_prior(correct_count=16, total=29)
+async def test_postgres_args_clerk_user_id(capture_execute, mock_item_bank):
+    prior = _build_prior_with_difficulty(correct_count=6, total=11, items=mock_item_bank)
+    last_item = mock_item_bank[11]
     await record_response(
         assessment_id="test-001",
-        item_id="item-30",
+        item_id=last_item["item_id"],
         correct=True,
         prior_responses=prior,
         skill_domain="READING",
@@ -161,11 +130,12 @@ async def test_postgres_args_clerk_user_id(capture_execute):
     assert args[0] == "user-abc-123"  # $1 clerk_user_id
 
 
-async def test_postgres_args_skill_domain(capture_execute):
-    prior = _build_prior(correct_count=16, total=29)
+async def test_postgres_args_skill_domain(capture_execute, mock_item_bank):
+    prior = _build_prior_with_difficulty(correct_count=6, total=11, items=mock_item_bank)
+    last_item = mock_item_bank[11]
     await record_response(
         assessment_id="test-001",
-        item_id="item-30",
+        item_id=last_item["item_id"],
         correct=True,
         prior_responses=prior,
         skill_domain="WRITING",
@@ -175,12 +145,13 @@ async def test_postgres_args_skill_domain(capture_execute):
     assert args[1] == "WRITING"  # $2 skill_domain
 
 
-async def test_postgres_args_item_id_is_first_response_item(capture_execute):
+async def test_postgres_args_item_id_is_first_response_item(capture_execute, mock_item_bank):
     """item_id column must store the first item's ID from the response list, not the session UUID."""
-    prior = _build_prior(correct_count=16, total=29)
+    prior = _build_prior_with_difficulty(correct_count=6, total=11, items=mock_item_bank)
+    last_item = mock_item_bank[11]
     await record_response(
         assessment_id="my-assessment-999",
-        item_id="item-30",
+        item_id=last_item["item_id"],
         correct=True,
         prior_responses=prior,
         skill_domain="READING",
@@ -191,12 +162,13 @@ async def test_postgres_args_item_id_is_first_response_item(capture_execute):
     assert args[2] == "item-1"
 
 
-async def test_postgres_args_assessment_session_id_is_session_uuid(capture_execute):
+async def test_postgres_args_assessment_session_id_is_session_uuid(capture_execute, mock_item_bank):
     """assessment_session_id column must store the session-level assessment_id UUID."""
-    prior = _build_prior(correct_count=16, total=29)
+    prior = _build_prior_with_difficulty(correct_count=6, total=11, items=mock_item_bank)
+    last_item = mock_item_bank[11]
     await record_response(
         assessment_id="my-assessment-999",
-        item_id="item-30",
+        item_id=last_item["item_id"],
         correct=True,
         prior_responses=prior,
         skill_domain="READING",
@@ -207,12 +179,13 @@ async def test_postgres_args_assessment_session_id_is_session_uuid(capture_execu
     assert args[3] == "my-assessment-999"
 
 
-async def test_postgres_query_contains_assessment_session_id_column(capture_execute):
+async def test_postgres_query_contains_assessment_session_id_column(capture_execute, mock_item_bank):
     """The INSERT query must reference assessment_session_id column, not just item_id for the session."""
-    prior = _build_prior(correct_count=16, total=29)
+    prior = _build_prior_with_difficulty(correct_count=6, total=11, items=mock_item_bank)
+    last_item = mock_item_bank[11]
     await record_response(
         assessment_id="test-001",
-        item_id="item-30",
+        item_id=last_item["item_id"],
         correct=True,
         prior_responses=prior,
         skill_domain="READING",
@@ -222,11 +195,12 @@ async def test_postgres_query_contains_assessment_session_id_column(capture_exec
     assert "assessment_session_id" in query
 
 
-async def test_postgres_args_response_is_valid_json(capture_execute):
-    prior = _build_prior(correct_count=16, total=29)
+async def test_postgres_args_response_is_valid_json(capture_execute, mock_item_bank):
+    prior = _build_prior_with_difficulty(correct_count=6, total=11, items=mock_item_bank)
+    last_item = mock_item_bank[11]
     await record_response(
         assessment_id="test-001",
-        item_id="item-30",
+        item_id=last_item["item_id"],
         correct=True,
         prior_responses=prior,
         skill_domain="READING",
@@ -236,17 +210,18 @@ async def test_postgres_args_response_is_valid_json(capture_execute):
     response_json = args[4]  # $5 response JSONB (after clerk_user_id, skill_domain, item_id, assessment_session_id)
     parsed = json.loads(response_json)
     assert isinstance(parsed, list)
-    assert len(parsed) == 30  # 29 prior + 1 current
+    assert len(parsed) == 12  # 11 prior + 1 current, capped at the 12-item bank size
 
 
 # ── non-termination path ──────────────────────────────────────────────────────
 
 async def test_does_not_write_postgres_when_not_terminated(mock_item_bank, capture_execute):
-    # 27 prior + 1 current = 28 responses — below threshold of 30
-    prior = _build_prior(correct_count=15, total=27)
+    # 3 prior + 1 current = 4 responses — below the 12-item bank-size threshold
+    prior = _build_prior_with_difficulty(correct_count=2, total=3, items=mock_item_bank)
+    current = mock_item_bank[3]
     result = await record_response(
         assessment_id="test-001",
-        item_id="item-28",
+        item_id=current["item_id"],
         correct=True,
         prior_responses=prior,
         skill_domain="READING",
@@ -257,10 +232,11 @@ async def test_does_not_write_postgres_when_not_terminated(mock_item_bank, captu
 
 
 async def test_non_terminated_returns_current_item(mock_item_bank, capture_execute):
-    prior = _build_prior(correct_count=15, total=27)
+    prior = _build_prior_with_difficulty(correct_count=2, total=3, items=mock_item_bank)
+    current = mock_item_bank[3]
     result = await record_response(
         assessment_id="test-001",
-        item_id="item-28",
+        item_id=current["item_id"],
         correct=True,
         prior_responses=prior,
         skill_domain="READING",
@@ -272,16 +248,17 @@ async def test_non_terminated_returns_current_item(mock_item_bank, capture_execu
 
 
 async def test_non_terminated_items_answered_count(mock_item_bank, capture_execute):
-    prior = _build_prior(correct_count=15, total=27)
+    prior = _build_prior_with_difficulty(correct_count=2, total=3, items=mock_item_bank)
+    current = mock_item_bank[3]
     result = await record_response(
         assessment_id="test-001",
-        item_id="item-28",
+        item_id=current["item_id"],
         correct=True,
         prior_responses=prior,
         skill_domain="READING",
         clerk_user_id="test-user",
     )
-    assert result["items_answered"] == 28
+    assert result["items_answered"] == 4
 
 
 # ── start_assessment ──────────────────────────────────────────────────────────
@@ -358,18 +335,50 @@ async def test_start_assessment_model_rejects_speaking():
         StartAssessmentRequest(clerk_user_id="user-001", skill_domain="SPEAKING")
 
 
+async def test_respond_model_rejects_prior_response_missing_difficulty_param():
+    """A client that echoes prior_responses without difficulty_param must be rejected
+    at the API boundary, not crash the service with a bare-dict KeyError."""
+    from agents.agt05_assessment.models import RespondRequest
+    import pytest
+    with pytest.raises(Exception):
+        RespondRequest(
+            clerk_user_id="user-001",
+            assessment_id="test-assessment",
+            item_id="item-1",
+            correct=True,
+            prior_responses=[{"item_id": "item-0", "correct": True}],
+            skill_domain="READING",
+        )
+
+
+async def test_respond_model_accepts_prior_response_with_difficulty_param():
+    from agents.agt05_assessment.models import RespondRequest
+    request = RespondRequest(
+        clerk_user_id="user-001",
+        assessment_id="test-assessment",
+        item_id="item-1",
+        correct=True,
+        prior_responses=[
+            {"item_id": "item-0", "difficulty_param": -0.5, "correct": True}
+        ],
+        skill_domain="READING",
+    )
+    assert request.prior_responses[0].difficulty_param == -0.5
+
+
 # ── D9: Postgres error handling ───────────────────────────────────────────────
 
-async def test_postgres_error_does_not_propagate_on_termination(monkeypatch):
+async def test_postgres_error_does_not_propagate_on_termination(monkeypatch, mock_item_bank):
     """Postgres write failure at termination must be caught; response still returned."""
     async def failing_execute(query, *args):
         raise Exception("Postgres connection lost")
 
     monkeypatch.setattr("agents.agt05_assessment.service.execute", failing_execute)
-    prior = _build_prior(correct_count=16, total=29)
+    prior = _build_prior_with_difficulty(correct_count=9, total=11, items=mock_item_bank)
+    last_item = mock_item_bank[11]
     result = await record_response(
         assessment_id="test-pg-err",
-        item_id="item-30",
+        item_id=last_item["item_id"],
         correct=True,
         prior_responses=prior,
         skill_domain="READING",
@@ -381,43 +390,50 @@ async def test_postgres_error_does_not_propagate_on_termination(monkeypatch):
     assert "final_theta" in result
 
 
-async def test_postgres_error_result_has_correct_cefr(monkeypatch):
+async def test_postgres_error_result_has_correct_cefr(monkeypatch, mock_item_bank):
     async def failing_execute(query, *args):
         raise Exception("Postgres connection lost")
 
     monkeypatch.setattr("agents.agt05_assessment.service.execute", failing_execute)
-    prior = _build_prior(correct_count=16, total=29)
+    prior = _build_prior_with_difficulty(correct_count=9, total=11, items=mock_item_bank)
+    last_item = mock_item_bank[11]
     result = await record_response(
         assessment_id="test-pg-err",
-        item_id="item-30",
+        item_id=last_item["item_id"],
         correct=True,
         prior_responses=prior,
         skill_domain="READING",
         clerk_user_id="user-pg",
     )
-    assert result["cefr_band"] == "B1"
+    # 9/11 prior correct + 1 more correct = 10/12 total; under EAP this
+    # computes to theta ~= 0.748, which maps to CEFR band B2 (not the old
+    # hardcoded "B1" that was correct only under the previous
+    # proportion-correct formula).
+    assert result["final_theta"] == pytest.approx(0.748, abs=0.001)
+    assert result["cefr_band"] == "B2"
 
 
 # ── D10: early-exhaustion response shape ─────────────────────────────────────
 
 @pytest.fixture
 def early_exhaustion_setup(monkeypatch, mock_item_bank):
-    """Item bank runs out after 5 items (well below 30-item threshold)."""
+    """Item bank runs out before the SE/bank-size threshold is naturally reached."""
     monkeypatch.setattr(
-        "agents.agt05_assessment.service.select_next_item_stub",
+        "agents.agt05_assessment.service.select_next_item_eap",
         lambda theta, answered_ids, bank: None,  # always exhausted
     )
     monkeypatch.setattr(
-        "agents.agt05_assessment.service.should_terminate",
-        lambda responses: False,  # not at 30-item threshold
+        "agents.agt05_assessment.service.should_terminate_eap",
+        lambda responses, theta, item_bank_size, max_items=30: False,  # not at threshold yet
     )
 
 
-async def test_early_exhaustion_returns_terminated_true(early_exhaustion_setup, capture_execute):
-    prior = _build_prior(correct_count=3, total=4)
+async def test_early_exhaustion_returns_terminated_true(early_exhaustion_setup, capture_execute, mock_item_bank):
+    prior = _build_prior_with_difficulty(correct_count=3, total=4, items=mock_item_bank)
+    current = mock_item_bank[4]
     result = await record_response(
         assessment_id="test-exhaust",
-        item_id="item-5",
+        item_id=current["item_id"],
         correct=True,
         prior_responses=prior,
         skill_domain="READING",
@@ -426,11 +442,12 @@ async def test_early_exhaustion_returns_terminated_true(early_exhaustion_setup, 
     assert result["terminated"] is True
 
 
-async def test_early_exhaustion_has_cefr_band(early_exhaustion_setup, capture_execute):
-    prior = _build_prior(correct_count=3, total=4)
+async def test_early_exhaustion_has_cefr_band(early_exhaustion_setup, capture_execute, mock_item_bank):
+    prior = _build_prior_with_difficulty(correct_count=3, total=4, items=mock_item_bank)
+    current = mock_item_bank[4]
     result = await record_response(
         assessment_id="test-exhaust",
-        item_id="item-5",
+        item_id=current["item_id"],
         correct=True,
         prior_responses=prior,
         skill_domain="READING",
@@ -440,11 +457,12 @@ async def test_early_exhaustion_has_cefr_band(early_exhaustion_setup, capture_ex
     assert result["cefr_band"] != ""
 
 
-async def test_early_exhaustion_has_final_theta(early_exhaustion_setup, capture_execute):
-    prior = _build_prior(correct_count=3, total=4)
+async def test_early_exhaustion_has_final_theta(early_exhaustion_setup, capture_execute, mock_item_bank):
+    prior = _build_prior_with_difficulty(correct_count=3, total=4, items=mock_item_bank)
+    current = mock_item_bank[4]
     result = await record_response(
         assessment_id="test-exhaust",
-        item_id="item-5",
+        item_id=current["item_id"],
         correct=True,
         prior_responses=prior,
         skill_domain="READING",
@@ -454,12 +472,13 @@ async def test_early_exhaustion_has_final_theta(early_exhaustion_setup, capture_
     assert "confidence_interval" in result
 
 
-async def test_early_exhaustion_has_no_current_item_key(early_exhaustion_setup, capture_execute):
+async def test_early_exhaustion_has_no_current_item_key(early_exhaustion_setup, capture_execute, mock_item_bank):
     """current_item must not appear in a terminal response."""
-    prior = _build_prior(correct_count=3, total=4)
+    prior = _build_prior_with_difficulty(correct_count=3, total=4, items=mock_item_bank)
+    current = mock_item_bank[4]
     result = await record_response(
         assessment_id="test-exhaust",
-        item_id="item-5",
+        item_id=current["item_id"],
         correct=True,
         prior_responses=prior,
         skill_domain="READING",

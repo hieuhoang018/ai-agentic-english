@@ -126,6 +126,36 @@ async def get_writing(session_id: str):
     return state
 
 
+@app.post("/sessions/{session_id}/meta", status_code=204)
+async def set_session_meta(session_id: str, body: dict = Body(...)):
+    await stm.set_session_meta(session_id, body)
+
+
+@app.get("/sessions/{session_id}/meta")
+async def get_session_meta(session_id: str):
+    meta = await stm.get_session_meta(session_id)
+    if meta is None:
+        raise HTTPException(status_code=404, detail="Session meta not found")
+    return meta
+
+
+@app.delete("/sessions/{session_id}/meta", status_code=204)
+async def delete_session_meta(session_id: str):
+    await stm.delete_session_meta(session_id)
+
+
+@app.post("/sessions/{session_id}/meta/increment-turn")
+async def increment_turn(session_id: str):
+    count = await stm.incr_turn_count(session_id)
+    return {"turn_count": count}
+
+
+@app.get("/sessions/{session_id}/meta/turn-count")
+async def get_turn_count(session_id: str):
+    count = await stm.get_turn_count(session_id)
+    return {"turn_count": count}
+
+
 # ── Consolidation ─────────────────────────────────────────────────────────────
 
 @app.post("/sessions/{session_id}/consolidate")
@@ -160,6 +190,11 @@ async def get_sessions(clerk_user_id: str, limit: int = 20):
 @app.get("/ltm/{clerk_user_id}/conversations")
 async def get_conversations(clerk_user_id: str, limit: int = 20):
     return await ltm.get_conversations(clerk_user_id, limit)
+
+
+@app.get("/ltm/{clerk_user_id}/assessment-history")
+async def get_assessment_history_endpoint(clerk_user_id: str, skill_domain: str, limit: int = 50):
+    return await ltm.get_assessment_history(clerk_user_id, skill_domain, limit)
 
 
 # ── Review Center ─────────────────────────────────────────────────────────────

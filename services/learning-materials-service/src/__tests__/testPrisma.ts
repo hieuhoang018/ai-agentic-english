@@ -12,6 +12,7 @@ export type MockPrismaClient = {
     findUnique: ReturnType<typeof vi.fn>;
     create: ReturnType<typeof vi.fn>;
     update: ReturnType<typeof vi.fn>;
+    deleteMany: ReturnType<typeof vi.fn>;
   };
   assessmentQuestion: {
     findMany: ReturnType<typeof vi.fn>;
@@ -33,6 +34,7 @@ export function createMockPrisma(): MockPrismaClient {
       findUnique: vi.fn(),
       create: vi.fn(),
       update: vi.fn(),
+      deleteMany: vi.fn(),
     },
     assessmentQuestion: { findMany: vi.fn() },
     vocabEntry: { findMany: vi.fn(async () => []), groupBy: vi.fn(async () => []) },

@@ -1,7 +1,9 @@
 """
 Habit Building Agent service.
 Manages streak tracking and milestone notifications via Kafka.
-Re-engagement escalation logic lives here; the cron that calls it lives in notification-service.
+Absence-based reminders (daily-reminder, etc.) are owned by
+notification-service's dailyReminder.ts scheduler, which pulls context
+from AGT-07 directly — this agent does not compute or trigger those.
 """
 
 import logging
@@ -12,6 +14,8 @@ logger = logging.getLogger(__name__)
 
 _ACHIEVEMENT_TYPE_MAP = {
     "7-day streak": "7-day-streak",
+    "30-day streak": "30-day-streak",
+    "100-day streak": "100-day-streak",
     "first-lesson": "first-lesson",
     # "level-up" is the third AchievementType in the TS shared package but has no producer here:
     # it represents a CEFR level advancement (A1→A2, etc.) and belongs in AGT-05 (assessment)
@@ -19,34 +23,11 @@ _ACHIEVEMENT_TYPE_MAP = {
 }
 
 
-async def check_re_engagement(
-    clerk_user_id: str,
-    days_since_last_session: int,
-    risk_score: float = 0.0,
-    streak_days: int = 0,
-    review_due_count: int = 0,
-) -> str | None:
-    """
-    Return the Novu notification template key appropriate for the absence duration.
-    Returns None when the user is active (days_since_last_session < 1).
-    Callers (notification-service cron) use the returned key to trigger Novu.
-    """
-    if risk_score > 0.7:
-        return "proactive-intervention"
-    if days_since_last_session >= 7:
-        return "weekly-progress-summary"
-    if days_since_last_session >= 3:
-        return "re-engagement-nudge"
-    if days_since_last_session >= 1:
-        return "daily-reminder"
-    return None
-
-
 async def send_milestone(clerk_user_id: str, milestone_name: str) -> None:
     """
     Emit achievement.unlocked Kafka event if the milestone maps to a known AchievementType.
-    Unknown milestones (e.g. '30-day streak', '100-day streak') are silently skipped —
-    add them to _ACHIEVEMENT_TYPE_MAP and the TS AchievementType union when Novu templates exist.
+    Unrecognised milestone names are silently skipped — add them to _ACHIEVEMENT_TYPE_MAP
+    and the TS AchievementType union when a new milestone type is introduced.
     """
     achievement_type = _ACHIEVEMENT_TYPE_MAP.get(milestone_name)
     if achievement_type is None:

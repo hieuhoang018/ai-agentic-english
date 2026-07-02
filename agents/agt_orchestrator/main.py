@@ -18,7 +18,10 @@ INTERNAL_SECRET = os.environ.get("INTERNAL_SECRET", "dev-internal-secret")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    await get_producer()
+    try:
+        await get_producer()
+    except Exception:
+        logger.error("Kafka producer startup failed; continuing without it", exc_info=True)
     yield
     await close_producer()
 
@@ -120,6 +123,10 @@ async def orchestrate_onboarding(body: OnboardingRequest):
         except ValueError:
             raise HTTPException(status_code=502, detail="AGT-02 plan generation failed")
 
+        plan_id = plan.get("plan_id")
+        if not isinstance(plan_id, str) or not plan_id:
+            raise HTTPException(status_code=502, detail="AGT-02 plan generation response missing plan_id")
+
         path_definition = plan.get("path_definition")
         if not isinstance(path_definition, dict):
             path_definition = await _fetch_learning_materials_path_definition(client, plan.get("lm_plan_id"))
@@ -131,14 +138,14 @@ async def orchestrate_onboarding(body: OnboardingRequest):
         await emit_ts_event(
             "learning-path.ready",
             "learning-path.ready",
-            {"userId": body.userId, "pathId": plan["plan_id"]},
+            {"userId": body.userId, "pathId": plan_id},
             key=body.userId,
         )
     except Exception:
         logger.error("Failed to emit learning-path.ready for user=%s", body.userId, exc_info=True)
 
     return {
-        "id": plan["plan_id"],
+        "id": plan_id,
         "learningPathId": plan.get("lm_plan_id"),
         "userId": body.userId,
         "pathDefinition": path_definition,

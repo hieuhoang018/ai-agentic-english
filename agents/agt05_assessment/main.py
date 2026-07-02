@@ -29,7 +29,7 @@ async def start(body: StartAssessmentRequest):
     """
     Start a CAT placement assessment for one skill domain.
     Returns first item at theta=0.0 (midpoint).
-    TODO Phase 8+: Fisher information maximisation item selection.
+    Uses Fisher-information maximisation via select_next_item_eap.
     """
     return await start_assessment(body.clerk_user_id, body.skill_domain)
 
@@ -38,13 +38,13 @@ async def start(body: StartAssessmentRequest):
 async def respond(body: RespondRequest):
     """
     Record a response and return the next item or termination result.
-    TODO Phase 8+: SE(theta) < 0.3 termination criterion.
+    Terminates on SE(theta) < 0.3 or item-bank exhaustion via should_terminate_eap.
     """
     return await record_response(
         body.assessment_id,
         body.item_id,
         body.correct,
-        body.prior_responses,
+        [r.model_dump() for r in body.prior_responses],
         body.skill_domain,
         body.clerk_user_id,
     )

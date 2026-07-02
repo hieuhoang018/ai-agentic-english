@@ -1,16 +1,18 @@
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, WebSocket
 
 from agents.shared.db.postgres import get_pool, close_pool
 from agents.shared.db.redis_client import get_redis, close_redis
 from agents.shared.events.producer import get_producer, close_producer
 from agents.agt03_tutor import service
+from agents.agt03_tutor import pipeline
 from agents.agt03_tutor.models import (
     StartSessionRequest, StartSessionResponse,
     TurnRequest, TurnResponse,
     EndSessionRequest, EndSessionResponse,
 )
+from agents.agt03_tutor.websocket_handler import handle_session
 
 
 @asynccontextmanager
@@ -40,16 +42,24 @@ async def start_session(body: StartSessionRequest):
 @app.post("/sessions/turn", response_model=TurnResponse)
 async def turn(body: TurnRequest):
     try:
-        return await service.process_turn(body.session_id, body.user_message, body.audio_base64)
+        return await pipeline.run_turn_pipeline(body.session_id, body.user_message, body.audio_base64)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
 
 
 @app.post("/sessions/end", response_model=EndSessionResponse)
 async def end_session(body: EndSessionRequest):
-    return await service.end_session(body.session_id, body.clerk_user_id, body.skill_focus)
+    try:
+        return await service.end_session(body.session_id, body.clerk_user_id, body.skill_focus)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
 
 
 @app.get("/sessions/{session_id}/state")
 async def session_state(session_id: str):
     return await service.get_session_state(session_id)
+
+
+@app.websocket("/ws/sessions/{session_id}")
+async def websocket_session(websocket: WebSocket, session_id: str):
+    await handle_session(websocket, session_id)

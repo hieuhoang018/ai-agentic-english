@@ -505,7 +505,7 @@ Write-Host "Recommended tab: $($lib.recommended.Count)"
 ## Agent 11 of 11 — AGT-10: Habit Building
 **Status: NOT BUILT — Sprint F (final agent)**
 
-**Verification (all 5 must pass):**
+**Verification (all 4 must pass):**
 
 ```powershell
 # 1. Four-tab library — all tabs populated
@@ -523,24 +523,14 @@ $r = (Invoke-WebRequest -Uri "http://localhost:8110/streak/chk-u10/record" -Meth
   -UseBasicParsing).Content | ConvertFrom-Json
 Write-Host "New streak: $($r.streak)"
 # PASS: 7 (and Novu milestone-celebration triggered in logs)
+# Note: absence-based reminders (daily-reminder, weekly-progress-summary, etc.)
+# are NOT computed by AGT-10 — that logic lives in notification-service's
+# dailyReminder.ts scheduler, which pulls context from AGT-07 directly.
 
-# 3. Re-engagement escalation
-@(
-    @{days=1; expected="daily-reminder"},
-    @{days=3; expected="re-engagement-nudge"},
-    @{days=7; expected="weekly-progress-summary"}
-) | ForEach-Object {
-    $b = "{`"clerk_user_id`":`"chk-u10`",`"days_since_last_session`":$($_.days)}"
-    $r = (Invoke-WebRequest -Uri "http://localhost:8110/re-engagement" -Method POST `
-      -ContentType "application/json" -Body $b -UseBasicParsing).Content | ConvertFrom-Json
-    Write-Host "Days $($_.days): $($r.template) (expected $($_.expected))"
-}
-# PASS: each template matches expected
-
-# 4. Novu delivers notification (requires real NOVU_API_KEY)
+# 3. Novu delivers notification (requires real NOVU_API_KEY)
 # Check Novu dashboard Activity Feed within 30 seconds
 
-# 5. CRITICAL — Kafka consumer auto-increments streak
+# 4. CRITICAL — Kafka consumer auto-increments streak
 # Complete an AGT-03 session for chk-u10. Wait 5 seconds.
 $streak = (Invoke-WebRequest -Uri "http://localhost:8110/streak/chk-u10" -UseBasicParsing).Content | ConvertFrom-Json
 Write-Host "Streak (auto): $($streak.streak)"

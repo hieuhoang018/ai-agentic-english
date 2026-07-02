@@ -23,7 +23,8 @@
     "@aws-sdk/s3-request-presigner": "^3.1075.0",
     "@prisma/client": "6.19.3",
     "cors": "2.8.5",
-    "express": "4.22.2"
+    "express": "4.22.2",
+    "kafkajs": "2.2.4"
   },
   "devDependencies": {
     "@ai-agentic-english/config": "*",

@@ -3,8 +3,8 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from agents.shared.db.redis_client import get_redis, close_redis
 from agents.agt10_habit.exercise_library import get_exercise_library
-from agents.agt10_habit.service import record_session_complete, check_re_engagement, get_streak
-from agents.agt10_habit.models import RecordSessionRequest, ReEngagementRequest
+from agents.agt10_habit.service import record_session_complete, get_streak
+from agents.agt10_habit.models import RecordSessionRequest
 from agents.agt10_habit.consumers import start_consumers
 
 
@@ -53,16 +53,3 @@ async def streak(clerk_user_id: str):
     """Return current streak from Redis."""
     current = await get_streak(clerk_user_id)
     return {"clerk_user_id": clerk_user_id, "streak": current}
-
-
-@app.post("/re-engagement")
-async def re_engagement(body: ReEngagementRequest):
-    """Trigger re-engagement Novu notification based on absence duration."""
-    template = await check_re_engagement(
-        body.clerk_user_id,
-        body.days_since_last_session,
-        body.risk_score,
-        body.streak_days,
-        body.review_due_count,
-    )
-    return {"triggered": template is not None, "template": template}

@@ -18,10 +18,12 @@ Session lifecycle:
     (idempotent), and emit session.end with durationMinutes — this is
     what AGT-01's handle_session_end consumer reacts to.
 
-pipeline.py and websocket_handler.py remain stubs this sprint; main.py calls
-this module directly over plain HTTP endpoints. process_turn calls AGT-04
-(grammar feedback) and AGT-11 (translation) concurrently via asyncio.gather,
-both best-effort — failures return None and never block the turn response.
+pipeline.py wraps process_turn as the single turn-processing path shared by
+both the HTTP route (POST /sessions/turn) and the WebSocket route
+(websocket_handler.py, /ws/sessions/{session_id} — text-only, client-side
+SpeechSynthesis TTS). process_turn calls AGT-04 (grammar feedback) and AGT-11
+(translation) concurrently via asyncio.gather, both best-effort — failures
+return None and never block the turn response.
 """
 
 from __future__ import annotations
@@ -30,8 +32,8 @@ import asyncio
 import base64
 import logging
 import os
-import time
 import uuid
+from datetime import datetime, timezone
 
 import httpx
 
@@ -54,13 +56,6 @@ _OPENING_MESSAGES: dict[str, str] = {
     "READING": "Hi! Today we'll work on reading comprehension using a short workplace passage. Ready when you are.",
     "WRITING": "Hi! Let's practice writing. I'll give you a short prompt and we can refine your draft together.",
 }
-
-# In-process session trackers. Acceptable for a single-instance sprint
-# deployment; a future phase will move these into AGT-06 STM state.
-_SESSION_START_TIMES: dict[str, float] = {}
-_SESSION_TURN_COUNTS: dict[str, int] = {}
-# Keyed by session_id. Value: {"profile": dict, "skill_focus": str, "clerk_user_id": str}
-_SESSION_PROFILES: dict[str, dict] = {}
 
 
 async def _stm_set_state(session_id: str, skill_focus: str) -> None:
@@ -87,6 +82,40 @@ async def _stm_get_context(session_id: str) -> list[dict]:
         return resp.json()
 
 
+async def _stm_set_meta(session_id: str, meta: dict) -> None:
+    async with httpx.AsyncClient(timeout=5.0) as client:
+        resp = await client.post(f"{AGT06_BASE_URL}/sessions/{session_id}/meta", json=meta)
+        resp.raise_for_status()
+
+
+async def _stm_get_meta(session_id: str) -> dict | None:
+    async with httpx.AsyncClient(timeout=5.0) as client:
+        resp = await client.get(f"{AGT06_BASE_URL}/sessions/{session_id}/meta")
+        if resp.status_code == 404:
+            return None
+        resp.raise_for_status()
+        return resp.json()
+
+
+async def _stm_delete_meta(session_id: str) -> None:
+    async with httpx.AsyncClient(timeout=5.0) as client:
+        await client.delete(f"{AGT06_BASE_URL}/sessions/{session_id}/meta")
+
+
+async def _stm_incr_turn(session_id: str) -> int:
+    async with httpx.AsyncClient(timeout=5.0) as client:
+        resp = await client.post(f"{AGT06_BASE_URL}/sessions/{session_id}/meta/increment-turn")
+        resp.raise_for_status()
+        return resp.json()["turn_count"]
+
+
+async def _stm_get_turn_count(session_id: str) -> int:
+    async with httpx.AsyncClient(timeout=5.0) as client:
+        resp = await client.get(f"{AGT06_BASE_URL}/sessions/{session_id}/meta/turn-count")
+        resp.raise_for_status()
+        return resp.json()["turn_count"]
+
+
 async def _fetch_profile(clerk_user_id: str, session_id: str) -> tuple[dict, bool]:
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
@@ -109,7 +138,8 @@ async def _fetch_grammar_feedback(
 ) -> dict | None:
     """
     Call AGT-04 for grammar/fluency feedback. Best-effort — returns None on failure.
-    READING sessions skip feedback (comprehension scoring is a separate stub endpoint).
+    READING sessions skip feedback (comprehension scoring goes through AGT-04's
+    /feedback/comprehension endpoint directly, not this call).
     SPEAKING and LISTENING → /feedback/speaking; WRITING → /feedback/writing.
     """
     if skill_focus == "READING":
@@ -223,15 +253,7 @@ async def start_session(clerk_user_id: str, skill_focus: str, session_id: str | 
     plan_loaded = await _fetch_plan(clerk_user_id)
 
     # Critical path: raises if AGT-06 STM is unavailable.
-    # _SESSION_PROFILES is written AFTER this so that a failure here
-    # does not leave an orphaned profile entry with no matching start time.
     await _stm_set_state(session_id, skill_focus)
-
-    _SESSION_PROFILES[session_id] = {
-        "profile": _profile,
-        "skill_focus": skill_focus,
-        "clerk_user_id": clerk_user_id,
-    }
 
     opening = _OPENING_MESSAGES.get(skill_focus, _OPENING_MESSAGES["SPEAKING"])
     if settings.INFERENCE_MODE != "mock":
@@ -246,8 +268,15 @@ async def start_session(clerk_user_id: str, skill_focus: str, session_id: str | 
     except Exception as exc:
         logger.warning("start_session: AGT-06 append_context failed for %s: %s", session_id, exc)
 
-    _SESSION_START_TIMES[session_id] = time.monotonic()
-    _SESSION_TURN_COUNTS[session_id] = 0
+    # Critical: wall-clock time, not time.monotonic() — this value is read back
+    # by a potentially different process (or the same process after a restart).
+    await _stm_set_meta(session_id, {
+        "start_time": datetime.now(timezone.utc).isoformat(),
+        "clerk_user_id": clerk_user_id,
+        "skill_focus": skill_focus,
+        "profile": _profile,
+        "profile_loaded": profile_loaded,
+    })
 
     await emit(
         "session.start",
@@ -269,7 +298,8 @@ async def process_turn(session_id: str, user_message: str | None, audio_base64: 
     if user_message is None and audio_base64 is None:
         raise ValueError("process_turn requires either user_message or audio_base64")
 
-    if session_id not in _SESSION_START_TIMES:
+    session_data = await _stm_get_meta(session_id)
+    if session_data is None:
         raise ValueError(
             f"process_turn: session '{session_id}' is not active — "
             "call start_session first or session has already ended"
@@ -296,7 +326,6 @@ async def process_turn(session_id: str, user_message: str | None, audio_base64: 
         logger.warning("process_turn: AGT-06 get_context failed for %s: %s", session_id, exc)
         context = []
 
-    session_data = _SESSION_PROFILES.get(session_id, {})
     clerk_user_id = session_data.get("clerk_user_id", "")
     skill_focus = session_data.get("skill_focus", "SPEAKING")
 
@@ -317,7 +346,7 @@ async def process_turn(session_id: str, user_message: str | None, audio_base64: 
     except Exception as exc:
         logger.warning("process_turn: AGT-06 append_context (assistant) failed for %s: %s", session_id, exc)
 
-    _SESSION_TURN_COUNTS[session_id] = _SESSION_TURN_COUNTS.get(session_id, 0) + 1
+    await _stm_incr_turn(session_id)
 
     # Best-effort AGT-04 grammar feedback and AGT-11 translation run concurrently.
     grammar_feedback, (translated_message, translation_zone) = await asyncio.gather(
@@ -338,12 +367,25 @@ async def process_turn(session_id: str, user_message: str | None, audio_base64: 
 
 
 async def end_session(session_id: str, clerk_user_id: str, skill_focus: str) -> dict:
-    start_time = _SESSION_START_TIMES.pop(session_id, None)
-    if start_time is None:
-        logger.warning("end_session: session %s not in start times — already ended or process restarted", session_id)
-    duration_minutes = round((time.monotonic() - start_time) / 60.0, 4) if start_time else 0.0
-    turns_completed = _SESSION_TURN_COUNTS.pop(session_id, 0)
-    _SESSION_PROFILES.pop(session_id, None)
+    session_data = await _stm_get_meta(session_id)
+    start_time_iso = session_data.get("start_time") if session_data else None
+    if start_time_iso is None:
+        logger.warning("end_session: session %s has no meta — already ended or expired", session_id)
+        duration_minutes = 0.0
+        turns_completed = 0
+    else:
+        try:
+            start_dt = datetime.fromisoformat(start_time_iso)
+            if start_dt.tzinfo is None:
+                start_dt = start_dt.replace(tzinfo=timezone.utc)  # treat naive as UTC rather than crashing
+            duration_minutes = round((datetime.now(timezone.utc) - start_dt).total_seconds() / 60.0, 4)
+            turns_completed = await _stm_get_turn_count(session_id)
+        except (ValueError, TypeError) as exc:
+            logger.warning("end_session: malformed start_time for session %s: %s", session_id, exc)
+            duration_minutes = 0.0
+            turns_completed = 0
+
+    await _stm_delete_meta(session_id)
 
     consolidated = False
     try:
@@ -357,9 +399,9 @@ async def end_session(session_id: str, clerk_user_id: str, skill_focus: str) -> 
     except Exception as exc:
         logger.warning("end_session: AGT-06 consolidate failed for %s: %s", session_id, exc)
 
-    # Only emit if this invocation actually owned the session (start_time was present).
+    # Only emit if this invocation actually owned the session (meta was present).
     # Prevents a double-call from publishing a second event with durationMinutes=0.
-    if start_time is not None:
+    if session_data is not None:
         await emit(
             "session.end",
             {
