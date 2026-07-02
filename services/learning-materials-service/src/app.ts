@@ -11,6 +11,7 @@ import { createInternalRouter } from './routes/internal';
 import { createLearningPathsRouter } from './routes/learningPaths';
 import { createLessonsRouter } from './routes/lessons';
 import { createModulesRouter } from './routes/modules';
+import { createReviewRouter } from './routes/review';
 
 export interface HealthCheckClient {
   $queryRaw: PrismaClient['$queryRaw'];
@@ -40,6 +41,7 @@ export function createApp(
   app.use('/assessment', createAssessmentRouter(prisma));
   app.use('/learning-paths', createLearningPathsRouter(prisma));
   app.use('/audio', createAudioRouter(storage));
+  app.use('/review', createReviewRouter(prisma));
 
   const internalSecret = getEnv('INTERNAL_SECRET', 'dev-internal-secret');
   app.use('/internal', createInternalMiddleware(internalSecret), createInternalRouter(prisma));

@@ -1,19 +1,17 @@
 import { notFound } from 'next/navigation'
 import FlashcardStudy from '../../../_components/FlashcardStudy'
-import { getFlashcardParams, getFlashcardsByTopic, getFlashcardTopic } from '../../../_data/review-content'
+import { getReviewFlashcardTopic, getReviewFlashcardsByTopic } from '../../../_lib/review-api'
 
 type FlashcardStudyPageProps = {
   params: Promise<{ topicId: string }>
 }
 
-export function generateStaticParams() {
-  return getFlashcardParams()
-}
+export const dynamic = 'force-dynamic'
 
 export default async function FlashcardStudyPage({ params }: FlashcardStudyPageProps) {
   const { topicId } = await params
-  const topic = getFlashcardTopic(topicId)
+  const topic = await getReviewFlashcardTopic(topicId)
   if (!topic) notFound()
 
-  return <FlashcardStudy cards={getFlashcardsByTopic(topicId)} />
+  return <FlashcardStudy cards={await getReviewFlashcardsByTopic(topic.id)} />
 }

@@ -1,19 +1,28 @@
-import Link from 'next/link'
+import ReviewEmptyState from '../_components/ReviewEmptyState'
 import FlashcardTopicGrid from '../_components/FlashcardTopicGrid'
 import ReviewHero from '../_components/ReviewHero'
-import { getFlashcardTopics } from '../_data/review-content'
+import { getReviewFlashcardTopics } from '../_lib/review-api'
 
-export default function FlashcardsPage() {
-  const topics = getFlashcardTopics()
+export const dynamic = 'force-dynamic'
+
+export default async function FlashcardsPage() {
+  const topics = await getReviewFlashcardTopics()
 
   return (
     <div>
       <ReviewHero
-        title="Flashcard theo chủ đề"
-        description="Chọn một chủ đề để bắt đầu ôn tập từ vựng ngay hôm nay."
-        action={<Link href="/main/review-center/flashcards/technology" className="flex h-11 items-center gap-2 rounded-lg bg-primary px-5 font-bold text-white"><span className="material-symbols-outlined">add</span>Tạo chủ đề mới</Link>}
+        title="Flashcard theo chu de"
+        description="Chon mot cap do CEFR de bat dau on tap tu vung tu du lieu hoc lieu."
       />
-      <FlashcardTopicGrid topics={topics} />
+      {topics.length > 0 ? (
+        <FlashcardTopicGrid topics={topics} />
+      ) : (
+        <ReviewEmptyState
+          icon="style"
+          title="No vocabulary topics found"
+          description="Start Kong and the learning-materials service, then seed vocab entries and refresh this page to load CEFR-based flashcard topics."
+        />
+      )}
     </div>
   )
 }

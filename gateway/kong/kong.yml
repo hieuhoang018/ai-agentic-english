@@ -172,6 +172,19 @@ services:
               claims_to_verify:
                 - exp
 
+  - name: lm-review
+    url: http://learning-materials-service:4002/review
+    routes:
+      - name: lm-review-route
+        paths:
+          - /api/review
+        strip_path: true
+        plugins:
+          - name: jwt
+            config:
+              claims_to_verify:
+                - exp
+
   - name: agt-orchestrator-onboarding
     url: http://agt-orchestrator:8100/orchestrate/onboarding
     routes:

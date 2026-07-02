@@ -1,14 +1,28 @@
-import ReviewHero from '../_components/ReviewHero'
+import ReviewEmptyState from '../_components/ReviewEmptyState'
 import GrammarSection from '../_components/GrammarSection'
-import { getGrammarSections } from '../_data/review-content'
+import ReviewHero from '../_components/ReviewHero'
+import { getReviewGrammarSections } from '../_lib/review-api'
 
-export default function GrammarPage() {
-  const sections = getGrammarSections()
+export const dynamic = 'force-dynamic'
+
+export default async function GrammarPage() {
+  const sections = await getReviewGrammarSections()
 
   return (
     <div>
-      <ReviewHero title="Ôn tập Ngữ pháp" description="Củng cố nền tảng cấu trúc câu qua các bài tập và lý thuyết chi tiết từ chuyên gia AI của chúng tôi." />
-      {sections.map((section) => <GrammarSection key={section.id} section={section} />)}
+      <ReviewHero
+        title="On tap ngu phap"
+        description="Cung co cau truc cau bang cac diem ngu phap lay truc tiep tu kho hoc lieu."
+      />
+      {sections.length > 0 ? (
+        sections.map((section) => <GrammarSection key={section.id} section={section} />)
+      ) : (
+        <ReviewEmptyState
+          icon="account_tree"
+          title="No grammar sections found"
+          description="Start Kong and the learning-materials service, then seed grammar points and refresh this page to load category-based review lessons."
+        />
+      )}
     </div>
   )
 }

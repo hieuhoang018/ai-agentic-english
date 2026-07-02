@@ -100,3 +100,58 @@ export interface CatalogSummaryDto {
   totalLessons: number;
   totalExercises: number;
 }
+
+export interface ReviewFlashcardTopicDto {
+  id: CefrLevel;
+  cefrLevel: CefrLevel;
+  title: string;
+  description: string;
+  totalCards: number;
+}
+
+export interface ReviewFlashcardDto {
+  id: string;
+  topicId: CefrLevel;
+  term: string;
+  partOfSpeech: string;
+  definition: string | null;
+  example: string | null;
+  ipa: string | null;
+  cefrLevel: CefrLevel;
+  domainTag: string | null;
+  source: string;
+  license: string;
+}
+
+export interface ReviewGrammarExampleDto {
+  id: string;
+  sentence: string;
+  note: string | null;
+}
+
+export interface ReviewGrammarLessonSummaryDto {
+  id: string;
+  categoryId: string;
+  category: string;
+  title: string;
+  cefrLevel: CefrLevel;
+  explanation: string;
+  exampleCount: number;
+}
+
+export interface ReviewGrammarLessonDto extends ReviewGrammarLessonSummaryDto {
+  examples: ReviewGrammarExampleDto[];
+  source: string;
+  license: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ReviewGrammarSectionDto {
+  id: string;
+  category: string;
+  title: string;
+  lessonCount: number;
+  cefrLevels: CefrLevel[];
+  lessons: ReviewGrammarLessonSummaryDto[];
+}
