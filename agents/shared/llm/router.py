@@ -1,8 +1,14 @@
 """
 Three-tier LLM routing for the AI agent layer.
 
+Not all 11 agents route through here: AGT-05 (CAT/IRT psychometric
+assessment), AGT-07 (SM-2 spaced-repetition review scheduling), AGT-08
+(CUSUM/PELT changepoint + risk scoring), and AGT-09 (composite item
+scorer / recommendation ranking) are pure-algorithm services with no LLM
+calls, so they never appear in the tier tables below.
+
 Tier 1 — Groq (primary, speed-critical real-time paths):
-  Real-time agents: AGT-03, AGT-04, AGT-05
+  Real-time agents: AGT-03, AGT-04
   Free quota: 1,000 RPD org-level — preserved exclusively for real-time agents.
 
 Tier 2 — OpenRouter (fallback, async agents + Groq overflow):
@@ -46,14 +52,11 @@ class AgentID(str, Enum):
 
 
 # Real-time agents — Groq Tier 1 first (preserve 1,000 RPD budget for these only)
-REALTIME_AGENTS = {AgentID.AGT03, AgentID.AGT04, AgentID.AGT05}
+REALTIME_AGENTS = {AgentID.AGT03, AgentID.AGT04}
 
 # Async agents — skip Groq entirely, OpenRouter -> Ollama
 ASYNC_AGENTS = {
     AgentID.AGT02,
-    AgentID.AGT07,
-    AgentID.AGT08,
-    AgentID.AGT09,
     AgentID.AGT11,
     AgentID.CONTENT_GEN,
 }
@@ -61,19 +64,15 @@ ASYNC_AGENTS = {
 GROQ_MODELS: dict[AgentID, str] = {
     AgentID.AGT03: "llama-3.3-70b-versatile",  # conversation — best quality on Groq
     AgentID.AGT04: "llama-3.1-8b-instant",     # grammar feedback — 800+ TPS, <500ms
-    AgentID.AGT05: "llama-3.3-70b-versatile",  # CEFR band classification
 }
 
 OPENROUTER_MODELS: dict[AgentID, str] = {
     AgentID.AGT03: "google/gemini-2.0-flash-exp:free",  # conversation fallback
-    # deepseek/deepseek-chat-v3.1:free (originally chosen for AGT02/07/09/CONTENT_GEN)
+    # deepseek/deepseek-chat-v3.1:free (originally chosen for AGT02/CONTENT_GEN)
     # was retired by OpenRouter (404, paid-only now) as of this writing —
     # openai/gpt-oss-20b:free is free, not upstream-rate-limited, and confirmed to
     # follow strict-JSON instructions.
     AgentID.AGT02: "openai/gpt-oss-20b:free",          # plan generation
-    AgentID.AGT07: "openai/gpt-oss-20b:free",          # review generation
-    AgentID.AGT08: "deepseek/deepseek-r1:free",         # analysis (chain-of-thought)
-    AgentID.AGT09: "openai/gpt-oss-20b:free",          # recommendation rationale
     # qwen/qwen3-235b-a22b:free (originally chosen for best Vietnamese quality) was
     # also retired by OpenRouter (404, paid-only now) — confirmed live against a real
     # API key. openai/gpt-oss-20b:free is reused here since it was independently
@@ -90,11 +89,8 @@ OLLAMA_MODELS: dict[AgentID, str] = {
     AgentID.AGT03: "llama3.1:8b",   # conversation backstop
     AgentID.AGT04: "llama3.1:8b",   # grammar analysis backstop
     AgentID.AGT02: "gemma3:4b",     # planning backstop
-    AgentID.AGT07: "gemma3:4b",     # review backstop
-    AgentID.AGT08: "llama3.1:8b",   # analysis backstop
-    AgentID.AGT09: "gemma3:4b",     # recommendation backstop
     AgentID.AGT11: "qwen2.5:7b",    # translation backstop (multilingual)
-    AgentID.CONTENT_GEN: "gemma3:4b",  # content-gen backstop, same as AGT02/07/09's gemma3:4b
+    AgentID.CONTENT_GEN: "gemma3:4b",  # content-gen backstop, same as AGT02's gemma3:4b
 }
 
 
