@@ -7,6 +7,7 @@ import httpx
 import pytest
 import respx
 from agents.agt10_habit.exercise_library import get_exercise_library, AGT02_BASE, AGT07_BASE, AGT09_BASE, LMS_BASE
+from agents.shared.config import settings
 
 USER = "user_x"
 
@@ -100,3 +101,20 @@ async def test_get_exercise_library_calls_correct_urls():
     assert route_due.call_count == 1
     assert route_reco.call_count == 1
     assert route_browse.call_count == 1
+
+
+@respx.mock
+async def test_get_exercise_library_sends_internal_secret_to_agt02_only():
+    """AGT-02's /today route requires x-internal-secret (see agt02_learning_path/main.py);
+    the other three tabs are not gated and must not carry the header."""
+    route_today = respx.get(AGT02_TODAY_URL).mock(return_value=httpx.Response(200, json=[]))
+    route_due = respx.get(AGT07_DUE_URL).mock(return_value=httpx.Response(200, json=[]))
+    route_reco = respx.get(AGT09_RECO_URL).mock(return_value=httpx.Response(200, json=[]))
+    route_browse = respx.get(LMS_MODULES_URL).mock(return_value=httpx.Response(200, json=[]))
+
+    await get_exercise_library(USER)
+
+    assert route_today.calls[0].request.headers["x-internal-secret"] == settings.INTERNAL_SECRET
+    assert "x-internal-secret" not in route_due.calls[0].request.headers
+    assert "x-internal-secret" not in route_reco.calls[0].request.headers
+    assert "x-internal-secret" not in route_browse.calls[0].request.headers

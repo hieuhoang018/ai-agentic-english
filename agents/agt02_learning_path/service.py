@@ -9,7 +9,17 @@ generate_plan() flow:
   3. Compute skill_allocation via optimizer.allocate_skills().
   4. Fetch (and Redis-cache) a catalog summary from the Learning Materials
      service, grouped by skill code. Falls back to {} (triggers
-     optimizer.FALLBACK_ACTIVITIES) if unreachable.
+     optimizer.FALLBACK_ACTIVITIES) if unreachable. The cached catalog is
+     always the full, unfiltered set — level filtering happens after the
+     cache read (see step 4b) so the shared cache entry stays valid across
+     learners at different CEFR levels.
+  4b. Reorder each skill's module pool by proximity to profile.goal_profile
+      .currentLevel via _filter_catalog_by_level(): modules at-or-above the
+      learner's level sort first (closest first), so select_daily_activities'
+      greedy fill picks level-appropriate content instead of whatever is
+      first in DB order. A skill is never left empty by this step — if no
+      module meets the learner's level, the full original pool is kept,
+      ordered closest-below-first.
   5. Build an LLM prompt describing the profile, allocation, and goals.
   6. Call the LLM router (AGT02, async tier) for a short rationale.
   7. Select today's activities via optimizer.select_daily_activities().
@@ -42,6 +52,10 @@ LM_INTERNAL_SECRET = os.environ.get("LM_INTERNAL_SECRET", "dev-internal-secret")
 
 # learning-materials-service's Module.skillFocus values -> optimizer skill codes (L/S/R/W).
 _SKILL_FOCUS_TO_CODE = {"listening": "L", "speaking": "S", "reading": "R", "writing": "W"}
+
+# Ordinal ranking of CEFR levels, low to high. Mirrors the level set used
+# elsewhere in the codebase (e.g. agt09_recommendation's _CEFR_DIFFICULTY).
+_CEFR_RANK = {"A1": 0, "A2": 1, "B1": 2, "B2": 3, "C1": 4, "C2": 5}
 
 CATALOG_CACHE_KEY = "catalog:summary:v2"
 CATALOG_CACHE_TTL = 3600  # 1 hour
@@ -96,6 +110,45 @@ def _modules_to_skill_catalog(modules: list[dict]) -> dict[str, list[dict]]:
             "difficulty": module.get("cefrLevel", "B1"),
         })
     return catalog
+
+
+def _filter_catalog_by_level(catalog: dict[str, list[dict]], current_level: str | None) -> dict[str, list[dict]]:
+    """
+    Reorder (and, where possible, restrict) each skill's module pool so
+    select_daily_activities' greedy fill prefers modules at or above the
+    learner's current_level, instead of raw catalog/DB order.
+
+    - Modules at-or-above current_level are kept and sorted closest-first
+      (e.g. a B2 learner sees B2, then C1, then C2).
+    - If no module in a skill meets current_level (e.g. a C2 learner in a
+      skill with only lower-level content), the full original pool is kept
+      instead of an empty list, sorted closest-below-first — real catalog
+      content at the wrong level is still preferable to generic
+      FALLBACK_ACTIVITIES placeholders.
+    - Unrecognized/missing current_level is a no-op: returns catalog unchanged
+      (this is the cold-start / no goal_profile path).
+    """
+    target_rank = _CEFR_RANK.get(current_level)
+    if target_rank is None:
+        return catalog
+
+    filtered: dict[str, list[dict]] = {}
+    for skill, items in catalog.items():
+        at_or_above = [
+            item for item in items
+            if _CEFR_RANK.get(item.get("difficulty"), target_rank) >= target_rank
+        ]
+        if at_or_above:
+            filtered[skill] = sorted(
+                at_or_above,
+                key=lambda item: _CEFR_RANK.get(item.get("difficulty"), target_rank),
+            )
+        else:
+            filtered[skill] = sorted(
+                items,
+                key=lambda item: -_CEFR_RANK.get(item.get("difficulty"), 0),
+            )
+    return filtered
 
 
 def _build_path_definition(activities: list[dict]) -> dict:
@@ -238,6 +291,8 @@ async def generate_plan(clerk_user_id: str, request: dict) -> dict:
 
     allocation = optimizer.allocate_skills(profile)
     catalog = await _fetch_catalog_summary()
+    current_level = (profile.get("goal_profile") or {}).get("currentLevel")
+    catalog = _filter_catalog_by_level(catalog, current_level)
 
     messages = _build_prompt(profile, allocation, goals)
     rationale = await call_llm(messages, AgentID.AGT02)
@@ -254,6 +309,16 @@ async def generate_plan(clerk_user_id: str, request: dict) -> dict:
     pool = await get_pool()
     async with pool.acquire() as conn:
         async with conn.transaction():
+            # Per-user advisory lock, held for the transaction's lifetime.
+            # `FOR UPDATE` below only locks a row that already exists, so two
+            # concurrent calls for a user with NO active plan yet (first-ever
+            # plan, or a race right after the prior plan was deactivated)
+            # would otherwise both see existing=None and both insert
+            # version=1/is_active=TRUE. The advisory lock serializes ALL
+            # generate_plan calls for a given user regardless of whether a
+            # row exists, closing that gap.
+            await conn.execute("SELECT pg_advisory_xact_lock(hashtext($1))", clerk_user_id)
+
             existing = await conn.fetchrow(
                 """
                 SELECT plan_id, version FROM agent_learning_plans

@@ -41,7 +41,7 @@ async def test_start_session_returns_opening_message_and_emits_event(monkeypatch
     respx.get(f"{service.AGT01_BASE_URL}/profile/user1").mock(
         return_value=httpx.Response(200, json={"cold_start_flag": False})
     )
-    respx.get(f"{service.AGT02_BASE_URL}/plans/user1/active").mock(
+    agt02_route = respx.get(f"{service.AGT02_BASE_URL}/plans/user1/active").mock(
         return_value=httpx.Response(200, json={"lm_plan_id": "plan1"})
     )
     respx.post(f"{service.AGT06_BASE_URL}/sessions/abc/state").mock(return_value=httpx.Response(204))
@@ -58,6 +58,9 @@ async def test_start_session_returns_opening_message_and_emits_event(monkeypatch
     result = await service.start_session("user1", "SPEAKING", "abc")
 
     assert result["session_id"] == "abc"
+    # AGT-02's /active route requires this header (see agt02_learning_path/main.py).
+    from agents.shared.config import settings
+    assert agt02_route.calls[0].request.headers["x-internal-secret"] == settings.INTERNAL_SECRET
     assert result["skill_focus"] == "SPEAKING"
     assert result["opening_message"]
     assert result["profile_loaded"] is True
