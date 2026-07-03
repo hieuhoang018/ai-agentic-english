@@ -5,8 +5,12 @@ def assert_internal_secret_is_safe(secret: str, inference_mode: str) -> None:
     and agents/shared/config.py's default — anyone can read it on GitHub. An
     empty/whitespace secret (e.g. Compose silently substituting "" for an unset
     ``${INTERNAL_SECRET}``) is treated the same way, since it's just as unsafe.
+    The secret is normalized once and reused for both checks, so a value like
+    " dev-internal-secret\\n" (e.g. a trailing newline from a pasted .env value)
+    can't slip past the emptiness check and then fail the exact-match check.
     """
-    if inference_mode == "live" and (not secret.strip() or secret == "dev-internal-secret"):
+    normalized = secret.strip()
+    if inference_mode == "live" and (not normalized or normalized == "dev-internal-secret"):
         raise RuntimeError(
             "INTERNAL_SECRET is unset or still the insecure dev default while "
             "INFERENCE_MODE=live. Set a real INTERNAL_SECRET before running in production."

@@ -35,4 +35,26 @@ describe('assertProductionSecret', () => {
 
     expect(() => assertProductionSecret('a-real-production-secret', 'INTERNAL_SECRET')).not.toThrow();
   });
+
+  it('throws when DEPLOY_ENV=production and the dev default is padded with whitespace', () => {
+    // Regression test: the emptiness check and the dev-default comparison must
+    // use the same normalized value. Previously the emptiness check trimmed
+    // the secret but the equality check compared the raw string, so
+    // ' dev-internal-secret ' (e.g. a stray space from a pasted .env value)
+    // passed the emptiness check (non-empty) and failed the equality check
+    // (not an exact match) -- silently bypassing the guard entirely.
+    vi.stubEnv('DEPLOY_ENV', 'production');
+
+    expect(() => assertProductionSecret(' dev-internal-secret ', 'INTERNAL_SECRET')).toThrow(
+      'INTERNAL_SECRET',
+    );
+  });
+
+  it('throws when DEPLOY_ENV=production and the dev default has a trailing newline', () => {
+    vi.stubEnv('DEPLOY_ENV', 'production');
+
+    expect(() => assertProductionSecret('dev-internal-secret\n', 'INTERNAL_SECRET')).toThrow(
+      'INTERNAL_SECRET',
+    );
+  });
 });

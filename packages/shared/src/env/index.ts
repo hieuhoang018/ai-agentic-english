@@ -31,7 +31,8 @@ export function getEnvInt(key: string, defaultValue: number): number {
 
 export function assertProductionSecret(secret: string, label: string): void {
   const deployEnv = getEnv('DEPLOY_ENV', 'development');
-  if (deployEnv === 'production' && (!secret.trim() || secret === 'dev-internal-secret')) {
+  const normalized = secret.trim();
+  if (deployEnv === 'production' && (!normalized || normalized === 'dev-internal-secret')) {
     throw new Error(
       `${label} is unset or still the insecure dev default while DEPLOY_ENV=production. ` +
         'Set a real secret before running in production.',
