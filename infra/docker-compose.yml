@@ -302,6 +302,7 @@ services:
       INFERENCE_MODE: mock
       LM_SERVICE_BASE_URL: http://learning-materials-service:4002
       LM_INTERNAL_SECRET: dev-internal-secret
+      INTERNAL_SECRET: dev-internal-secret
       OLLAMA_BASE_URL: http://ollama:11434
     depends_on:
       postgres-agents:
@@ -326,6 +327,7 @@ services:
       MINIO_ACCESS_KEY: minioadmin
       MINIO_SECRET_KEY: minioadmin
       INFERENCE_MODE: mock
+      INTERNAL_SECRET: dev-internal-secret
       AGT04_BASE_URL: http://agt04-feedback:8104
       AGT06_BASE_URL: http://agt06-memory:8106
       AGT07_BASE_URL: http://agt07-review:8107
@@ -495,6 +497,7 @@ services:
       REDIS_URL: redis://redis:6379
       KAFKA_BROKERS: kafka:9092
       INFERENCE_MODE: mock
+      INTERNAL_SECRET: dev-internal-secret
     depends_on:
       postgres-agents:
         condition: service_healthy

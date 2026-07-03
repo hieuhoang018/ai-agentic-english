@@ -114,6 +114,7 @@ async def orchestrate_onboarding(body: OnboardingRequest):
                     "daily_minutes": body.dailyTimeBudgetMinutes,
                     "goals": body.goals,
                 },
+                headers={"x-internal-secret": INTERNAL_SECRET},
             )
         except httpx.HTTPError as exc:
             logger.error("AGT-02 unreachable: %s", exc)

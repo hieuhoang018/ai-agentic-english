@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import uuid
 from unittest.mock import AsyncMock, MagicMock, patch as mock_patch
@@ -16,6 +17,13 @@ pytestmark = pytest.mark.integration
 
 # In-memory store for mocking database
 _db_store = {}
+
+# Simulates Postgres advisory locks: keyed by clerk_user_id (not by
+# connection), shared across every FakeConnection instance -- this is what
+# lets test_generate_plan_concurrent_calls_for_new_user_... genuinely exercise
+# the serialization added to generate_plan's transaction, rather than just
+# asserting the lock SQL was issued.
+_advisory_locks: dict[str, asyncio.Lock] = {}
 
 
 class FakeRecord:
@@ -53,7 +61,12 @@ class TransactionContext:
         return self.conn
 
     async def __aexit__(self, exc_type, exc, tb):
-        pass
+        # Advisory locks are transaction-scoped in real Postgres (pg_advisory_xact_lock) --
+        # release on commit/rollback, mirrored here as "on transaction exit".
+        held_key = self.conn._held_lock_key
+        if held_key is not None:
+            self.conn._held_lock_key = None
+            _advisory_locks[held_key].release()
 
 
 class FakeConnection:
@@ -61,9 +74,18 @@ class FakeConnection:
 
     def __init__(self):
         self._in_transaction = False
+        self._held_lock_key: str | None = None
 
     async def fetchrow(self, query, *args):
         """Mock fetchrow for database queries."""
+        # A real DB round-trip always yields control back to the event loop at
+        # least once. Without this, two coroutines driven via asyncio.gather
+        # can run this synchronous-in-substance fake straight through to
+        # completion without ever interleaving, masking races that would be
+        # real against an actual asyncpg connection (verified: the
+        # concurrent-generate-plan test below passed even with the advisory
+        # lock removed, until this yield point was added).
+        await asyncio.sleep(0)
         # Handle SELECT for existing active plans
         if "SELECT plan_id, version FROM agent_learning_plans" in query:
             clerk_user_id = args[0]
@@ -107,7 +129,13 @@ class FakeConnection:
         return None
 
     async def execute(self, query, *args):
-        """Mock execute for UPDATE queries."""
+        """Mock execute for advisory-lock and UPDATE queries."""
+        if "pg_advisory_xact_lock" in query:
+            clerk_user_id = args[0]
+            lock = _advisory_locks.setdefault(clerk_user_id, asyncio.Lock())
+            await lock.acquire()
+            self._held_lock_key = clerk_user_id
+            return
         if "UPDATE agent_learning_plans SET is_active = FALSE" in query:
             plan_id = args[0]
             for clerk_id in _db_store:
@@ -154,6 +182,7 @@ def patch_redis(monkeypatch):
 def patch_db(monkeypatch):
     """Mock the database pool and fetchrow for tests."""
     _db_store.clear()
+    _advisory_locks.clear()
 
     async def fake_get_pool():
         return FakePool()
@@ -274,6 +303,47 @@ async def test_generate_plan_twice_deactivates_previous_and_increments_version(m
     active = await service.get_active_plan(clerk_id)
     assert active["plan_id"] == second["plan_id"]
     assert active["version"] == 2
+
+
+@respx.mock
+async def test_generate_plan_concurrent_calls_for_new_user_do_not_create_duplicate_active_plans(monkeypatch):
+    """Regression test for the fixed duplicate-active-plan race condition.
+
+    Two concurrent generate_plan calls for a user with NO existing plan used
+    to both see `existing=None` (SELECT ... FOR UPDATE locks nothing when
+    there's no row yet) and both insert version=1/is_active=TRUE. The
+    per-user pg_advisory_xact_lock added to generate_plan's transaction must
+    serialize these calls: one completes and commits before the other's
+    SELECT even runs, so the second sees the first's row and becomes
+    version=2, leaving exactly one active plan.
+    """
+    clerk_id = f"test-user-{uuid.uuid4()}"
+
+    respx.get(f"{service.AGT01_BASE_URL}/profile/{clerk_id}").mock(
+        return_value=httpx.Response(200, json={"clerk_user_id": clerk_id, "irt_theta": {}, "cold_start_flag": True})
+    )
+    respx.get(f"{service.LM_SERVICE_BASE_URL}/internal/catalog/summary").mock(
+        return_value=httpx.Response(404)
+    )
+    respx.post(f"{service.LM_SERVICE_BASE_URL}/internal/learning-paths").mock(
+        return_value=httpx.Response(200)
+    )
+
+    async def fake_emit(topic, payload, agent_id, key=None):
+        pass
+
+    monkeypatch.setattr(service, "emit", fake_emit)
+
+    plan_a, plan_b = await asyncio.gather(
+        service.generate_plan(clerk_id, {"daily_minutes": 20, "goals": []}),
+        service.generate_plan(clerk_id, {"daily_minutes": 20, "goals": []}),
+    )
+
+    versions = sorted([plan_a["version"], plan_b["version"]])
+    assert versions == [1, 2], "concurrent calls for a brand-new user must serialize, not both produce version=1"
+
+    active_plans = [p for p in _db_store[clerk_id]["plans"] if p["is_active"]]
+    assert len(active_plans) == 1, "exactly one plan must be active after concurrent generation"
 
 
 @respx.mock
@@ -500,3 +570,353 @@ async def test_sync_learning_path_missing_id_field_falls_back_to_uuid(monkeypatc
     assert plan["is_active"] is True
     assert isinstance(plan["lm_plan_id"], str)
     assert len(plan["lm_plan_id"]) > 0
+
+
+# --- CEFR-aware selection (_filter_catalog_by_level) ------------------------
+# AGT-02 previously ignored profile.goal_profile.currentLevel entirely when
+# selecting catalog modules: selection order was pure DB/catalog order, so a
+# B2 listening learner could just as easily get an A1 module as a B2 one.
+# _filter_catalog_by_level() reorders (and, when needed, restricts) each
+# skill's module pool by CEFR proximity to currentLevel before
+# optimizer.select_daily_activities() greedily fills the day's budget from it.
+
+
+def test_filter_catalog_by_level_prefers_at_or_above_closest_first():
+    catalog = {
+        "L": [
+            {"module_id": "c2", "difficulty": "C2"},
+            {"module_id": "a1", "difficulty": "A1"},
+            {"module_id": "b2", "difficulty": "B2"},
+            {"module_id": "c1", "difficulty": "C1"},
+        ],
+    }
+
+    filtered = service._filter_catalog_by_level(catalog, "B2")
+
+    # A1 (below B2) is dropped; the rest are kept, closest level first.
+    assert [item["module_id"] for item in filtered["L"]] == ["b2", "c1", "c2"]
+
+
+def test_filter_catalog_by_level_falls_back_to_closest_below_when_nothing_meets_level():
+    catalog = {
+        "R": [
+            {"module_id": "a1", "difficulty": "A1"},
+            {"module_id": "b1", "difficulty": "B1"},
+        ],
+    }
+
+    # Learner is C2; no module in this skill meets that level. All modules
+    # must be kept (never an empty pool), ordered closest-below-first.
+    filtered = service._filter_catalog_by_level(catalog, "C2")
+
+    assert [item["module_id"] for item in filtered["R"]] == ["b1", "a1"]
+
+
+def test_filter_catalog_by_level_preserves_order_within_same_level():
+    catalog = {
+        "S": [
+            {"module_id": "b2-first", "difficulty": "B2"},
+            {"module_id": "b2-second", "difficulty": "B2"},
+        ],
+    }
+
+    filtered = service._filter_catalog_by_level(catalog, "B2")
+
+    # Stable sort: ties at the same CEFR level keep original (DB curriculum) order.
+    assert [item["module_id"] for item in filtered["S"]] == ["b2-first", "b2-second"]
+
+
+def test_filter_catalog_by_level_noop_when_current_level_missing_or_unknown():
+    catalog = {"L": [{"module_id": "a1", "difficulty": "A1"}]}
+
+    assert service._filter_catalog_by_level(catalog, None) == catalog
+    assert service._filter_catalog_by_level(catalog, "") == catalog
+    assert service._filter_catalog_by_level(catalog, "Native") == catalog
+
+
+def test_filter_catalog_by_level_only_touches_skills_present_in_catalog():
+    # A skill with no modules at all must not be fabricated as an empty entry --
+    # optimizer.select_daily_activities relies on a missing key (not `[]`) to
+    # fall back to FALLBACK_ACTIVITIES.
+    catalog = {"L": [{"module_id": "a1", "difficulty": "A1"}]}
+
+    filtered = service._filter_catalog_by_level(catalog, "B2")
+
+    assert "S" not in filtered
+    assert "R" not in filtered
+    assert "W" not in filtered
+
+
+def test_filter_catalog_by_level_handles_missing_difficulty_field_defensively():
+    # Production catalogs always set "difficulty" (_modules_to_skill_catalog
+    # defaults cefrLevel to "B1"), but this must not crash on malformed input.
+    catalog = {"L": [{"module_id": "no-difficulty"}, {"module_id": "b2", "difficulty": "B2"}]}
+
+    filtered = service._filter_catalog_by_level(catalog, "B2")
+
+    assert {item["module_id"] for item in filtered["L"]} == {"no-difficulty", "b2"}
+
+
+@respx.mock
+async def test_generate_plan_selects_cefr_matched_module_over_lower_level_module(monkeypatch):
+    """Regression test for the fixed CEFR-blindness bug: a B2 learner who is
+    weak in listening gets the B2 listening module, not the A1 one, even
+    though the A1 module is first in catalog/DB order."""
+    clerk_id = f"test-user-{uuid.uuid4()}"
+
+    respx.get(f"{service.AGT01_BASE_URL}/profile/{clerk_id}").mock(
+        return_value=httpx.Response(200, json={
+            "clerk_user_id": clerk_id,
+            "irt_theta": {"L": -1.0, "S": 1.0, "R": 1.0, "W": 1.0},
+            "goal_profile": {"currentLevel": "B2", "goals": ["business"]},
+            "cold_start_flag": False,
+        })
+    )
+    respx.get(f"{service.LM_SERVICE_BASE_URL}/internal/catalog/summary").mock(
+        return_value=httpx.Response(200, json={
+            "modules": [
+                {
+                    "id": "mod-listen-a1",
+                    "title": "Basic greetings",
+                    "cefrLevel": "A1",
+                    "skillFocus": "listening",
+                    "lessonCount": 1,
+                    "exerciseCount": 1,
+                    "lessons": [{"id": "l1", "exerciseIds": ["e1"]}],
+                },
+                {
+                    "id": "mod-listen-b2",
+                    "title": "Negotiation calls",
+                    "cefrLevel": "B2",
+                    "skillFocus": "listening",
+                    "lessonCount": 1,
+                    "exerciseCount": 1,
+                    "lessons": [{"id": "l2", "exerciseIds": ["e2"]}],
+                },
+            ],
+            "totalModules": 2,
+            "totalLessons": 2,
+            "totalExercises": 2,
+        })
+    )
+    respx.post(f"{service.LM_SERVICE_BASE_URL}/internal/learning-paths").mock(
+        return_value=httpx.Response(201, json={"id": "lm-path-1"})
+    )
+
+    async def fake_emit(topic, payload, agent_id, key=None):
+        pass
+
+    monkeypatch.setattr(service, "emit", fake_emit)
+
+    plan = await service.generate_plan(clerk_id, {"daily_minutes": 30, "goals": ["business"]})
+
+    listening_activities = [a for a in plan["activities"] if a.get("skill_domain") == "L"]
+    assert listening_activities, "expected at least one listening activity"
+    assert listening_activities[0]["module_id"] == "mod-listen-b2"
+    assert listening_activities[0]["difficulty"] == "B2"
+
+
+@respx.mock
+async def test_generate_plan_gives_closest_below_module_when_learner_exceeds_catalog_level(monkeypatch):
+    """A C2 learner in a skill where the catalog only has lower-level content
+    must still get real catalog content (the highest level available), not be
+    silently pushed onto generic FALLBACK_ACTIVITIES."""
+    clerk_id = f"test-user-{uuid.uuid4()}"
+
+    respx.get(f"{service.AGT01_BASE_URL}/profile/{clerk_id}").mock(
+        return_value=httpx.Response(200, json={
+            "clerk_user_id": clerk_id,
+            "irt_theta": {"L": -1.0, "S": 1.0, "R": 1.0, "W": 1.0},
+            "goal_profile": {"currentLevel": "C2", "goals": []},
+            "cold_start_flag": False,
+        })
+    )
+    respx.get(f"{service.LM_SERVICE_BASE_URL}/internal/catalog/summary").mock(
+        return_value=httpx.Response(200, json={
+            "modules": [
+                {
+                    "id": "mod-listen-a1",
+                    "title": "Basic greetings",
+                    "cefrLevel": "A1",
+                    "skillFocus": "listening",
+                    "lessonCount": 1,
+                    "exerciseCount": 1,
+                    "lessons": [{"id": "l1", "exerciseIds": ["e1"]}],
+                },
+                {
+                    "id": "mod-listen-b2",
+                    "title": "Negotiation calls",
+                    "cefrLevel": "B2",
+                    "skillFocus": "listening",
+                    "lessonCount": 1,
+                    "exerciseCount": 1,
+                    "lessons": [{"id": "l2", "exerciseIds": ["e2"]}],
+                },
+            ],
+            "totalModules": 2,
+            "totalLessons": 2,
+            "totalExercises": 2,
+        })
+    )
+    respx.post(f"{service.LM_SERVICE_BASE_URL}/internal/learning-paths").mock(
+        return_value=httpx.Response(201, json={"id": "lm-path-1"})
+    )
+
+    async def fake_emit(topic, payload, agent_id, key=None):
+        pass
+
+    monkeypatch.setattr(service, "emit", fake_emit)
+
+    plan = await service.generate_plan(clerk_id, {"daily_minutes": 30, "goals": []})
+
+    listening_activities = [a for a in plan["activities"] if a.get("skill_domain") == "L"]
+    assert listening_activities, "expected at least one listening activity"
+    # No C2 (or even B2-or-above) module exists; closest-below (B2) wins over A1.
+    assert listening_activities[0]["module_id"] == "mod-listen-b2"
+
+
+@respx.mock
+async def test_generate_plan_cold_start_with_no_goal_profile_is_unaffected_by_level_filter(monkeypatch):
+    """Users with no goal_profile / currentLevel (e.g. AGT-01 unreachable, or a
+    brand-new profile) must see the pre-fix behavior unchanged: catalog order
+    wins, since there is no level to filter by."""
+    clerk_id = f"test-user-{uuid.uuid4()}"
+
+    respx.get(f"{service.AGT01_BASE_URL}/profile/{clerk_id}").mock(
+        return_value=httpx.Response(200, json={
+            "clerk_user_id": clerk_id,
+            "irt_theta": {"L": -1.0, "S": 1.0, "R": 1.0, "W": 1.0},
+            "cold_start_flag": True,
+            # no goal_profile key at all
+        })
+    )
+    respx.get(f"{service.LM_SERVICE_BASE_URL}/internal/catalog/summary").mock(
+        return_value=httpx.Response(200, json={
+            "modules": [
+                {
+                    "id": "mod-listen-a1",
+                    "title": "Basic greetings",
+                    "cefrLevel": "A1",
+                    "skillFocus": "listening",
+                    "lessonCount": 1,
+                    "exerciseCount": 1,
+                    "lessons": [{"id": "l1", "exerciseIds": ["e1"]}],
+                },
+                {
+                    "id": "mod-listen-b2",
+                    "title": "Negotiation calls",
+                    "cefrLevel": "B2",
+                    "skillFocus": "listening",
+                    "lessonCount": 1,
+                    "exerciseCount": 1,
+                    "lessons": [{"id": "l2", "exerciseIds": ["e2"]}],
+                },
+            ],
+            "totalModules": 2,
+            "totalLessons": 2,
+            "totalExercises": 2,
+        })
+    )
+    respx.post(f"{service.LM_SERVICE_BASE_URL}/internal/learning-paths").mock(
+        return_value=httpx.Response(201, json={"id": "lm-path-1"})
+    )
+
+    async def fake_emit(topic, payload, agent_id, key=None):
+        pass
+
+    monkeypatch.setattr(service, "emit", fake_emit)
+
+    plan = await service.generate_plan(clerk_id, {"daily_minutes": 30, "goals": []})
+
+    listening_activities = [a for a in plan["activities"] if a.get("skill_domain") == "L"]
+    assert listening_activities[0]["module_id"] == "mod-listen-a1"
+
+
+@respx.mock
+async def test_fetch_catalog_summary_sends_no_query_params(patch_redis):
+    """The Learning Materials /internal/catalog/summary route accepts no
+    filter params (see internal.ts) -- the cached catalog is always the full,
+    unfiltered set. CEFR filtering happens client-side afterward, in
+    _filter_catalog_by_level(), so the shared Redis cache entry stays valid
+    across learners at different levels."""
+    route = respx.get(f"{service.LM_SERVICE_BASE_URL}/internal/catalog/summary").mock(
+        return_value=httpx.Response(200, json={
+            "modules": [], "totalModules": 0, "totalLessons": 0, "totalExercises": 0,
+        })
+    )
+
+    await service._fetch_catalog_summary()
+
+    assert route.calls[0].request.url.params == httpx.QueryParams()
+
+
+# --- Other coverage gaps -------------------------------------------------
+
+
+@respx.mock
+async def test_generate_plan_merges_skill_estimates_over_profile_theta(monkeypatch):
+    """skill_estimates is a caller-supplied override merged onto AGT-01's
+    irt_theta before allocation -- covered on optimizer.allocate_skills
+    directly, but never exercised end-to-end through generate_plan."""
+    clerk_id = f"test-user-{uuid.uuid4()}"
+
+    respx.get(f"{service.AGT01_BASE_URL}/profile/{clerk_id}").mock(
+        return_value=httpx.Response(200, json={
+            "clerk_user_id": clerk_id,
+            "irt_theta": {"L": 1.0, "S": 1.0, "R": 1.0, "W": 1.0},
+            "cold_start_flag": False,
+        })
+    )
+    respx.get(f"{service.LM_SERVICE_BASE_URL}/internal/catalog/summary").mock(
+        return_value=httpx.Response(404)
+    )
+    respx.post(f"{service.LM_SERVICE_BASE_URL}/internal/learning-paths").mock(
+        return_value=httpx.Response(200)
+    )
+
+    async def fake_emit(topic, payload, agent_id, key=None):
+        pass
+
+    monkeypatch.setattr(service, "emit", fake_emit)
+
+    plan = await service.generate_plan(clerk_id, {
+        "daily_minutes": 30,
+        "goals": [],
+        "skill_estimates": {"S": -2.0},
+    })
+
+    # Profile alone says all four skills are equally strong; the caller-supplied
+    # skill_estimates override should make S dominate the allocation.
+    assert plan["skill_allocation"]["S"] > plan["skill_allocation"]["L"]
+    assert plan["skill_allocation"]["S"] > plan["skill_allocation"]["R"]
+    assert plan["skill_allocation"]["S"] > plan["skill_allocation"]["W"]
+
+
+def test_build_prompt_includes_goals_verbatim():
+    """goals only ever reach the LLM rationale prompt -- assert the prompt
+    content directly, since existing generate_plan tests mock call_llm to a
+    fixed string and never inspect what was actually sent to it."""
+    messages = service._build_prompt(
+        {"irt_theta": {"L": 0.0}}, {"L": 0.25, "S": 0.25, "R": 0.25, "W": 0.25}, ["business", "ielts"],
+    )
+
+    assert messages[0]["role"] == "system"
+    user_payload = json.loads(messages[1]["content"])
+    assert user_payload["goals"] == ["business", "ielts"]
+
+
+@respx.mock
+async def test_fetch_catalog_summary_uses_redis_cache_and_skips_http(patch_redis):
+    """All existing catalog tests exercise a cold Redis cache; this covers the
+    cache-hit branch (service.py's `if cached: return ...`), which was
+    previously untested."""
+    await patch_redis.set(
+        service.CATALOG_CACHE_KEY,
+        json.dumps({"L": [{"activity_type": "cached", "title": "Cached", "estimated_minutes": 5}]}),
+    )
+    # Deliberately not mocking the HTTP route: if the cache is skipped and a
+    # real request is attempted, respx raises instead of silently passing.
+
+    catalog = await service._fetch_catalog_summary()
+
+    assert catalog == {"L": [{"activity_type": "cached", "title": "Cached", "estimated_minutes": 5}]}

@@ -206,7 +206,10 @@ async def _fetch_translation(
 async def _fetch_plan(clerk_user_id: str) -> bool:
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
-            resp = await client.get(f"{AGT02_BASE_URL}/plans/{clerk_user_id}/active")
+            resp = await client.get(
+                f"{AGT02_BASE_URL}/plans/{clerk_user_id}/active",
+                headers={"x-internal-secret": settings.INTERNAL_SECRET},
+            )
             if resp.status_code == 404:
                 return False
             resp.raise_for_status()
