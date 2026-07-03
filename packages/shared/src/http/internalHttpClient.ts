@@ -1,3 +1,5 @@
+import { assertProductionSecret } from '../env';
+
 export interface InternalHttpResponse<T> {
   status: number;
   body: T | null;
@@ -9,6 +11,8 @@ export interface InternalHttpClient {
 }
 
 export function createInternalHttpClient(baseUrl: string, internalSecret: string): InternalHttpClient {
+  assertProductionSecret(internalSecret, 'INTERNAL_SECRET');
+
   const authHeader = { 'x-internal-secret': internalSecret };
 
   async function execute<T>(method: 'GET' | 'POST', path: string, body?: unknown): Promise<InternalHttpResponse<T>> {

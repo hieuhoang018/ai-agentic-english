@@ -1,4 +1,7 @@
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from agents.shared.security import assert_internal_secret_is_safe
 
 
 class Settings(BaseSettings):
@@ -44,6 +47,11 @@ class Settings(BaseSettings):
     LMS_BASE_URL: str = "http://localhost:4002"
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+
+    @model_validator(mode="after")
+    def _check_internal_secret(self) -> "Settings":
+        assert_internal_secret_is_safe(self.INTERNAL_SECRET, self.INFERENCE_MODE)
+        return self
 
 
 settings = Settings()

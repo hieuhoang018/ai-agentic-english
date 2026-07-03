@@ -12,15 +12,15 @@ import { runVocabOfTheDay } from './scheduler/vocabOfTheDay';
 const port = getEnvInt('PORT', 4005);
 const app = createApp();
 
-app.listen(port, () => {
-  console.log(`notification-service listening on port ${port}`);
-});
-
 const prisma = new PrismaClient();
 // Real client when NOVU_API_KEY is set, mock otherwise.
 const novuClient: NovuClient = process.env.NOVU_API_KEY ? createLiveNovuClient(process.env.NOVU_API_KEY) : new MockNovuClient();
 const userServiceClient = createUserServiceClient();
 const reminderContextClient = createReminderContextClient();
+
+app.listen(port, () => {
+  console.log(`notification-service listening on port ${port}`);
+});
 
 startNotificationConsumer(prisma, novuClient).catch((error) => {
   console.error('Failed to start notification Kafka consumer', error);
