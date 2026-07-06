@@ -76,6 +76,12 @@ export type StreakResponse = {
   streak: number;
 };
 
+export type SpeakingSessionTicketResponse = {
+  ticket: string;
+  session_id: string;
+  expires_in_seconds: number;
+};
+
 export type RecommendationItem = {
   id: string;
   title: string;

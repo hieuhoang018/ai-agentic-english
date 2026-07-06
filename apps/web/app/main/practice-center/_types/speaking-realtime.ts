@@ -76,6 +76,12 @@ export function buildSpeakingSessionWebSocketUrl(sessionId: string, baseUrl = ge
   return new URL(`/ws/sessions/${encodeURIComponent(sessionId)}`, baseUrl).toString()
 }
 
+export function withSpeakingSessionTicket(wsUrl: string, ticket: string) {
+  const url = new URL(wsUrl)
+  url.searchParams.set('ticket', ticket)
+  return url.toString()
+}
+
 export function createSpeakingStartMessage(clerkUserId: string): SpeakingStartClientMessage {
   return {
     type: 'start',
