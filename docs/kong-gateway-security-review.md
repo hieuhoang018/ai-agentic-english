@@ -9,8 +9,8 @@
 the gateway today, and two other gaps (an unauthenticated Admin API and a hardcoded JWT key shared
 between dev and prod) are more urgent than rate limiting itself.
 
-**Status update (2026-07-06, same day):** §2.1 and §2.2 fixed on `server/gateway-fix` — see notes
-inline at each finding. §2.3–2.5 still open.
+**Status update (2026-07-06, same day):** all of §2.1–2.5 fixed on `server/gateway-fix` — see notes
+inline at each finding.
 
 ---
 
@@ -122,7 +122,7 @@ rendered file ("declarative config loaded from ... kong.generated.yml") and prox
 Must be re-run on every deploy (documented in `gateway/kong/README.md` and `infra/README.md`) —
 there's no automatic key-rotation refresh, just a fresh fetch each time this script runs.
 
-### 🟠 2.3 — No rate limiting anywhere (the original question)
+### 🟠 2.3 — No rate limiting anywhere (the original question) — ✅ fixed
 
 Zero instances of `rate-limiting` or `rate-limiting-advanced` in `kong.yml`. Highest-value routes
 to protect, ranked by abuse/cost potential:
@@ -141,7 +141,20 @@ submitting grading requests every second), a stricter cap on ticket issuance (on
 already enforces single-use, but nothing stops rapid re-issuance), and a basic global default rate
 limit as a floor for everything else.
 
-### 🟡 2.4 — No request-size-limiting plugin at the gateway
+**Implemented**: global `rate-limiting` plugin (300/min, 3000/hour, `policy: local`) added to
+`kong.yml`'s top-level `plugins:` list as a floor for every route. Route-specific stricter caps
+added on top for the four routes above: orchestrator onboarding/grading (20/min, 200/hour each),
+speaking-ticket issuance (10/min, 60/hour), offline sync (30/min, 300/hour), and the webhook route
+(60/min, 1000/hour, `limit_by: ip` since it has no JWT consumer identity). Verified live: booted
+Kong against the updated config with no load errors, confirmed `X-RateLimit-*`/`RateLimit-*`
+response headers show the configured limits and decrement per request on the webhook route (the
+JWT-protected routes couldn't be exercised end-to-end without the real Clerk private key, but the
+plugin wiring is identical). `policy: local` is a per-Kong-node in-memory counter, correct for the
+single Kong instance this stack runs today — noted in `gateway/kong/README.md` to switch to
+`policy: redis` (the `redis` container already exists in the stack) if Kong is ever scaled
+horizontally.
+
+### 🟡 2.4 — No request-size-limiting plugin at the gateway — ✅ fixed
 
 The three TS services get an app-layer backstop from `express.json()`'s default 100kb limit
 (`services/*/src/app.ts` — `user-service`, `learning-materials-service`, `notification-service` all
@@ -153,21 +166,46 @@ confirm an equivalent default exists on the FastAPI/Starlette agent routes proxi
 backend framework defaults to, and would reject oversized bodies before they reach any backend at
 all.
 
-### 🟢 2.5 — Minor / lower priority
+**Implemented**: global `request-size-limiting` plugin, `allowed_payload_size: 1` (1 MB), added
+alongside the global rate-limiting plugin. Verified live: a 2 MB payload to the webhook route got
+rejected with `413` before reaching any backend; a small payload passed the size check fine.
+
+### 🟢 2.5 — Minor / lower priority — ✅ fixed (all four items)
 
 - **JWT plugin only verifies `exp`** (`claims_to_verify: [exp]` everywhere) — Kong's `jwt` plugin
   also supports verifying `nbf` (not-before); adding it is a one-line change per route and closes
   a narrow window for prematurely-issued tokens. Low urgency.
+  **Fixed**: `nbf` added to all 15 `claims_to_verify` blocks. Confirmed real Clerk JWTs include
+  `nbf` by default (standard claim) and that the local test-token helper
+  (`packages/shared/src/testing/index.ts`) isn't affected since it's only used to hit services
+  directly in unit tests, never through Kong.
 - **CORS is hardcoded to `http://localhost:3000` only** (`kong.yml:40-41`) — expected to need the
   real production origin added before a real deploy; flagging because, per §2.2, this is the same
   single file used for both environments today, so it's easy to forget alongside the JWT-key swap.
+  **Fixed**: `render-kong-config.mjs` (already built for §2.2) now also accepts
+  `CORS_ORIGIN=https://...` (comma-separated for multiple) and replaces the origins list in
+  `kong.generated.yml`. Unset is a warning, not a hard failure — CORS blocks the frontend loudly
+  rather than leaking anything, unlike the JWT-issuer case. Verified live: rendered with two
+  origins and confirmed both appear correctly in the generated YAML.
 - **No bot-detection / IP-restriction plugins** — reasonable to skip at current MVP scale; revisit
-  if abuse patterns show up in practice.
+  if abuse patterns show up in practice. **No change** — still the right call at this scale, left
+  as-is deliberately.
 - **Carried over from `docs/homepage-progress-integration-plan.md`**: every `clerk_user_id`
   path-param route (AGT-08/09/10 GETs, offline sync) trusts the path parameter over the JWT `sub`
   claim — an IDOR gap, not a rate-limiting one, but worth deciding *where* to fix it (once at the
   gateway via a custom/pre-function plugin, vs. four times, once per agent) in the same pass as
   the rate-limiting work, since both are "add a Kong plugin across these same routes" changes.
+  **Fixed for the one remaining gap**: AGT-09/AGT-10 already had the `require_matching_user` guard
+  (prior PR); AGT-07's offline routes (`GET /offline/{clerk_user_id}/package`,
+  `POST /offline/{clerk_user_id}/sync`) did not. Confirmed Kong forwards the validated JWT's
+  `Authorization` header downstream unmodified (no `hide_credentials` anywhere in `kong.yml`), so
+  the existing app-layer pattern applies directly — no gateway-level change needed. Added
+  `Depends(require_matching_user)` to both routes in `agents/agt07_review/main.py`, matching the
+  AGT-09/10 pattern exactly. Updated/added tests in
+  `agents/agt07_review/tests/test_offline.py` for the 401/403/200 cases; full AGT-07 suite (79
+  tests) passes. AGT-08 wasn't touched — its routes still aren't exposed through Kong at all (see
+  the wiring inventory in `CLAUDE.local.md`), so there's no gateway-reachable IDOR surface there
+  yet.
 
 ---
 
@@ -187,6 +225,10 @@ None of this requires new infrastructure — Kong 3.8 (already running) ships `r
 `request-size-limiting`, and `ip-restriction` in its open-source bundle; this is entirely a
 `kong.yml` (+ one docker-compose) change.
 
+**All five items above are done** (see "✅ fixed" notes inline). The one exception to "Kong
+config only" was §2.5's IDOR item, which turned out to need a small app-layer change in
+`agents/agt07_review/main.py` rather than a gateway plugin — Kong already forwards what's needed.
+
 ---
 
 ## 4. References
@@ -200,3 +242,7 @@ None of this requires new infrastructure — Kong 3.8 (already running) ships `r
   happens downstream of Kong, independent of any gateway-level gating.
 - `docs/homepage-progress-integration-plan.md` — source of the pre-existing IDOR observation
   referenced in §2.5.
+- `gateway/kong/scripts/render-kong-config.mjs`, `gateway/kong/scripts/lib/jwks.mjs` — new, built
+  for §2.2 and extended for §2.5's CORS item.
+- `agents/shared/auth/clerk.py` (`require_matching_user`), `agents/agt07_review/main.py` — the
+  IDOR fix for §2.5's last open item.

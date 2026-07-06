@@ -11,6 +11,12 @@
 // Optional: CLERK_JWT_KID=<kid> to pick a specific key when the JWKS has more
 // than one RSA key.
 //
+// Optional: CORS_ORIGIN=https://app.example.com[,https://other.example.com]
+// replaces the CORS plugin's dev-only `http://localhost:3000` origin list.
+// Unset is a loud-but-safe no-op (prod frontend requests just get blocked by
+// CORS until it's set — no security leak either way), so it's a warning, not
+// a hard failure like CLERK_ISSUER above.
+//
 // Run this on every deploy, not just the first one — Clerk can rotate its
 // signing key, and this always fetches the current JWKS rather than caching
 // the PEM anywhere.
@@ -84,6 +90,34 @@ const newPemBlock = pem
 
 let rendered = source.replace(oldKeyLine, `key: ${clerkIssuer}`);
 rendered = rendered.replace(pemBlockPattern, `${newPemBlock}\n`);
+
+const corsOrigin = process.env.CORS_ORIGIN;
+if (corsOrigin) {
+  const originsBlockPattern = /( *)origins:\n( *)- http:\/\/localhost:3000\n/;
+  const originsMatch = rendered.match(originsBlockPattern);
+  if (!originsMatch) {
+    console.error(
+      'CORS_ORIGIN was set but the expected "origins:\\n  - http://localhost:3000" block ' +
+        "wasn't found in kong.yml — it has drifted from what this script expects. Refusing " +
+        'to guess a replacement; update this script to match the new structure.',
+    );
+    process.exit(1);
+  }
+  const [, originsKeyIndent, originsItemIndent] = originsMatch;
+  const newOrigins = corsOrigin
+    .split(',')
+    .map((o) => o.trim())
+    .filter(Boolean)
+    .map((o) => `${originsItemIndent}- ${o}`)
+    .join('\n');
+  rendered = rendered.replace(originsBlockPattern, `${originsKeyIndent}origins:\n${newOrigins}\n`);
+  console.error(`CORS origins set to: ${corsOrigin}`);
+} else {
+  console.error(
+    'CORS_ORIGIN not set — kong.generated.yml still only allows http://localhost:3000. ' +
+      'Set it before a real prod deploy or the frontend will be blocked by CORS.',
+  );
+}
 
 writeFileSync(OUTPUT_PATH, rendered);
 
