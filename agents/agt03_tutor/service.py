@@ -23,11 +23,12 @@ Session lifecycle:
     visible reply by several seconds even though both calls are optional.
 
   process_turn: process_turn_reply followed by process_turn_feedback,
-    merged into one dict. Kept for the HTTP route (POST /sessions/turn),
-    which can only send a single response per request. The WebSocket route
-    (websocket_handler.py) calls process_turn_reply and process_turn_feedback
-    separately instead, sending the reply immediately and the feedback in a
-    later "turn_feedback" frame — see websocket_handler.py.
+    merged into one dict. Used by both the HTTP route (POST /sessions/turn)
+    and, currently, the WebSocket route — process_turn_reply and
+    process_turn_feedback exist as separate functions so a future
+    WebSocket-layer change can call them separately, sending the reply
+    immediately and the feedback in a later frame, instead of only through
+    the combined process_turn below.
 
   end_session: compute session duration, trigger AGT-06 consolidation
     (idempotent), and emit session.end with durationMinutes — this is
@@ -313,12 +314,12 @@ async def process_turn_reply(session_id: str, user_message: str | None, audio_ba
     STM context. Returns as soon as the reply is ready — no AGT-04/AGT-11
     calls happen here. See process_turn_feedback for those."""
     if user_message is None and audio_base64 is None:
-        raise ValueError("process_turn requires either user_message or audio_base64")
+        raise ValueError("process_turn_reply requires either user_message or audio_base64")
 
     session_data = await _stm_get_meta(session_id)
     if session_data is None:
         raise ValueError(
-            f"process_turn: session '{session_id}' is not active — "
+            f"process_turn_reply: session '{session_id}' is not active — "
             "call start_session first or session has already ended"
         )
 
@@ -335,12 +336,12 @@ async def process_turn_reply(session_id: str, user_message: str | None, audio_ba
     try:
         await _stm_append_context(session_id, "user", transcript_text)
     except Exception as exc:
-        logger.warning("process_turn: AGT-06 append_context (user) failed for %s: %s", session_id, exc)
+        logger.warning("process_turn_reply: AGT-06 append_context (user) failed for %s: %s", session_id, exc)
 
     try:
         context = await _stm_get_context(session_id)
     except Exception as exc:
-        logger.warning("process_turn: AGT-06 get_context failed for %s: %s", session_id, exc)
+        logger.warning("process_turn_reply: AGT-06 get_context failed for %s: %s", session_id, exc)
         context = []
 
     clerk_user_id = session_data.get("clerk_user_id", "")
@@ -361,7 +362,7 @@ async def process_turn_reply(session_id: str, user_message: str | None, audio_ba
     try:
         await _stm_append_context(session_id, "assistant", assistant_message)
     except Exception as exc:
-        logger.warning("process_turn: AGT-06 append_context (assistant) failed for %s: %s", session_id, exc)
+        logger.warning("process_turn_reply: AGT-06 append_context (assistant) failed for %s: %s", session_id, exc)
 
     await _stm_incr_turn(session_id)
 
@@ -384,11 +385,12 @@ async def process_turn_feedback(
     skill_focus: str,
 ) -> dict:
     """Slow path: best-effort AGT-04 grammar feedback + AGT-11 translation,
-    run concurrently. Callers decide when to fetch this relative to the
-    reply — the WebSocket handler fetches it after already sending the
-    reply to the client."""
+    run concurrently. Exists as a separate function (rather than being
+    inlined into process_turn) so a future WebSocket-layer change can call
+    it after already sending the reply to the client, instead of only
+    through the combined process_turn below."""
     grammar_feedback, (translated_message, translation_zone) = await asyncio.gather(
-        _fetch_grammar_feedback(transcript_text or "", session_id, clerk_user_id, skill_focus),
+        _fetch_grammar_feedback(transcript_text, session_id, clerk_user_id, skill_focus),
         _fetch_translation(assistant_message, clerk_user_id, skill_focus),
     )
     return {
@@ -399,10 +401,12 @@ async def process_turn_feedback(
 
 
 async def process_turn(session_id: str, user_message: str | None, audio_base64: str | None) -> dict:
-    """Combined reply+feedback, preserved for the single-shot HTTP route
-    (POST /sessions/turn), which cannot push a second async frame the way
-    the WebSocket route can. WebSocket clients use process_turn_reply +
-    process_turn_feedback separately instead — see websocket_handler.py."""
+    """Combined reply+feedback, used by the single-shot HTTP route
+    (POST /sessions/turn), which cannot push a second async frame, and
+    currently also by the WebSocket route. process_turn_reply and
+    process_turn_feedback exist as separate functions so a future
+    WebSocket-layer change can call them separately instead — see
+    websocket_handler.py."""
     reply = await process_turn_reply(session_id, user_message, audio_base64)
     feedback = await process_turn_feedback(
         session_id,
