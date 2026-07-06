@@ -12,14 +12,14 @@ type FlashcardGridProps = {
 export default function FlashcardGrid({ topic, cards }: FlashcardGridProps) {
   return (
     <div>
-      <section className="mb-7 rounded-lg border border-outline-variant/40 bg-surface-container-lowest p-6">
+      <section className="mb-7 rounded-lg border border-outline-variant/40 bg-surface-container-lowest p-4 sm:p-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex items-center gap-4">
             <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-blue-50 text-primary">
               <span className="material-symbols-outlined">{topic.icon}</span>
             </div>
-            <div>
-              <h1 className="text-3xl font-bold text-on-surface">{topic.title}</h1>
+            <div className="min-w-0">
+              <h1 className="text-2xl font-bold text-on-surface sm:text-3xl">{topic.title}</h1>
               <div className="mt-4 flex flex-wrap items-center gap-3 text-sm text-on-surface-variant">
                 <span className="rounded bg-primary-fixed px-3 py-1 font-bold text-primary">
                   {topic.cefrLevel}
@@ -31,7 +31,7 @@ export default function FlashcardGrid({ topic, cards }: FlashcardGridProps) {
           </div>
           <Link
             href={flashcardStudyPath(topic.id)}
-            className="flex h-12 items-center gap-2 rounded-lg bg-primary px-5 font-semibold text-white"
+            className="flex h-12 w-full items-center justify-center gap-2 rounded-lg bg-primary px-5 font-semibold text-white sm:w-auto"
           >
             <span className="material-symbols-outlined">style</span>
             Study cards
@@ -52,7 +52,7 @@ export default function FlashcardGrid({ topic, cards }: FlashcardGridProps) {
         {cards.map((card) => (
           <article
             key={card.id}
-            className="rounded-lg border border-outline-variant/50 bg-surface-container-lowest p-6 shadow-[0_8px_24px_-20px_rgba(15,23,42,0.5)]"
+            className="rounded-lg border border-outline-variant/50 bg-surface-container-lowest p-4 shadow-[0_8px_24px_-20px_rgba(15,23,42,0.5)] sm:p-6"
           >
             <div className="flex items-start justify-between gap-3">
               <span className="material-symbols-outlined text-primary">style</span>

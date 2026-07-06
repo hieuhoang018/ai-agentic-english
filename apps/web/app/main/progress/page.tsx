@@ -127,9 +127,9 @@ export default function ProgressPage() {
 
   return (
     <div>
-      <h1 className="mb-8 text-4xl font-bold text-on-surface">Tiến độ học tập chi tiết</h1>
+      <h1 className="mb-8 text-3xl font-bold text-on-surface sm:text-4xl">Tiến độ học tập chi tiết</h1>
 
-      <section className="mb-8 rounded-lg border border-outline-variant bg-surface-container-lowest p-6 shadow-[0_10px_32px_-24px_rgba(15,23,42,0.55)]">
+      <section className="mb-8 rounded-lg border border-outline-variant bg-surface-container-lowest p-4 shadow-[0_10px_32px_-24px_rgba(15,23,42,0.55)] sm:p-6">
         <div className="flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
           <div>
             <p className="text-lg text-on-surface">{goalText}</p>
@@ -139,8 +139,8 @@ export default function ProgressPage() {
               </p>
             )}
           </div>
-          <div className="text-right">
-            <p className="text-6xl font-bold text-primary">{library.status === 'success' ? `${todayPercent}%` : '—'}</p>
+          <div className="text-left md:text-right">
+            <p className="text-5xl font-bold text-primary sm:text-6xl">{library.status === 'success' ? `${todayPercent}%` : '—'}</p>
             <p className="text-sm text-on-surface-variant">Tiến độ nhiệm vụ hôm nay</p>
           </div>
         </div>
