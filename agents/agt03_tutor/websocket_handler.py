@@ -193,8 +193,8 @@ async def handle_session(websocket: WebSocket, session_id: str) -> None:
             except WebSocketDisconnect:
                 raise
             except Exception as exc:
-                # start_session/run_turn_pipeline/end_session can all raise
-                # (e.g. AGT-06 unavailable, unknown session). Report it to the
+                # start_session/run_turn_pipeline_reply/run_turn_pipeline_feedback/end_session
+                # can all raise (e.g. AGT-06 unavailable, unknown session). Report it to the
                 # client and keep the connection alive rather than crashing —
                 # mirrors the HTTP route's try/except ValueError -> 422 handling.
                 logger.warning(
