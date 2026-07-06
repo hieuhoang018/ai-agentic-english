@@ -9,21 +9,32 @@ Session lifecycle:
     opening message (canned per skill_focus in mock mode), append it to STM
     context, and emit session.start.
 
-  process_turn: optionally transcribe audio via asr.transcribe (already
+  process_turn_reply: optionally transcribe audio via asr.transcribe (already
     implemented, unchanged), append the user turn to STM context, call the
     LLM router for a reply (canned echo in mock mode), append the assistant
-    turn to STM context.
+    turn to STM context. This is the fast path — it does not call AGT-04 or
+    AGT-11, so callers get the visible reply as soon as it's ready.
+
+  process_turn_feedback: best-effort AGT-04 (grammar feedback) and AGT-11
+    (translation) calls, run concurrently via asyncio.gather. Split out of
+    the reply path because both were previously awaited before the turn
+    response was sent — on a live LLM stack that can silently fall back to
+    the slow Ollama tier (see shared/llm/router.py), that held up every
+    visible reply by several seconds even though both calls are optional.
+
+  process_turn: process_turn_reply followed by process_turn_feedback,
+    merged into one dict. Kept for the HTTP route (POST /sessions/turn),
+    which can only send a single response per request. The WebSocket route
+    (websocket_handler.py) calls process_turn_reply and process_turn_feedback
+    separately instead, sending the reply immediately and the feedback in a
+    later "turn_feedback" frame — see websocket_handler.py.
 
   end_session: compute session duration, trigger AGT-06 consolidation
     (idempotent), and emit session.end with durationMinutes — this is
     what AGT-01's handle_session_end consumer reacts to.
 
-pipeline.py wraps process_turn as the single turn-processing path shared by
-both the HTTP route (POST /sessions/turn) and the WebSocket route
-(websocket_handler.py, /ws/sessions/{session_id} — text-only, client-side
-SpeechSynthesis TTS). process_turn calls AGT-04 (grammar feedback) and AGT-11
-(translation) concurrently via asyncio.gather, both best-effort — failures
-return None and never block the turn response.
+pipeline.py wraps these as the single turn-processing path shared by both the
+HTTP route and the WebSocket route.
 """
 
 from __future__ import annotations
@@ -297,7 +308,10 @@ async def start_session(clerk_user_id: str, skill_focus: str, session_id: str | 
     }
 
 
-async def process_turn(session_id: str, user_message: str | None, audio_base64: str | None) -> dict:
+async def process_turn_reply(session_id: str, user_message: str | None, audio_base64: str | None) -> dict:
+    """Fast path: transcribe (if audio), get the AGT-03 chat reply, persist
+    STM context. Returns as soon as the reply is ready — no AGT-04/AGT-11
+    calls happen here. See process_turn_feedback for those."""
     if user_message is None and audio_base64 is None:
         raise ValueError("process_turn requires either user_message or audio_base64")
 
@@ -351,21 +365,61 @@ async def process_turn(session_id: str, user_message: str | None, audio_base64: 
 
     await _stm_incr_turn(session_id)
 
-    # Best-effort AGT-04 grammar feedback and AGT-11 translation run concurrently.
-    grammar_feedback, (translated_message, translation_zone) = await asyncio.gather(
-        _fetch_grammar_feedback(transcript_text or "", session_id, clerk_user_id, skill_focus),
-        _fetch_translation(assistant_message, clerk_user_id, skill_focus),
-    )
-
     return {
         "session_id": session_id,
         "assistant_message": assistant_message,
         "transcript_text": transcript_text,
         "mock_feedback": mock_feedback,
         "language": "en",
+        "clerk_user_id": clerk_user_id,
+        "skill_focus": skill_focus,
+    }
+
+
+async def process_turn_feedback(
+    session_id: str,
+    transcript_text: str,
+    assistant_message: str,
+    clerk_user_id: str,
+    skill_focus: str,
+) -> dict:
+    """Slow path: best-effort AGT-04 grammar feedback + AGT-11 translation,
+    run concurrently. Callers decide when to fetch this relative to the
+    reply — the WebSocket handler fetches it after already sending the
+    reply to the client."""
+    grammar_feedback, (translated_message, translation_zone) = await asyncio.gather(
+        _fetch_grammar_feedback(transcript_text or "", session_id, clerk_user_id, skill_focus),
+        _fetch_translation(assistant_message, clerk_user_id, skill_focus),
+    )
+    return {
         "grammar_feedback": grammar_feedback,
         "translated_message": translated_message,
         "translation_zone": translation_zone,
+    }
+
+
+async def process_turn(session_id: str, user_message: str | None, audio_base64: str | None) -> dict:
+    """Combined reply+feedback, preserved for the single-shot HTTP route
+    (POST /sessions/turn), which cannot push a second async frame the way
+    the WebSocket route can. WebSocket clients use process_turn_reply +
+    process_turn_feedback separately instead — see websocket_handler.py."""
+    reply = await process_turn_reply(session_id, user_message, audio_base64)
+    feedback = await process_turn_feedback(
+        session_id,
+        reply["transcript_text"],
+        reply["assistant_message"],
+        reply["clerk_user_id"],
+        reply["skill_focus"],
+    )
+    return {
+        "session_id": reply["session_id"],
+        "assistant_message": reply["assistant_message"],
+        "transcript_text": reply["transcript_text"],
+        "mock_feedback": reply["mock_feedback"],
+        "language": reply["language"],
+        "grammar_feedback": feedback["grammar_feedback"],
+        "translated_message": feedback["translated_message"],
+        "translation_zone": feedback["translation_zone"],
     }
 
 
