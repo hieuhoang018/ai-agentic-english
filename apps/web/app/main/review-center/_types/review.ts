@@ -1,15 +1,13 @@
 export type ReviewArea = 'flashcards' | 'grammar'
-export type FlashcardStatus = 'learned' | 'unlearned'
 export type GrammarDifficulty = 'beginner' | 'intermediate' | 'advanced'
-export type GrammarProgressState = 'notStarted' | 'inProgress' | 'completed'
 
 export interface FlashcardTopic {
   id: string
+  cefrLevel: string
   title: string
   description: string
   icon: string
   totalCards: number
-  learnedCards: number
   tone: string
 }
 
@@ -17,48 +15,40 @@ export interface Flashcard {
   id: string
   topicId: string
   term: string
-  ipa: string
+  ipa: string | null
   partOfSpeech: string
-  definition: string
-  example: string
-  status: FlashcardStatus
+  definition: string | null
+  example: string | null
+  cefrLevel: string
+  domainTag: string | null
 }
 
 export interface GrammarExample {
-  text: string
-  note: string
-  tone: 'primary' | 'success' | 'error'
-}
-
-export interface GrammarQuestion {
   id: string
-  prompt: string
-  options: string[]
-  answer: string
+  text: string
+  note: string | null
 }
 
 export interface GrammarLesson {
   id: string
   categoryId: string
+  category: string
   title: string
   description: string
   difficulty: GrammarDifficulty
-  completedExercises: number
-  totalExercises: number
-  state: GrammarProgressState
+  cefrLevel: string
+  exampleCount: number
   icon: string
-  theory?: {
-    usage: string[]
-    formulas: { label: string; value: string; tone: 'primary' | 'error' | 'warning' }[]
-    signalWords: string[]
-  }
   examples?: GrammarExample[]
-  questions?: GrammarQuestion[]
+  source?: string
+  license?: string
 }
 
 export interface GrammarSection {
   id: string
   title: string
+  category: string
   markerClass: string
+  cefrLevels: string[]
   lessons: GrammarLesson[]
 }

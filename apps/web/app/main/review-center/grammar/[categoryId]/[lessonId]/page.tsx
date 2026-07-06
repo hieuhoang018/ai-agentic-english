@@ -1,18 +1,16 @@
 import { notFound } from 'next/navigation'
 import GrammarLessonView from '../../../_components/GrammarLessonView'
-import { getGrammarLesson, getGrammarLessonParams } from '../../../_data/review-content'
+import { getReviewGrammarLesson } from '../../../_lib/review-api'
 
 type GrammarLessonPageProps = {
   params: Promise<{ categoryId: string; lessonId: string }>
 }
 
-export function generateStaticParams() {
-  return getGrammarLessonParams()
-}
+export const dynamic = 'force-dynamic'
 
 export default async function GrammarLessonPage({ params }: GrammarLessonPageProps) {
   const { categoryId, lessonId } = await params
-  const lesson = getGrammarLesson(categoryId, lessonId)
+  const lesson = await getReviewGrammarLesson(categoryId, lessonId)
   if (!lesson) notFound()
 
   return <GrammarLessonView lesson={lesson} />

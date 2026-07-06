@@ -13,12 +13,21 @@ export default function GrammarSection({ section, compact = true }: GrammarSecti
 
   return (
     <section className="mb-10">
-      <div className="mb-6 flex items-center justify-between">
-        <h2 className="flex items-center gap-3 text-2xl font-bold text-on-surface">
-          <span className={`h-2 w-2 rounded-full ${section.markerClass}`} />
-          {section.title}
-        </h2>
-        {compact ? <Link href={grammarCategoryPath(section.id)} className="text-sm font-bold text-primary">Xem tất cả</Link> : null}
+      <div className="mb-6 flex items-center justify-between gap-4">
+        <div>
+          <h2 className="flex items-center gap-3 text-2xl font-bold text-on-surface">
+            <span className={`h-2 w-2 rounded-full ${section.markerClass}`} />
+            {section.title}
+          </h2>
+          <p className="mt-2 text-sm text-on-surface-variant">
+            {section.lessons.length} lessons across {section.cefrLevels.join(', ')}
+          </p>
+        </div>
+        {compact ? (
+          <Link href={grammarCategoryPath(section.id)} className="text-sm font-bold text-primary">
+            View all
+          </Link>
+        ) : null}
       </div>
       <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
         {lessons.map((lesson) => <GrammarTopicCard key={lesson.id} lesson={lesson} />)}

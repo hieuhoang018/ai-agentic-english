@@ -10,6 +10,7 @@ type OnboardingShellProps = {
   backHref?: string
   nextHref?: string
   nextLabel?: string
+  nextDisabled?: boolean
   showFooterBack?: boolean
   wide?: boolean
 }
@@ -24,6 +25,7 @@ export default function OnboardingShell({
   nextHref,
   showFooterBack = true,
   nextLabel = 'Tiếp tục',
+  nextDisabled = false,
   wide = false,
 }: OnboardingShellProps) {
   return (
@@ -48,10 +50,17 @@ export default function OnboardingShell({
               Quay lại
             </Link>
           ) : null}
-          <Link href={nextHref} className="flex h-12 items-center gap-2 rounded-full bg-primary px-7 font-bold text-white">
-            {nextLabel}
-            <span className="material-symbols-outlined">arrow_forward</span>
-          </Link>
+          {nextDisabled ? (
+            <button type="button" disabled className="flex h-12 cursor-not-allowed items-center gap-2 rounded-full bg-primary px-7 font-bold text-white opacity-40">
+              {nextLabel}
+              <span className="material-symbols-outlined">lock</span>
+            </button>
+          ) : (
+            <Link href={nextHref} className="flex h-12 items-center gap-2 rounded-full bg-primary px-7 font-bold text-white">
+              {nextLabel}
+              <span className="material-symbols-outlined">arrow_forward</span>
+            </Link>
+          )}
         </footer>
       ) : null}
     </div>

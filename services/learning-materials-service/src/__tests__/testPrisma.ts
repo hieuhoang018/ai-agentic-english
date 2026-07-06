@@ -17,8 +17,8 @@ export type MockPrismaClient = {
   assessmentQuestion: {
     findMany: ReturnType<typeof vi.fn>;
   };
-  vocabEntry: { findMany: ReturnType<typeof vi.fn> };
-  grammarPoint: { findMany: ReturnType<typeof vi.fn> };
+  vocabEntry: { findMany: ReturnType<typeof vi.fn>; groupBy: ReturnType<typeof vi.fn> };
+  grammarPoint: { findMany: ReturnType<typeof vi.fn>; findUnique: ReturnType<typeof vi.fn> };
   passage: { findMany: ReturnType<typeof vi.fn> };
 } & AppPrismaClient;
 
@@ -37,8 +37,8 @@ export function createMockPrisma(): MockPrismaClient {
       deleteMany: vi.fn(),
     },
     assessmentQuestion: { findMany: vi.fn() },
-    vocabEntry: { findMany: vi.fn(async () => []) },
-    grammarPoint: { findMany: vi.fn(async () => []) },
+    vocabEntry: { findMany: vi.fn(async () => []), groupBy: vi.fn(async () => []) },
+    grammarPoint: { findMany: vi.fn(async () => []), findUnique: vi.fn() },
     passage: { findMany: vi.fn(async () => []) },
   } as unknown as MockPrismaClient;
 }

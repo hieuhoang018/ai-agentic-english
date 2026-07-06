@@ -86,7 +86,7 @@ export default function GeneratedPlanPage() {
       <div className="mx-auto flex min-h-screen max-w-6xl flex-col items-center justify-center px-4 py-10 text-center">
         <span className="material-symbols-outlined animate-spin text-5xl text-primary">progress_activity</span>
         <h1 className="mt-6 text-3xl font-bold text-on-surface">Đang thiết kế lộ trình của bạn</h1>
-        <p className="mt-3 max-w-xl text-on-surface-variant">Wise Mentor đang tạo kế hoạch học tập từ mục tiêu, trình độ và thời gian bạn đã chọn.</p>
+        <p className="mt-3 text-on-surface-variant">Wise Mentor đang tạo kế hoạch học tập từ mục tiêu, trình độ và thời gian bạn đã chọn.</p>
       </div>
     )
   }
