@@ -23,10 +23,19 @@ def _analysis_key(clerk_user_id: str) -> str:
 
 
 async def _persist_latest(clerk_user_id: str, result: dict) -> None:
-    """Write the last successful analysis result. No TTL: this is a 'last
-    known analysis,' not a cheap-to-recompute cache — see run_analysis()."""
-    r = await get_redis()
-    await r.set(_analysis_key(clerk_user_id), json.dumps(result))
+    """
+    Write the last successful analysis result. No TTL: this is a 'last
+    known analysis,' not a cheap-to-recompute cache — see run_analysis().
+    On failure: logs the error but does NOT raise (a Redis outage during
+    persist must not turn a successful analysis into an apparent failure
+    for callers — see consumers.py's handle_consolidation_complete and
+    main.py's POST /run).
+    """
+    try:
+        r = await get_redis()
+        await r.set(_analysis_key(clerk_user_id), json.dumps(result))
+    except Exception as exc:
+        logger.error("AGT-08 Redis persist failed user=%s error=%s", clerk_user_id, exc)
 
 
 AGT06_BASE = "http://agt06-memory:8106"

@@ -287,3 +287,21 @@ async def test_run_analysis_does_not_persist_on_upstream_fetch_failure(monkeypat
     assert "error" in result
     cached = await fake_redis.get("agt08:latest:user-fetch-fail")
     assert cached is None
+
+
+async def test_run_analysis_does_not_raise_when_redis_persist_fails(monkeypatch, fake_redis):
+    """Regression: a Redis outage during persistence must not turn a
+    successful analysis into an apparent failure for the caller — only
+    the cache write is best-effort, the analysis result itself is real."""
+    _make_http_client_mock([_make_session(1)], monkeypatch)
+
+    async def _broken_set(*args, **kwargs):
+        raise ConnectionError("simulated Redis outage")
+
+    monkeypatch.setattr(fake_redis, "set", _broken_set)
+
+    from agents.agt08_analysis.service import run_analysis
+    result = await run_analysis("user-redis-down")
+
+    assert "error" not in result
+    assert "risk_score" in result
