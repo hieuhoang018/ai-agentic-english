@@ -27,7 +27,7 @@ export default function FlashcardStudy({ cards }: FlashcardStudyProps) {
   }
 
   return (
-    <div className="mx-auto max-w-4xl pt-28">
+    <div className="mx-auto max-w-4xl pt-6 sm:pt-16 lg:pt-28">
       <div className="mb-7 flex items-center justify-between">
         <span className="text-on-surface-variant">
           Card {index + 1} / {cards.length}
@@ -39,12 +39,12 @@ export default function FlashcardStudy({ cards }: FlashcardStudyProps) {
 
       <button
         onClick={() => setFlipped((value) => !value)}
-        className="flex min-h-[480px] w-full flex-col items-center justify-center rounded-lg border border-outline-variant bg-white p-8 text-center shadow-[0_12px_36px_-24px_rgba(15,23,42,0.55)]"
+        className="flex min-h-[360px] w-full flex-col items-center justify-center rounded-lg border border-outline-variant bg-white p-5 text-center shadow-[0_12px_36px_-24px_rgba(15,23,42,0.55)] sm:min-h-[480px] sm:p-8"
       >
         {!flipped ? (
           <>
             <span className="text-sm uppercase tracking-wider text-on-surface-variant">Vocabulary</span>
-            <h1 className="mt-6 text-4xl font-bold text-primary">{card.term}</h1>
+            <h1 className="mt-6 text-3xl font-bold text-primary sm:text-4xl">{card.term}</h1>
             <p className="mt-3 min-h-8 text-xl text-on-surface">{card.ipa ?? 'IPA unavailable'}</p>
             <span className="mt-8 flex h-16 w-16 items-center justify-center rounded-full bg-primary-fixed text-primary">
               <span className="material-symbols-outlined">style</span>
@@ -56,7 +56,7 @@ export default function FlashcardStudy({ cards }: FlashcardStudyProps) {
             <span className="text-sm uppercase tracking-wider text-on-surface-variant">
               {card.partOfSpeech}
             </span>
-            <h1 className="mt-6 text-3xl font-bold text-on-surface">
+            <h1 className="mt-6 text-2xl font-bold text-on-surface sm:text-3xl">
               {card.definition ?? 'Definition unavailable.'}
             </h1>
             {card.example ? (
@@ -70,7 +70,7 @@ export default function FlashcardStudy({ cards }: FlashcardStudyProps) {
         )}
       </button>
 
-      <div className="mt-8 flex items-center justify-center gap-6">
+      <div className="mt-8 flex items-center justify-center gap-3 sm:gap-6">
         <button
           onClick={() => {
             setIndex((value) => Math.max(0, value - 1))
@@ -83,7 +83,7 @@ export default function FlashcardStudy({ cards }: FlashcardStudyProps) {
         </button>
         <button
           onClick={() => setFlipped((value) => !value)}
-          className="flex h-12 items-center gap-2 rounded-lg bg-primary px-8 font-bold text-white"
+          className="flex h-12 items-center gap-2 rounded-lg bg-primary px-5 font-bold text-white sm:px-8"
         >
           <span className="material-symbols-outlined">sync</span>
           Flip card

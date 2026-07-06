@@ -68,14 +68,14 @@ export default function SpeakingChat({ session }: SpeakingChatProps) {
   }
 
   return (
-    <section className="flex min-h-[620px] flex-col overflow-hidden rounded-lg border border-outline-variant/70 bg-surface-container-lowest">
-      <header className="flex flex-col gap-4 border-b border-outline-variant/70 p-5 sm:flex-row sm:items-center sm:justify-between">
+    <section className="flex min-h-[520px] flex-col overflow-hidden rounded-lg border border-outline-variant/70 bg-surface-container-lowest sm:min-h-[620px]">
+      <header className="flex flex-col gap-4 border-b border-outline-variant/70 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
         <div className="flex items-center gap-4">
           <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-primary text-white">
             <span className="material-symbols-outlined">smart_toy</span>
           </div>
           <div>
-            <h2 className="text-2xl font-bold text-on-surface">Wise Mentor AI</h2>
+            <h2 className="text-xl font-bold text-on-surface sm:text-2xl">Wise Mentor AI</h2>
             <p className={`flex items-center gap-1 text-sm font-semibold ${getStatusClassName(status)}`}>
               <span
                 className={`h-2 w-2 rounded-full ${
@@ -97,7 +97,7 @@ export default function SpeakingChat({ session }: SpeakingChatProps) {
         </button>
       </header>
 
-      <div className="flex-1 space-y-6 overflow-y-auto bg-[#f7f8fd] p-6">
+      <div className="flex-1 space-y-6 overflow-y-auto bg-[#f7f8fd] p-4 sm:p-6">
         <div className="flex justify-center">
           <span className="rounded-full bg-surface-container-high px-4 py-1 text-xs text-on-surface-variant">
             Chủ đề: {session.topic}
@@ -118,7 +118,7 @@ export default function SpeakingChat({ session }: SpeakingChatProps) {
                   <span className="material-symbols-outlined text-lg">smart_toy</span>
                 </div>
               ) : null}
-              <div className={`max-w-[78%] ${isUser ? 'text-right' : ''}`}>
+              <div className={`max-w-[86%] sm:max-w-[78%] ${isUser ? 'text-right' : ''}`}>
                 <div
                   className={`rounded-lg px-4 py-3 text-left leading-7 shadow-sm ${
                     isUser ? 'bg-primary text-white' : 'border border-outline-variant bg-white text-on-surface'
@@ -160,7 +160,7 @@ export default function SpeakingChat({ session }: SpeakingChatProps) {
 
         {messages.length === 0 ? (
           <div className="flex justify-start">
-            <div className="max-w-[78%] rounded-lg border border-outline-variant bg-white px-4 py-3 leading-7 text-on-surface-variant shadow-sm">
+            <div className="max-w-[86%] rounded-lg border border-outline-variant bg-white px-4 py-3 leading-7 text-on-surface-variant shadow-sm sm:max-w-[78%]">
               {error ?? 'Đang mở phiên luyện nói...'}
             </div>
           </div>
@@ -202,7 +202,7 @@ export default function SpeakingChat({ session }: SpeakingChatProps) {
       </div>
 
       <footer className="border-t border-outline-variant/70 p-4">
-        <form onSubmit={handleSubmit} className="flex items-center gap-3">
+        <form onSubmit={handleSubmit} className="flex items-center gap-2 sm:gap-3">
           <input
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
@@ -222,7 +222,7 @@ export default function SpeakingChat({ session }: SpeakingChatProps) {
             type="button"
             onClick={handleMicClick}
             disabled={!canUseMic}
-            className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-full text-white shadow-lg transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
+            className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-white shadow-lg transition-colors disabled:cursor-not-allowed disabled:opacity-60 sm:h-14 sm:w-14 ${
               isRecording ? 'bg-tertiary' : 'bg-primary hover:bg-[#0047bb]'
             }`}
             aria-label="Ghi âm"

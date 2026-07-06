@@ -9,7 +9,7 @@ export default function SpeakingSidebar({ goals, vocabularySuggestions }: Speaki
   return (
     <aside className="space-y-0 overflow-hidden rounded-lg border border-outline-variant/70 bg-surface-container-lowest">
       <section className="border-b border-outline-variant/70 p-5">
-        <h2 className="mb-4 flex items-center gap-2 text-2xl font-bold text-on-surface">
+        <h2 className="mb-4 flex items-center gap-2 text-xl font-bold text-on-surface sm:text-2xl">
           <span className="material-symbols-outlined text-primary">flag</span>
           Mục tiêu bài học
         </h2>
@@ -27,7 +27,7 @@ export default function SpeakingSidebar({ goals, vocabularySuggestions }: Speaki
 
       <section className="p-5">
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="flex items-center gap-2 text-2xl font-bold text-on-surface">
+          <h2 className="flex items-center gap-2 text-xl font-bold text-on-surface sm:text-2xl">
             <span className="material-symbols-outlined text-primary">emoji_objects</span>
             Gợi ý từ vựng
           </h2>

@@ -96,8 +96,8 @@ export default function QuestionPanel({ question }: QuestionPanelProps) {
   };
 
   return (
-    <section className="rounded-lg border border-outline-variant/50 border-t-4 border-t-primary bg-surface-container-lowest p-6 shadow-[0_8px_28px_-20px_rgba(15,23,42,0.5)]">
-      <h2 className="mb-5 flex items-center gap-2 text-2xl font-bold text-primary">
+    <section className="rounded-lg border border-outline-variant/50 border-t-4 border-t-primary bg-surface-container-lowest p-4 shadow-[0_8px_28px_-20px_rgba(15,23,42,0.5)] sm:p-6">
+      <h2 className="mb-5 flex items-center gap-2 text-xl font-bold text-primary sm:text-2xl">
         <span className="material-symbols-outlined">quiz</span>
         Câu hỏi thực hành
       </h2>
@@ -202,7 +202,7 @@ export default function QuestionPanel({ question }: QuestionPanelProps) {
           type="button"
           onClick={() => void submitAnswer()}
           disabled={grading.status === 'submitting'}
-          className="flex h-11 items-center justify-center gap-2 rounded-lg bg-primary px-6 text-sm font-semibold text-white transition-colors hover:bg-[#0047bb] disabled:cursor-wait disabled:opacity-70"
+          className="flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-primary px-6 text-sm font-semibold text-white transition-colors hover:bg-[#0047bb] disabled:cursor-wait disabled:opacity-70 sm:w-auto"
         >
           <span className="material-symbols-outlined text-base">auto_awesome</span>
           {grading.status === 'submitting' ? 'Checking...' : 'Check answer'}

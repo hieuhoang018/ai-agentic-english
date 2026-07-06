@@ -6,12 +6,12 @@ type PracticeHeroProps = {
 
 export default function PracticeHero({ icon, title, description }: PracticeHeroProps) {
   return (
-    <section className="mb-12">
+    <section className="mb-8 sm:mb-12">
       <div className="flex items-center gap-3">
-        {icon ? <span className="material-symbols-outlined text-5xl text-primary">{icon}</span> : null}
-        <h1 className="text-4xl md:text-5xl font-bold tracking-normal text-on-surface">{title}</h1>
+        {icon ? <span className="material-symbols-outlined text-4xl text-primary sm:text-5xl">{icon}</span> : null}
+        <h1 className="text-3xl font-bold tracking-normal text-on-surface sm:text-4xl md:text-5xl">{title}</h1>
       </div>
-      <p className="mt-3 max-w-4xl text-lg leading-8 text-on-surface-variant">{description}</p>
+      <p className="mt-3 max-w-4xl text-base leading-7 text-on-surface-variant sm:text-lg sm:leading-8">{description}</p>
     </section>
   )
 }

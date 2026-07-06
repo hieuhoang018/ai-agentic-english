@@ -35,8 +35,8 @@ export default function ExerciseWorkspace({
     <div>
       <div className="mb-7 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div>
-          <h1 className="text-4xl font-bold text-on-surface">{module.title}</h1>
-          <p className="mt-2 text-lg text-on-surface-variant">{lesson.title}</p>
+          <h1 className="text-3xl font-bold text-on-surface sm:text-4xl">{module.title}</h1>
+          <p className="mt-2 text-base text-on-surface-variant sm:text-lg">{lesson.title}</p>
         </div>
       </div>
 
