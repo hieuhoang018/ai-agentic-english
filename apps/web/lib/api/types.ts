@@ -91,3 +91,48 @@ export type RecommendationItem = {
   difficulty?: string;
   cold_start?: boolean;
 };
+
+export type IrtTheta = {
+  L: number;
+  S: number | null;
+  R: number;
+  W: number;
+};
+
+export type ProfileSummaryResponse = {
+  clerk_user_id: string;
+  irt_theta: IrtTheta;
+  cold_start_flag: boolean;
+  goal_profile: { currentLevel?: string; goals?: string[] };
+};
+
+export type SessionSummaryItem = {
+  start_time: string;
+  end_time: string | null;
+};
+
+export type AnalysisPlateauResult = {
+  plateau: boolean;
+  insufficient_data: boolean;
+  // Absent (not just empty) when insufficient_data is true — see
+  // agents/agt08_analysis/changepoint.py's early-return branch.
+  changepoints?: number[];
+};
+
+// Mirrors agents/agt08_analysis/cusum.py::detect_persistent_errors's
+// per-result dict — no "type" field, despite the Kafka event this data also
+// feeds into being named "persistent_weakness".
+export type AnalysisPattern = {
+  error_type: string;
+  skill_domain: string;
+  count: number;
+  cusum_statistic: number;
+};
+
+export type AnalysisLatestResponse = {
+  clerk_user_id: string;
+  patterns: AnalysisPattern[];
+  plateau_by_skill: Record<string, AnalysisPlateauResult>;
+  risk_score: number | null;
+  insufficient_data: boolean;
+};

@@ -1,6 +1,7 @@
 import asyncio
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException, Body
+from fastapi import Depends, FastAPI, HTTPException, Body
+from agents.shared.auth import require_matching_user
 from agents.shared.db.postgres import get_pool, close_pool
 from agents.shared.db.redis_client import get_redis, close_redis
 from agents.shared.events.producer import get_producer, close_producer
@@ -195,6 +196,24 @@ async def get_conversations(clerk_user_id: str, limit: int = 20):
 @app.get("/ltm/{clerk_user_id}/assessment-history")
 async def get_assessment_history_endpoint(clerk_user_id: str, skill_domain: str, limit: int = 50):
     return await ltm.get_assessment_history(clerk_user_id, skill_domain, limit)
+
+
+# ── Frontend-facing summary (Kong-exposed) ────────────────────────────────────
+
+@app.get("/summary/{clerk_user_id}")
+async def get_sessions_summary(clerk_user_id: str, limit: int = 50, _: str = Depends(require_matching_user)):
+    """
+    Frontend-facing, JWT-scoped session history (start/end time only, no
+    summary_metrics) for the progress page's weekly activity chart.
+    Deliberately a separate top-level prefix from /ltm/* — those routes
+    (vocabulary, errors, sessions, conversations, assessment-history) are
+    called agent-to-agent without a user JWT and have no per-user guard;
+    Kong only ever exposes /summary/*, never /ltm/*, so this split is what
+    keeps those routes from becoming an IDOR surface the moment this agent
+    got a Kong route.
+    """
+    sessions = await ltm.get_sessions(clerk_user_id, limit)
+    return [{"start_time": s["start_time"], "end_time": s["end_time"]} for s in sessions]
 
 
 # ── Review Center ─────────────────────────────────────────────────────────────
