@@ -88,8 +88,8 @@ export default function SideMenu({ variant = 'desktop', isOpen = false, onClose 
       .map((part) => part[0]?.toUpperCase())
       .join('') || 'U'
   const navClassName = isMobile
-    ? `fixed right-0 top-0 z-[70] flex h-screen h-dvh w-[min(20rem,calc(100vw-3rem))] flex-col justify-between border-l border-outline-variant bg-surface-container-low shadow-[-18px_0_40px_-28px_rgba(15,23,42,0.7)] transition-transform duration-300 ease-out dark:border-outline dark:bg-surface-container-highest md:hidden ${
-        isOpen ? 'translate-x-0' : 'translate-x-full'
+    ? `fixed left-0 top-0 z-[70] flex h-screen h-dvh w-[min(20rem,calc(100vw-3rem))] flex-col justify-between border-r border-outline-variant bg-surface-container-low shadow-[18px_0_40px_-28px_rgba(15,23,42,0.7)] transition-transform duration-300 ease-out dark:border-outline dark:bg-surface-container-highest md:hidden ${
+        isOpen ? 'translate-x-0' : '-translate-x-full'
       }`
     : 'bg-surface-container-low dark:bg-surface-container-highest h-screen w-64 fixed left-0 top-0 hidden md:flex flex-col border-r border-outline-variant dark:border-outline z-50 justify-between'
   const handleNavigate = () => onClose?.()
