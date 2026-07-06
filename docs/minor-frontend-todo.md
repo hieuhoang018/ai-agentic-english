@@ -9,8 +9,9 @@
 3. mobile view for PWA
   - Since the system is a PWA, update the frontend so that it also have a mobile view. In the mobile view, the sidemenu should be hidden by default and should be accessible with an hamburger menu icon button on the top of the right side of the screen. When click on the hamburger menu icon button, the sidemenu appear from the right side, on top of the screen, and would retract back to hidden when click on anywhere on the screen outside of the sidemenu. Other components should be suitably scaled with the screen size.
 
-4. setting page
+4. Sign out button (done)
+  - Add sign out button to the user profile page using Clerk's SignOutButton component. Try embed the SignOutButton component into the UserProfile component, if that is impossible, then put the SignOutButton component below the UserProfile component. Make the changes frontend-only.
 
-5. notification
+5. 
 
 6. onboarding assessment UX fix
