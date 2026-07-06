@@ -56,3 +56,32 @@ export type GradingResponse = {
   score: number;
   feedback: string;
 };
+
+export type TodaysPlan = {
+  clerk_user_id: string;
+  plan_id: string | null;
+  activities: OnboardingActivity[];
+  daily_minutes: number;
+};
+
+export type ExerciseLibraryResponse = {
+  todaysPlan: TodaysPlan[];
+  dueForReview: unknown[];
+  recommended: unknown[];
+  browse: unknown[];
+};
+
+export type StreakResponse = {
+  clerk_user_id: string;
+  streak: number;
+};
+
+export type RecommendationItem = {
+  id: string;
+  title: string;
+  skillDomain?: string;
+  cefrLevel?: string;
+  rationale?: string;
+  difficulty?: string;
+  cold_start?: boolean;
+};

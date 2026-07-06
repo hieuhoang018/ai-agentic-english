@@ -5,7 +5,8 @@ from pydantic import BaseModel, Field
 
 class GeneratePlanRequest(BaseModel):
     skill_estimates: dict[str, float] | None = None
-    daily_minutes: int = 15
+    # Matches the onboarding UI's TimeCommitmentSlider range (5-180, step 5).
+    daily_minutes: int = Field(default=15, ge=5, le=180)
     goals: list[str] = Field(default_factory=list)
 
 

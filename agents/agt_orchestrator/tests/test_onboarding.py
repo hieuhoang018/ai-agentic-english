@@ -56,7 +56,7 @@ async def test_onboarding_happy_path(monkeypatch):
     respx.post("http://agt01-profiling:8101/profile/user_test").mock(
         return_value=httpx.Response(201, json={"clerk_user_id": "user_test"})
     )
-    respx.post("http://agt02-learning-path:8102/plans/user_test/generate").mock(
+    agt02_route = respx.post("http://agt02-learning-path:8102/plans/user_test/generate").mock(
         return_value=httpx.Response(201, json=PLAN_STUB)
     )
 
@@ -74,6 +74,9 @@ async def test_onboarding_happy_path(monkeypatch):
     assert body["pathDefinition"] == PATH_DEFINITION
     assert body["pathDefinition"]["modules"] == PATH_DEFINITION["modules"]
     assert "createdAt" in body
+    # AGT-02's /generate route requires this header (see agt02_learning_path/main.py) --
+    # the orchestrator must actually send it, not just have a matching default by luck.
+    assert agt02_route.calls[0].request.headers["x-internal-secret"] == "dev-internal-secret"
 
     mock_emit_ts.assert_awaited_once_with(
         "learning-path.ready",

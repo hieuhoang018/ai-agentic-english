@@ -1,6 +1,7 @@
 import asyncio
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI, Header
+from agents.shared.auth import require_matching_user
 from agents.shared.db.redis_client import get_redis, close_redis
 from agents.agt10_habit.exercise_library import get_exercise_library
 from agents.agt10_habit.service import record_session_complete, get_streak
@@ -31,13 +32,18 @@ async def health():
 
 
 @app.get("/library/{clerk_user_id}")
-async def exercise_library(clerk_user_id: str):
+async def exercise_library(
+    clerk_user_id: str,
+    authorization: str | None = Header(None),
+    _: str = Depends(require_matching_user),
+):
     """
     Return the four-tab exercise library.
     Tabs: Today's Plan, Due for Review, Recommended, Browse.
     Each tab fetched in parallel — partial failures return empty tab.
     """
-    return await get_exercise_library(clerk_user_id)
+    headers = {"Authorization": authorization} if authorization else None
+    return await get_exercise_library(clerk_user_id, headers)
 
 
 @app.post("/streak/{clerk_user_id}/record")
@@ -49,7 +55,7 @@ async def record_streak(clerk_user_id: str, body: RecordSessionRequest):
 
 
 @app.get("/streak/{clerk_user_id}")
-async def streak(clerk_user_id: str):
+async def streak(clerk_user_id: str, _: str = Depends(require_matching_user)):
     """Return current streak from Redis."""
     current = await get_streak(clerk_user_id)
     return {"clerk_user_id": clerk_user_id, "streak": current}
