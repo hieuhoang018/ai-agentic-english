@@ -211,6 +211,18 @@ export default function DashboardTopBar({ isMenuOpen = false, onOpenMenu }: Dash
 
   return (
     <header className="sticky top-0 z-40 flex min-h-16 w-full items-center border-b border-outline-variant/60 bg-surface/90 px-4 py-3 backdrop-blur-md dark:bg-inverse-surface/90 sm:px-6 md:px-container-margin">
+      {onOpenMenu ? (
+        <button
+          type="button"
+          onClick={onOpenMenu}
+          className="mr-2 flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-on-surface-variant transition-colors hover:bg-surface-container md:hidden"
+          aria-label="Open navigation menu"
+          aria-controls="mobile-side-menu"
+          aria-expanded={isMenuOpen}
+        >
+          <span className="material-symbols-outlined">menu</span>
+        </button>
+      ) : null}
       <div className="flex min-w-0 flex-1 items-center gap-3">
         {canGoBack ? (
           <Link
@@ -248,18 +260,6 @@ export default function DashboardTopBar({ isMenuOpen = false, onOpenMenu }: Dash
         <Link href="/main/settings" className="flex h-10 w-10 items-center justify-center rounded-full text-on-surface-variant transition-colors hover:bg-surface-container" aria-label="Cài đặt">
           <span className="material-symbols-outlined">settings</span>
         </Link>
-        {onOpenMenu ? (
-          <button
-            type="button"
-            onClick={onOpenMenu}
-            className="flex h-10 w-10 items-center justify-center rounded-full text-on-surface-variant transition-colors hover:bg-surface-container md:hidden"
-            aria-label="Open navigation menu"
-            aria-controls="mobile-side-menu"
-            aria-expanded={isMenuOpen}
-          >
-            <span className="material-symbols-outlined">menu</span>
-          </button>
-        ) : null}
       </div>
     </header>
   )
