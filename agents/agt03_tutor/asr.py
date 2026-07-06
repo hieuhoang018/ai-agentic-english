@@ -23,7 +23,11 @@ async def transcribe(audio_bytes: bytes, session_id: str) -> dict:
                 "https://api.groq.com/openai/v1/audio/transcriptions",
                 headers={"Authorization": f"Bearer {settings.GROQ_API_KEY}"},
                 files={"file": ("audio.webm", audio_bytes, "audio/webm")},
-                data={"model": "whisper-large-v3", "response_format": "verbose_json"},
+                # Pinned to English: without this hint Groq auto-detects the
+                # spoken language from audio alone, which is unreliable on
+                # short clips and non-native accents and can silently
+                # transcribe English speech as another language entirely.
+                data={"model": "whisper-large-v3", "response_format": "verbose_json", "language": "en"},
                 timeout=10.0,
             )
             r.raise_for_status()
