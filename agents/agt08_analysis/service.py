@@ -6,14 +6,37 @@ and the multi-signal risk score (risk_model.py) are all real implementations.
 """
 
 import httpx
+import json
 import logging
 from datetime import datetime, timezone
 from agents.agt08_analysis.cusum import detect_persistent_errors
 from agents.agt08_analysis.changepoint import detect_plateau
 from agents.agt08_analysis.risk_model import compute_risk_score
+from agents.shared.db.redis_client import get_redis
 from agents.shared.events.producer import emit
 
 logger = logging.getLogger(__name__)
+
+
+def _analysis_key(clerk_user_id: str) -> str:
+    return f"agt08:latest:{clerk_user_id}"
+
+
+async def _persist_latest(clerk_user_id: str, result: dict) -> None:
+    """
+    Write the last successful analysis result. No TTL: this is a 'last
+    known analysis,' not a cheap-to-recompute cache — see run_analysis().
+    On failure: logs the error but does NOT raise (a Redis outage during
+    persist must not turn a successful analysis into an apparent failure
+    for callers — see consumers.py's handle_consolidation_complete and
+    main.py's POST /run).
+    """
+    try:
+        r = await get_redis()
+        await r.set(_analysis_key(clerk_user_id), json.dumps(result))
+    except Exception as exc:
+        logger.error("AGT-08 Redis persist failed user=%s error=%s", clerk_user_id, exc)
+
 
 AGT06_BASE = "http://agt06-memory:8106"
 AGT01_BASE = "http://agt01-profiling:8101"
@@ -99,10 +122,31 @@ async def run_analysis(clerk_user_id: str) -> dict:
             "riskScore": risk,
         }, agent_id="AGT08")
 
-    return {
+    result = {
         "clerk_user_id": clerk_user_id,
         "patterns": persistent,
         "plateau_by_skill": plateau_by_skill,
         "risk_score": round(risk, 4),
         "insufficient_data": len(sessions) < 5,
+    }
+    await _persist_latest(clerk_user_id, result)
+    return result
+
+
+async def get_latest_analysis(clerk_user_id: str) -> dict:
+    """
+    Return the last persisted analysis for a user. A missing key means no
+    analysis has ever run for this user yet (e.g. a brand-new user who
+    hasn't completed a session to consolidate) — not an error.
+    """
+    r = await get_redis()
+    cached = await r.get(_analysis_key(clerk_user_id))
+    if cached:
+        return json.loads(cached)
+    return {
+        "clerk_user_id": clerk_user_id,
+        "patterns": [],
+        "plateau_by_skill": {},
+        "risk_score": None,
+        "insufficient_data": True,
     }
