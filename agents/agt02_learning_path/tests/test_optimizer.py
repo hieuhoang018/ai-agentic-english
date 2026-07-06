@@ -113,3 +113,31 @@ def test_allocate_skills_handles_none_theta_values():
     assert sum(result.values()) == pytest.approx(1.0, abs=1e-4)
     for skill in ("L", "S", "R", "W"):
         assert result[skill] >= MIN_ALLOCATION * 0.85  # Allow small rounding slack
+
+
+def test_select_daily_activities_empty_catalog_list_falls_back_to_default():
+    # catalog[skill] exists but is [] (e.g. every module was filtered out by
+    # a CEFR filter) -- `catalog.get(skill) or FALLBACK_ACTIVITIES[skill]`
+    # treats an empty list the same as "no entry", silently using generic
+    # fallback content instead of surfacing "no matching module for this skill".
+    allocation = {"L": 1.0, "S": 0.0, "R": 0.0, "W": 0.0}
+
+    activities = select_daily_activities(allocation, daily_minutes=10, catalog={"L": []})
+
+    assert activities
+    assert all(a["skill_domain"] == "L" for a in activities)
+
+
+def test_select_daily_activities_large_budget_caps_at_twice_pool_length():
+    # pool_idx < len(pool) * 2 caps iteration to 2 picks from a 1-item pool,
+    # so a 200-minute budget against a single 5-minute item still only
+    # yields 10 minutes of activities -- it does not loop indefinitely,
+    # but it also does not fill the requested budget.
+    allocation = {"L": 1.0, "S": 0.0, "R": 0.0, "W": 0.0}
+    catalog = {"L": [{"activity_type": "x", "title": "x", "estimated_minutes": 5}]}
+
+    activities = select_daily_activities(allocation, daily_minutes=200, catalog=catalog)
+
+    total_minutes = sum(a["estimated_minutes"] for a in activities)
+    assert total_minutes == 10
+    assert len(activities) == 2

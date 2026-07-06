@@ -16,6 +16,7 @@ testpaths = [
     "agt_orchestrator/tests",
     "shared/llm/tests",
     "shared/auth/tests",
+    "shared/tests",
 ]
 markers = [
     "integration: requires a live postgres-agents on localhost:5438 with migrations applied (docker compose up -d postgres-agents && infra/scripts/run-agent-migrations.sh)",
