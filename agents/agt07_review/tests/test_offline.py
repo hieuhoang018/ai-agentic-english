@@ -14,6 +14,7 @@ from unittest.mock import AsyncMock
 import agents.agt07_review.offline as offline_module
 import agents.agt07_review.service as service_module
 from agents.shared.config import settings as _settings
+from agents.shared.testing import auth_header
 
 AGT06_VOCAB_URL = f"{_settings.AGT06_BASE_URL}/ltm/user_test/vocabulary"
 AGT06_ERRORS_URL = f"{_settings.AGT06_BASE_URL}/ltm/user_test/errors"
@@ -358,7 +359,7 @@ async def test_offline_package_endpoint_returns_200(mock_sm2_fetch):
             return_value=_httpx.Response(200, json=[])
         )
         async with _httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-            resp = await client.get("/offline/user_abc/package")
+            resp = await client.get("/offline/user_abc/package", headers=auth_header("user_abc"))
 
     assert resp.status_code == 200
     data = resp.json()
@@ -366,6 +367,28 @@ async def test_offline_package_endpoint_returns_200(mock_sm2_fetch):
     assert "flashcards_due" in data
     assert "sm2_state" in data
     assert "highlight_snapshot" in data
+
+
+async def test_offline_package_endpoint_rejects_mismatched_user(mock_sm2_fetch):
+    import httpx as _httpx
+    from httpx import ASGITransport
+    from agents.agt07_review.main import app
+
+    async with _httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.get("/offline/user_abc/package", headers=auth_header("someone-else"))
+
+    assert resp.status_code == 403
+
+
+async def test_offline_package_endpoint_requires_bearer_token(mock_sm2_fetch):
+    import httpx as _httpx
+    from httpx import ASGITransport
+    from agents.agt07_review.main import app
+
+    async with _httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.get("/offline/user_abc/package")
+
+    assert resp.status_code == 401
 
 
 async def test_offline_sync_endpoint_returns_result(mock_db_offline):
@@ -379,13 +402,25 @@ async def test_offline_sync_endpoint_returns_result(mock_db_offline):
         ]
     }
     async with _httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        resp = await client.post("/offline/user_abc/sync", json=payload)
+        resp = await client.post("/offline/user_abc/sync", json=payload, headers=auth_header("user_abc"))
 
     assert resp.status_code == 200
     data = resp.json()
     assert "applied" in data
     assert "skipped" in data
     assert "errors" in data
+
+
+async def test_offline_sync_endpoint_rejects_mismatched_user(mock_db_offline):
+    import httpx as _httpx
+    from httpx import ASGITransport
+    from agents.agt07_review.main import app
+
+    payload = {"reviews": []}
+    async with _httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.post("/offline/user_abc/sync", json=payload, headers=auth_header("someone-else"))
+
+    assert resp.status_code == 403
 
 
 async def test_offline_sync_endpoint_rejects_invalid_quality(mock_db_offline):
@@ -396,6 +431,6 @@ async def test_offline_sync_endpoint_rejects_invalid_quality(mock_db_offline):
 
     payload = {"reviews": [{"review_id": "r-bad"}]}  # missing item_id and quality
     async with _httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        resp = await client.post("/offline/user_abc/sync", json=payload)
+        resp = await client.post("/offline/user_abc/sync", json=payload, headers=auth_header("user_abc"))
 
     assert resp.status_code == 422

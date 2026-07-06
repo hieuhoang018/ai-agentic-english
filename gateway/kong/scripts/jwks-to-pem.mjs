@@ -8,8 +8,11 @@
 // Examples:
 //   node gateway/kong/scripts/jwks-to-pem.mjs https://your-app.clerk.accounts.dev
 //   node gateway/kong/scripts/jwks-to-pem.mjs https://your-app.clerk.accounts.dev/.well-known/jwks.json
+//
+// For automated prod deploys, prefer render-kong-config.mjs, which does this
+// fetch and writes the resulting kong.generated.yml directly.
 
-import { createPublicKey } from 'node:crypto';
+import { fetchRsaPem } from './lib/jwks.mjs';
 
 const input = process.argv[2];
 const kidArg = process.argv[3];
@@ -19,36 +22,12 @@ if (!input) {
   process.exit(1);
 }
 
-const jwksUrl = input.endsWith('/.well-known/jwks.json')
-  ? input
-  : `${input.replace(/\/$/, '')}/.well-known/jwks.json`;
+const { pem, kid, keyCount } = await fetchRsaPem(input, kidArg);
 
-const res = await fetch(jwksUrl);
-if (!res.ok) {
-  throw new Error(`Failed to fetch ${jwksUrl}: ${res.status} ${res.statusText}`);
-}
-
-const { keys } = await res.json();
-if (!keys?.length) {
-  throw new Error(`No keys found in JWKS at ${jwksUrl}`);
-}
-
-const rsaKeys = keys.filter((k) => k.kty === 'RSA');
-if (!rsaKeys.length) {
-  throw new Error(`No RSA keys found in JWKS at ${jwksUrl}`);
-}
-
-const jwk = kidArg ? rsaKeys.find((k) => k.kid === kidArg) : rsaKeys[0];
-if (!jwk) {
-  throw new Error(`No RSA key with kid=${kidArg} found in JWKS at ${jwksUrl}`);
-}
-
-if (!kidArg && rsaKeys.length > 1) {
+if (!kidArg && keyCount > 1) {
   console.error(
-    `Note: JWKS has ${rsaKeys.length} RSA keys, using kid=${jwk.kid}. Pass a kid as the second argument to pick another.`,
+    `Note: JWKS has ${keyCount} RSA keys, using kid=${kid}. Pass a kid as the second argument to pick another.`,
   );
 }
-
-const pem = createPublicKey({ key: jwk, format: 'jwk' }).export({ type: 'spki', format: 'pem' });
 
 console.log(pem);

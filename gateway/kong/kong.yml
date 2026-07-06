@@ -51,6 +51,23 @@ plugins:
         - Authorization
         - Content-Type
       preflight_continue: false
+  # Global floor for every route, including ones without a route-specific
+  # rate-limiting plugin below (e.g. the catalog GETs). `policy: local` is an
+  # in-memory per-node counter — fine for the single Kong instance this stack
+  # runs today; switch to `policy: redis` (the `redis` container already
+  # exists in the stack) if Kong is ever scaled horizontally, since `local`
+  # counters don't sync across nodes.
+  - name: rate-limiting
+    config:
+      minute: 300
+      hour: 3000
+      policy: local
+  # One consistent cap regardless of what each backend framework defaults to
+  # (the 3 TS services get Express's 100kb default; the FastAPI agent routes
+  # proxied through Kong have no equivalent backstop of their own).
+  - name: request-size-limiting
+    config:
+      allowed_payload_size: 1
 
 services:
   - name: user-service
@@ -70,6 +87,15 @@ services:
         paths:
           - /api/webhooks/user-service
         strip_path: true
+        plugins:
+          # No jwt plugin here (Svix verifies its own signature downstream) —
+          # keyed by IP since there's no JWT consumer identity to key on.
+          - name: rate-limiting
+            config:
+              limit_by: ip
+              minute: 60
+              hour: 1000
+              policy: local
 
   - name: user-service-api
     url: http://user-service:4001/users
@@ -83,6 +109,7 @@ services:
             config:
               claims_to_verify:
                 - exp
+                - nbf
 
   - name: learning-materials-service-health
     url: http://learning-materials-service:4002/health
@@ -106,6 +133,7 @@ services:
             config:
               claims_to_verify:
                 - exp
+                - nbf
 
   - name: lm-lessons
     url: http://learning-materials-service:4002/lessons
@@ -119,6 +147,7 @@ services:
             config:
               claims_to_verify:
                 - exp
+                - nbf
 
   - name: lm-exercises
     url: http://learning-materials-service:4002/exercises
@@ -132,6 +161,7 @@ services:
             config:
               claims_to_verify:
                 - exp
+                - nbf
 
   - name: lm-audio
     url: http://learning-materials-service:4002/audio
@@ -145,6 +175,7 @@ services:
             config:
               claims_to_verify:
                 - exp
+                - nbf
 
   - name: lm-assessment
     url: http://learning-materials-service:4002/assessment
@@ -158,6 +189,7 @@ services:
             config:
               claims_to_verify:
                 - exp
+                - nbf
 
   - name: lm-learning-paths
     url: http://learning-materials-service:4002/learning-paths
@@ -171,6 +203,7 @@ services:
             config:
               claims_to_verify:
                 - exp
+                - nbf
 
   - name: lm-review
     url: http://learning-materials-service:4002/review
@@ -184,6 +217,7 @@ services:
             config:
               claims_to_verify:
                 - exp
+                - nbf
 
   - name: agt-orchestrator-onboarding
     url: http://agt-orchestrator:8100/orchestrate/onboarding
@@ -200,6 +234,15 @@ services:
             config:
               claims_to_verify:
                 - exp
+                - nbf
+          # Proxies to agt-orchestrator, which calls out to LLMs — real
+          # dollar cost per request. A user isn't submitting onboarding
+          # requests every second.
+          - name: rate-limiting
+            config:
+              minute: 20
+              hour: 200
+              policy: local
 
   - name: agt-orchestrator-grading
     url: http://agt-orchestrator:8100/orchestrate/grading
@@ -216,6 +259,13 @@ services:
             config:
               claims_to_verify:
                 - exp
+                - nbf
+          # Same LLM-cost rationale as the onboarding route above.
+          - name: rate-limiting
+            config:
+              minute: 20
+              hour: 200
+              policy: local
 
   - name: agt03-speaking-ticket
     url: http://agt03-tutor:8103/speaking/session-ticket
@@ -232,6 +282,14 @@ services:
             config:
               claims_to_verify:
                 - exp
+                - nbf
+          # Single-use enforcement stops a *used* ticket being replayed, but
+          # nothing stops rapid re-issuance of new ones — cap it separately.
+          - name: rate-limiting
+            config:
+              minute: 10
+              hour: 60
+              policy: local
 
   - name: agt07-offline
     url: http://agt07-review:8107/offline
@@ -249,6 +307,14 @@ services:
             config:
               claims_to_verify:
                 - exp
+                - nbf
+          # No cap on sync frequency previously — request *size* is bounded
+          # separately by the global request-size-limiting plugin above.
+          - name: rate-limiting
+            config:
+              minute: 30
+              hour: 300
+              policy: local
 
   - name: agt10-library
     url: http://agt10-habit:8110/library
@@ -265,6 +331,7 @@ services:
             config:
               claims_to_verify:
                 - exp
+                - nbf
 
   - name: agt10-streak
     url: http://agt10-habit:8110/streak
@@ -281,6 +348,7 @@ services:
             config:
               claims_to_verify:
                 - exp
+                - nbf
 
   - name: agt09-recommendations
     url: http://agt09-recommendation:8109/recommendations
@@ -297,6 +365,7 @@ services:
             config:
               claims_to_verify:
                 - exp
+                - nbf
 
   - name: agt08-analysis
     url: http://agt08-analysis:8108/analysis

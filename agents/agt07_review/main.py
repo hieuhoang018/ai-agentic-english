@@ -1,9 +1,10 @@
 import logging
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Header, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException
 from pydantic import BaseModel, Field
 from agents.agt07_review.service import get_due_items, rate_item, build_daily_test, pick_vocab_of_the_day
 from agents.agt07_review.offline import get_offline_package, apply_offline_sync
+from agents.shared.auth import require_matching_user
 from agents.shared.config import settings
 
 logger = logging.getLogger(__name__)
@@ -73,7 +74,7 @@ async def daily_test(clerk_user_id: str, size: int = 10):
 
 
 @app.get("/offline/{clerk_user_id}/package")
-async def offline_package(clerk_user_id: str):
+async def offline_package(clerk_user_id: str, _: str = Depends(require_matching_user)):
     """
     Build a self-contained review bundle for offline use.
     Returns due flashcards, full SM-2 state, and a highlight snapshot.
@@ -83,7 +84,7 @@ async def offline_package(clerk_user_id: str):
 
 
 @app.post("/offline/{clerk_user_id}/sync")
-async def offline_sync(clerk_user_id: str, body: SyncRequest):
+async def offline_sync(clerk_user_id: str, body: SyncRequest, _: str = Depends(require_matching_user)):
     """
     Replay queued offline review ratings through the SM-2 update logic.
     Reviews are processed in reviewed_at order; already-processed review_ids

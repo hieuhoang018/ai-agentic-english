@@ -12,7 +12,8 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "test": "npm run --workspaces --if-present test"
+    "test": "npm run --workspaces --if-present test",
+    "kong:render": "node gateway/kong/scripts/render-kong-config.mjs"
   },
   "devDependencies": {
     "@types/node": "22.19.20",

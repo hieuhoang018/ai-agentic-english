@@ -149,3 +149,19 @@ services:
     environment:
       DEPLOY_ENV: production
       INTERNAL_SECRET: ${INTERNAL_SECRET}
+
+  kong:
+    environment:
+      # Admin API is unused operationally in prod (declarative config is bind-mounted,
+      # never pushed via the Admin API). The base file already restricts the published
+      # port to host loopback; this additionally makes Kong itself refuse non-loopback
+      # admin connections, closing off the docker-network vector too. If admin access is
+      # ever needed, use `docker exec` into the container or an SSH tunnel — don't widen
+      # this back to 0.0.0.0.
+      KONG_ADMIN_LISTEN: 127.0.0.1:8001
+      # Points at the file rendered by gateway/kong/scripts/render-kong-config.mjs (real
+      # Clerk JWKS), not the dev-test kong.yml the base file mounts. Run that script before
+      # `docker compose up` with this override — see infra/README.md's prod deploy section.
+      KONG_DECLARATIVE_CONFIG: /kong/declarative/kong.generated.yml
+    volumes:
+      - ../gateway/kong/kong.generated.yml:/kong/declarative/kong.generated.yml:ro
