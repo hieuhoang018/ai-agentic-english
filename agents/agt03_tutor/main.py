@@ -1,7 +1,8 @@
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException, WebSocket
+from fastapi import FastAPI, Header, HTTPException, WebSocket
 
+from agents.shared.auth import extract_user_id
 from agents.shared.db.postgres import get_pool, close_pool
 from agents.shared.db.redis_client import get_redis, close_redis
 from agents.shared.events.producer import get_producer, close_producer
@@ -12,6 +13,7 @@ from agents.agt03_tutor.models import (
     TurnRequest, TurnResponse,
     EndSessionRequest, EndSessionResponse,
 )
+from agents.agt03_tutor.tickets import SpeakingTicketRequest, SpeakingTicketResponse, issue_ticket
 from agents.agt03_tutor.websocket_handler import handle_session
 
 
@@ -58,6 +60,16 @@ async def end_session(body: EndSessionRequest):
 @app.get("/sessions/{session_id}/state")
 async def session_state(session_id: str):
     return await service.get_session_state(session_id)
+
+
+@app.post("/speaking/session-ticket", response_model=SpeakingTicketResponse)
+async def speaking_session_ticket(
+    body: SpeakingTicketRequest | None = None,
+    authorization: str | None = Header(None),
+):
+    clerk_user_id = extract_user_id(authorization)
+    skill_focus = body.skill_focus if body else "SPEAKING"
+    return await issue_ticket(clerk_user_id, skill_focus)
 
 
 @app.websocket("/ws/sessions/{session_id}")

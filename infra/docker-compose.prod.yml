@@ -72,6 +72,7 @@ services:
       GROQ_API_KEY: ${GROQ_API_KEY}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
       INTERNAL_SECRET: ${INTERNAL_SECRET}
+      REQUIRE_SPEAKING_TICKET: "true"
 
   agt04-feedback:
     environment:

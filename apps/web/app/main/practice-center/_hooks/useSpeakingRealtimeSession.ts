@@ -9,11 +9,13 @@ import {
   createSpeakingStartMessage,
   createSpeakingTextTurnMessage,
   speakingEndMessage,
+  withSpeakingSessionTicket,
   type SpeakingGrammarFeedback,
   type SpeakingRealtimeClientMessage,
   type SpeakingRealtimeServerMessage,
   type SpeakingRealtimeStatus,
 } from '../_types/speaking-realtime'
+import type { SpeakingSessionTicketResponse } from '@/lib/api/types'
 
 export type SpeakingRealtimeTranscriptMessage = {
   id: string
@@ -27,7 +29,7 @@ export type SpeakingRealtimeTranscriptMessage = {
 }
 
 export type UseSpeakingRealtimeSessionResult = {
-  sessionId: string
+  sessionId: string | null
   status: SpeakingRealtimeStatus
   messages: SpeakingRealtimeTranscriptMessage[]
   error: string | null
@@ -37,10 +39,6 @@ export type UseSpeakingRealtimeSessionResult = {
   startRecording: () => Promise<void>
   stopRecording: () => void
   endSession: () => void
-}
-
-function createSessionId() {
-  return crypto.randomUUID()
 }
 
 function createMessageId(prefix: 'ai' | 'user') {
@@ -94,9 +92,19 @@ function parseServerMessage(data: unknown): SpeakingRealtimeServerMessage {
   return JSON.parse(data) as SpeakingRealtimeServerMessage
 }
 
+async function requestSpeakingSessionTicket(): Promise<SpeakingSessionTicketResponse> {
+  const response = await fetch('/api/speaking/session-ticket', { method: 'POST' })
+
+  if (!response.ok) {
+    throw new Error('Could not start a speaking session right now.')
+  }
+
+  return (await response.json()) as SpeakingSessionTicketResponse
+}
+
 export function useSpeakingRealtimeSession(): UseSpeakingRealtimeSessionResult {
   const { isLoaded, user } = useUser()
-  const [sessionId] = useState(createSessionId)
+  const [sessionId, setSessionId] = useState<string | null>(null)
   const [status, setStatus] = useState<SpeakingRealtimeStatus>('idle')
   const [messages, setMessages] = useState<SpeakingRealtimeTranscriptMessage[]>([])
   const [error, setError] = useState<string | null>(null)
@@ -372,83 +380,108 @@ export function useSpeakingRealtimeSession(): UseSpeakingRealtimeSessionResult {
     closeRequestedRef.current = false
     startedRef.current = false
 
-    const socket = new WebSocket(buildSpeakingSessionWebSocketUrl(sessionId))
-    socketRef.current = socket
+    let cancelled = false
+    let socket: WebSocket | null = null
 
-    socket.addEventListener('open', () => {
-      if (socketRef.current !== socket) return
-
-      setError(null)
-      sendSocketMessage(createSpeakingStartMessage(user.id))
-    })
-
-    socket.addEventListener('message', (event) => {
-      if (socketRef.current !== socket) return
-
-      let serverMessage: SpeakingRealtimeServerMessage
+    async function connect() {
+      let ticket: SpeakingSessionTicketResponse
 
       try {
-        serverMessage = parseServerMessage(event.data)
-      } catch (parseError) {
-        setError(parseError instanceof Error ? parseError.message : 'Could not read speaking response.')
+        ticket = await requestSpeakingSessionTicket()
+      } catch (ticketError) {
+        if (cancelled) return
+        setError(ticketError instanceof Error ? ticketError.message : 'Could not start a speaking session.')
         setStatus('error')
         return
       }
 
-      if (serverMessage.type === 'session_started') {
-        startedRef.current = true
-        appendAssistantMessage(serverMessage.opening_message)
-        setStatus('ready')
-        return
-      }
+      if (cancelled) return
 
-      if (serverMessage.type === 'turn_result') {
-        updatePendingUserTurn(serverMessage)
-        appendAssistantMessage(serverMessage.assistant_message)
-        if (!closeRequestedRef.current) setStatus('ready')
-        return
-      }
+      setSessionId(ticket.session_id)
 
-      if (serverMessage.type === 'session_ended') {
-        startedRef.current = false
-        closeRequestedRef.current = true
-        setStatus('ended')
-        return
-      }
+      socket = new WebSocket(
+        withSpeakingSessionTicket(buildSpeakingSessionWebSocketUrl(ticket.session_id), ticket.ticket),
+      )
+      socketRef.current = socket
 
-      setPendingTurnMessageId(null)
-      setError(serverMessage.detail)
-      setStatus('error')
-    })
+      socket.addEventListener('open', () => {
+        if (socketRef.current !== socket || !user?.id) return
 
-    socket.addEventListener('error', () => {
-      if (socketRef.current !== socket) return
+        setError(null)
+        sendSocketMessage(createSpeakingStartMessage(user.id))
+      })
 
-      setError('Speaking session connection failed.')
-      setStatus('error')
-    })
+      socket.addEventListener('message', (event) => {
+        if (socketRef.current !== socket) return
 
-    socket.addEventListener('close', () => {
-      if (socketRef.current !== socket) return
+        let serverMessage: SpeakingRealtimeServerMessage
 
-      socketRef.current = null
-      stopMediaTracks()
+        try {
+          serverMessage = parseServerMessage(event.data)
+        } catch (parseError) {
+          setError(parseError instanceof Error ? parseError.message : 'Could not read speaking response.')
+          setStatus('error')
+          return
+        }
 
-      if (closeRequestedRef.current) {
-        startedRef.current = false
-        setStatus('ended')
-        return
-      }
+        if (serverMessage.type === 'session_started') {
+          startedRef.current = true
+          appendAssistantMessage(serverMessage.opening_message)
+          setStatus('ready')
+          return
+        }
 
-      setError('Speaking session disconnected unexpectedly.')
-      setStatus('error')
-    })
+        if (serverMessage.type === 'turn_result') {
+          updatePendingUserTurn(serverMessage)
+          appendAssistantMessage(serverMessage.assistant_message)
+          if (!closeRequestedRef.current) setStatus('ready')
+          return
+        }
+
+        if (serverMessage.type === 'session_ended') {
+          startedRef.current = false
+          closeRequestedRef.current = true
+          setStatus('ended')
+          return
+        }
+
+        setPendingTurnMessageId(null)
+        setError(serverMessage.detail)
+        setStatus('error')
+      })
+
+      socket.addEventListener('error', () => {
+        if (socketRef.current !== socket) return
+
+        setError('Speaking session connection failed.')
+        setStatus('error')
+      })
+
+      socket.addEventListener('close', () => {
+        if (socketRef.current !== socket) return
+
+        socketRef.current = null
+        stopMediaTracks()
+
+        if (closeRequestedRef.current) {
+          startedRef.current = false
+          setStatus('ended')
+          return
+        }
+
+        setError('Speaking session disconnected unexpectedly.')
+        setStatus('error')
+      })
+    }
+
+    void connect()
 
     return () => {
+      cancelled = true
       cancelSpeech()
       abortRecording()
 
-      if (socketRef.current !== socket) return
+      if (!socket || socketRef.current !== socket) return
 
       closeRequestedRef.current = true
 
@@ -465,7 +498,6 @@ export function useSpeakingRealtimeSession(): UseSpeakingRealtimeSessionResult {
     cancelSpeech,
     isLoaded,
     sendSocketMessage,
-    sessionId,
     setPendingTurnMessageId,
     stopMediaTracks,
     updatePendingUserTurn,

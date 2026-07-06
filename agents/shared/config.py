@@ -46,6 +46,11 @@ class Settings(BaseSettings):
     AGT06_BASE_URL: str = "http://localhost:8106"
     LMS_BASE_URL: str = "http://localhost:4002"
 
+    # AGT-03: reject speaking WebSocket connections that arrive without a
+    # valid session ticket. Default off so local dev/tests keep working
+    # without Kong; flip to true in docker-compose.prod.yml.
+    REQUIRE_SPEAKING_TICKET: bool = False
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     @model_validator(mode="after")

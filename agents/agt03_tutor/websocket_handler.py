@@ -27,6 +27,23 @@ free tier-2 path) rather than introducing a paid server-side voice API.
 
 The connection's session_id comes from the URL path, not from the start
 message, so a session_id collision/mismatch is impossible by construction.
+
+Auth: an optional `?ticket=` query param, issued by
+`POST /speaking/session-ticket` from a Kong-validated JWT (see tickets.py).
+When a valid ticket is present, its clerk_user_id/skill_focus override
+whatever the client's "start" message claims. When absent or invalid,
+behavior falls back to trusting the "start" message body, gated by
+`settings.REQUIRE_SPEAKING_TICKET` (default False, so existing tests and
+local dev without Kong keep working).
+
+Rejecting a ticket happens before `accept()`, i.e. during the WS opening
+handshake. Verified live against a real uvicorn server: this surfaces to a
+real client as an HTTP-level handshake failure (403), not a WS close frame
+carrying TICKET_REJECTED_CLOSE_CODE -- a close code can only be delivered
+over an already-upgraded connection. Starlette's TestClient reports it
+differently (WebSocketDisconnect(code=...)) because it inspects the raw
+ASGI message rather than a real wire handshake; both represent the same
+"connection refused" outcome, so this doesn't change behavior anywhere.
 """
 
 from __future__ import annotations
@@ -38,11 +55,38 @@ from fastapi import WebSocket, WebSocketDisconnect
 
 from agents.agt03_tutor.service import start_session, end_session
 from agents.agt03_tutor.pipeline import run_turn_pipeline
+from agents.agt03_tutor.tickets import TICKET_REJECTED_CLOSE_CODE, consume_ticket
+from agents.shared.config import settings
 
 logger = logging.getLogger(__name__)
 
 
 async def handle_session(websocket: WebSocket, session_id: str) -> None:
+    ticket_clerk_user_id: str | None = None
+    ticket_skill_focus: str | None = None
+
+    raw_ticket = websocket.query_params.get("ticket")
+    if raw_ticket:
+        ticket_data = await consume_ticket(raw_ticket)
+        if ticket_data is None:
+            # Expired, already used, or never issued. Only hard-reject when
+            # tickets are mandatory — otherwise fall through to the no-ticket
+            # dev path so a stale ticket doesn't break local dev.
+            if settings.REQUIRE_SPEAKING_TICKET:
+                await websocket.close(code=TICKET_REJECTED_CLOSE_CODE)
+                return
+        elif ticket_data.get("session_id") != session_id:
+            # Defense in depth: a ticket is only valid for the session it was
+            # issued for, regardless of the enforcement flag.
+            await websocket.close(code=TICKET_REJECTED_CLOSE_CODE)
+            return
+        else:
+            ticket_clerk_user_id = ticket_data.get("clerk_user_id")
+            ticket_skill_focus = ticket_data.get("skill_focus")
+    elif settings.REQUIRE_SPEAKING_TICKET:
+        await websocket.close(code=TICKET_REJECTED_CLOSE_CODE)
+        return
+
     await websocket.accept()
     clerk_user_id: str | None = None
     skill_focus: str | None = None
@@ -70,8 +114,12 @@ async def handle_session(websocket: WebSocket, session_id: str) -> None:
                 msg_type = message.get("type")
 
                 if msg_type == "start":
-                    clerk_user_id = message.get("clerk_user_id")
-                    skill_focus = message.get("skill_focus", "SPEAKING")
+                    if ticket_clerk_user_id is not None:
+                        clerk_user_id = ticket_clerk_user_id
+                        skill_focus = ticket_skill_focus or message.get("skill_focus", "SPEAKING")
+                    else:
+                        clerk_user_id = message.get("clerk_user_id")
+                        skill_focus = message.get("skill_focus", "SPEAKING")
                     result = await start_session(clerk_user_id, skill_focus, session_id)
                     started = True
                     await websocket.send_json({"type": "session_started", **result})
