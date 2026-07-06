@@ -29,8 +29,9 @@ async def run_turn_pipeline(session_id: str, user_message: str | None, audio_bas
 
 
 async def run_turn_pipeline_reply(session_id: str, user_message: str | None, audio_base64: str | None) -> dict:
-    """Thin wrapper around service.process_turn_reply — used by the
-    WebSocket route to send the assistant's reply immediately."""
+    """Thin wrapper around service.process_turn_reply — intended for the
+    WebSocket route to call once it's updated to send the assistant's reply
+    immediately."""
     return await process_turn_reply(session_id, user_message, audio_base64)
 
 
@@ -41,7 +42,8 @@ async def run_turn_pipeline_feedback(
     clerk_user_id: str,
     skill_focus: str,
 ) -> dict:
-    """Thin wrapper around service.process_turn_feedback — used by the
-    WebSocket route to deliver AGT-04/AGT-11 feedback in a follow-up frame
-    after the assistant's reply has already been sent."""
+    """Thin wrapper around service.process_turn_feedback — intended for the
+    WebSocket route to call once it's updated to deliver AGT-04/AGT-11
+    feedback in a follow-up frame after the assistant's reply has already
+    been sent."""
     return await process_turn_feedback(session_id, transcript_text, assistant_message, clerk_user_id, skill_focus)
