@@ -17,8 +17,8 @@ export default async function GrammarCategoryPage({ params }: GrammarCategoryPag
     <div>
       <div className="mb-8 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
-          <h1 className="text-4xl font-bold text-on-surface">{category.title}</h1>
-          <p className="mt-3 text-lg text-on-surface-variant">
+          <h1 className="text-3xl font-bold text-on-surface sm:text-4xl">{category.title}</h1>
+          <p className="mt-3 text-base text-on-surface-variant sm:text-lg">
             {category.lessons.length} database lessons across {category.cefrLevels.join(', ')}
           </p>
         </div>

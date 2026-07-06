@@ -21,7 +21,7 @@ export default function TranscriptThread({ conversation }: TranscriptThreadProps
         </span>
       </header>
 
-      <div className="space-y-6 p-6">
+      <div className="space-y-6 p-4 sm:p-6">
         {conversation.messages.map((message) => {
           const isUser = message.speaker === 'user'
           return (
@@ -31,7 +31,7 @@ export default function TranscriptThread({ conversation }: TranscriptThreadProps
                   <span className="material-symbols-outlined">smart_toy</span>
                 </div>
               ) : null}
-              <div className={`max-w-[78%] space-y-3 ${isUser ? 'text-right' : ''}`}>
+              <div className={`max-w-[86%] space-y-3 sm:max-w-[78%] ${isUser ? 'text-right' : ''}`}>
                 {message.note ? <span className="inline-flex rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-[#007a4d]">{message.note}</span> : null}
                 <div className={`rounded-lg border px-4 py-3 text-left leading-7 ${isUser ? 'border-blue-200 bg-blue-100 text-[#0b235a]' : 'border-outline-variant bg-white text-on-surface'}`}>
                   {message.content}

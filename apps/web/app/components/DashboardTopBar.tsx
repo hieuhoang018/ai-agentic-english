@@ -19,6 +19,11 @@ type BreadcrumbConfig = {
   hide?: boolean
 }
 
+type DashboardTopBarProps = {
+  isMenuOpen?: boolean
+  onOpenMenu?: () => void
+}
+
 const mainSectionStorageKey = 'english-academy:main-breadcrumb-section'
 
 const mainSections: Record<MainSection, Required<Crumb>> = {
@@ -190,7 +195,7 @@ function buildBreadcrumbConfig(pathname: string, mainSection: MainSection): Brea
   return { crumbs, backHref: mainSections.home.href }
 }
 
-export default function DashboardTopBar() {
+export default function DashboardTopBar({ isMenuOpen = false, onOpenMenu }: DashboardTopBarProps) {
   const pathname = usePathname() || '/'
   const storedMainSection = useSyncExternalStore(subscribeToMainSectionStore, getStoredMainSection, getServerMainSection)
   const mainSection = getCurrentMainSection(pathname, storedMainSection)
@@ -205,7 +210,7 @@ export default function DashboardTopBar() {
   }, [pathname])
 
   return (
-    <header className="bg-surface/90 dark:bg-inverse-surface/90 backdrop-blur-md sticky top-0 z-40 flex min-h-16 items-center w-full px-container-margin py-3 border-b border-outline-variant/60">
+    <header className="sticky top-0 z-40 flex min-h-16 w-full items-center border-b border-outline-variant/60 bg-surface/90 px-4 py-3 backdrop-blur-md dark:bg-inverse-surface/90 sm:px-6 md:px-container-margin">
       <div className="flex min-w-0 flex-1 items-center gap-3">
         {canGoBack ? (
           <Link
@@ -218,7 +223,7 @@ export default function DashboardTopBar() {
         ) : null}
 
         {!hide ? (
-          <nav className="flex min-w-0 items-center gap-2 text-sm text-on-surface-variant" aria-label="Breadcrumb">
+          <nav className="hidden min-w-0 items-center gap-2 text-sm text-on-surface-variant sm:flex" aria-label="Breadcrumb">
             {crumbs.map((crumb, index) => {
               const isLast = index === crumbs.length - 1
               return (
@@ -238,11 +243,23 @@ export default function DashboardTopBar() {
         ) : null}
       </div>
 
-      <div className="flex items-center gap-3">
+      <div className="flex shrink-0 items-center gap-1 sm:gap-2 md:gap-3">
         <NotificationInbox />
         <Link href="/main/settings" className="flex h-10 w-10 items-center justify-center rounded-full text-on-surface-variant transition-colors hover:bg-surface-container" aria-label="Cài đặt">
           <span className="material-symbols-outlined">settings</span>
         </Link>
+        {onOpenMenu ? (
+          <button
+            type="button"
+            onClick={onOpenMenu}
+            className="flex h-10 w-10 items-center justify-center rounded-full text-on-surface-variant transition-colors hover:bg-surface-container md:hidden"
+            aria-label="Open navigation menu"
+            aria-controls="mobile-side-menu"
+            aria-expanded={isMenuOpen}
+          >
+            <span className="material-symbols-outlined">menu</span>
+          </button>
+        ) : null}
       </div>
     </header>
   )

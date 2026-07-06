@@ -21,8 +21,8 @@ export default function GrammarLessonView({ lesson }: GrammarLessonViewProps) {
             {lesson.category}
           </span>
         </div>
-        <h1 className="text-4xl font-bold text-on-surface">{lesson.title}</h1>
-        <p className="mt-3 max-w-4xl text-lg leading-8 text-on-surface-variant">{lesson.description}</p>
+        <h1 className="text-3xl font-bold text-on-surface sm:text-4xl">{lesson.title}</h1>
+        <p className="mt-3 max-w-4xl text-base leading-7 text-on-surface-variant sm:text-lg sm:leading-8">{lesson.description}</p>
       </div>
 
       <section className="mb-8">
@@ -31,7 +31,7 @@ export default function GrammarLessonView({ lesson }: GrammarLessonViewProps) {
           Explanation
         </h2>
         <div className="rounded-lg border border-outline-variant bg-white p-6">
-          <p className="leading-8 text-on-surface-variant">{lesson.description}</p>
+          <p className="leading-7 text-on-surface-variant sm:leading-8">{lesson.description}</p>
         </div>
       </section>
 
