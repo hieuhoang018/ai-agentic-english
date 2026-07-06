@@ -4,8 +4,22 @@ Tests for AGT-08 run_analysis — specifically the days_since computation.
 
 import httpx
 import pytest
+import fakeredis.aioredis
+import json
 from datetime import datetime, timezone, timedelta
 from unittest.mock import AsyncMock, MagicMock
+
+
+@pytest.fixture(autouse=True)
+def fake_redis(monkeypatch):
+    import agents.agt08_analysis.service as svc
+    store = fakeredis.aioredis.FakeRedis()
+
+    async def _get_redis():
+        return store
+
+    monkeypatch.setattr(svc, "get_redis", _get_redis)
+    return store
 
 
 def _make_session(days_ago: int) -> dict:
@@ -240,3 +254,36 @@ async def test_run_analysis_passes_sessions_to_risk_model(monkeypatch):
     args, kwargs = captured_calls[0]
     passed_sessions = kwargs.get("sessions") if "sessions" in kwargs else (args[2] if len(args) > 2 else None)
     assert passed_sessions == sessions, "sessions list must be forwarded to compute_risk_score unchanged"
+
+
+async def test_run_analysis_persists_successful_result_to_redis(monkeypatch, fake_redis):
+    """Task: AGT-08 persistence fix. A successful run_analysis() must write
+    its result to Redis under agt08:latest:{clerk_user_id} so GET /latest
+    has something to read."""
+    _make_http_client_mock([_make_session(1)], monkeypatch)
+
+    from agents.agt08_analysis.service import run_analysis
+    result = await run_analysis("user-persist")
+
+    cached = await fake_redis.get("agt08:latest:user-persist")
+    assert cached is not None
+    assert json.loads(cached) == result
+
+
+async def test_run_analysis_does_not_persist_on_upstream_fetch_failure(monkeypatch, fake_redis):
+    """Regression guard: a transient AGT-06/AGT-01 fetch failure must NOT
+    overwrite the last known good analysis in Redis with the error stub —
+    this is a 'last known analysis' cache, not a recompute-on-every-call
+    cache, so a bad run must be a no-op for persistence."""
+    mock_client = MagicMock()
+    mock_client.__aenter__ = AsyncMock(side_effect=RuntimeError("AGT-06 unreachable"))
+    mock_client.__aexit__ = AsyncMock(return_value=False)
+
+    import agents.agt08_analysis.service as svc
+    monkeypatch.setattr(svc.httpx, "AsyncClient", lambda **kw: mock_client)
+
+    result = await svc.run_analysis("user-fetch-fail")
+
+    assert "error" in result
+    cached = await fake_redis.get("agt08:latest:user-fetch-fail")
+    assert cached is None
