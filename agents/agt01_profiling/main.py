@@ -1,5 +1,6 @@
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
+from agents.shared.auth import require_matching_user
 from agents.shared.db.postgres import get_pool, close_pool
 from agents.shared.db.redis_client import get_redis, close_redis
 from agents.agt01_profiling.service import get_profile, create_profile, update_profile
@@ -57,3 +58,23 @@ async def patch_learner_profile(clerk_user_id: str, body: UpdateProfileRequest):
     if not updates:
         raise HTTPException(400, "No fields to update")
     return await update_profile(clerk_user_id, updates)
+
+
+@app.get("/summary/{clerk_user_id}")
+async def get_profile_summary(clerk_user_id: str, _: str = Depends(require_matching_user)):
+    """
+    Frontend-facing, JWT-scoped summary: IRT theta, cold-start flag, and the
+    learner's own stated goals only. Deliberately a separate top-level
+    prefix from GET /profile/{clerk_user_id} — that route is called
+    agent-to-agent (AGT-08's run_analysis, etc.) without a user JWT and
+    must stay ungated. Kong only ever exposes /summary/*, never /profile/*,
+    so this split keeps the rest of the profile (grammar_error_map,
+    vocabulary_beta) off any Kong-reachable path.
+    """
+    profile = await get_profile(clerk_user_id)
+    return {
+        "clerk_user_id": clerk_user_id,
+        "irt_theta": profile.get("irt_theta", {}),
+        "cold_start_flag": profile.get("cold_start_flag", True),
+        "goal_profile": profile.get("goal_profile", {}),
+    }

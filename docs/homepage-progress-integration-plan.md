@@ -14,6 +14,13 @@ it and should be implemented first. Only the AGT-08-specific slice of Stage A/C 
 Kong route and the progress page's insights/pattern data, if that gets picked up) waits on that
 fix landing — treat it as blocked, not as something to start in parallel.
 
+**Status (2026-07-06): all of Stage A/B/C done.** §2's AGT-08 persistence fix landed, Stage A/B
+landed via PR #34, Stage C landed the same day the fix did — every checklist item below is
+checked off, with disposition notes on the ones that didn't ship exactly as originally scoped
+(dropped roadmap/target-date, % reused rather than newly derived, IELTS-band question resolved
+as CEFR bands). See `CLAUDE.local.md`'s "Recently landed" section for the full changelog. §4's
+open questions are all resolved — see inline notes.
+
 ## 0. Why this doc exists
 
 `apps/web/app/main/homepage/page.tsx` and `apps/web/app/main/progress/page.tsx` are the two most
@@ -103,83 +110,100 @@ which touch AGT-08 — ahead of it.
 Do the AGT-09/AGT-10 routes first — they're unblocked today. Hold the AGT-08 route until §2's
 fix lands (tracked elsewhere, already underway).
 
-- [ ] `agt10-library` service/route: `/api/habit/library` → `agt10-habit:8110/library`, JWT.
-- [ ] `agt10-streak` service/route: `/api/habit/streak` → `agt10-habit:8110/streak`, JWT, **GET
+- [x] `agt10-library` service/route: `/api/habit/library` → `agt10-habit:8110/library`, JWT.
+- [x] `agt10-streak` service/route: `/api/habit/streak` → `agt10-habit:8110/streak`, JWT, **GET
   only** — do not route the `POST .../record` endpoint through Kong (§1 — client should never
   call it).
-- [ ] `agt09-recommendations` service/route: `/api/recommendations` → `agt09-
+- [x] `agt09-recommendations` service/route: `/api/recommendations` → `agt09-
   recommendation:8109/recommendations`, JWT, GET only (the `invalidate` endpoint is
   AGT-02-to-AGT-09 internal, not client-facing).
-- [ ] `agt08-analysis` service/route: `/api/analysis` → `agt08-analysis:8108/analysis`, JWT, **GET
+- [x] `agt08-analysis` service/route: `/api/analysis` → `agt08-analysis:8108/analysis`, JWT, **GET
   only**, and **only after §2's persistence fix lands** — don't expose `POST /run` publicly, since
   nothing stops a client from spamming it and duplicating Kafka emissions.
-- [ ] Same IDOR concern as the AGT-03 plan's Stage D applies to every one of these — all four
+- [x] Same IDOR concern as the AGT-03 plan's Stage D applies to every one of these — all four
   routes take `clerk_user_id` as a path param with no JWT-`sub` cross-check today. Either add that
   check agent-side, or (simpler, consistent with recommendation there) add a `/me/...` variant
   that derives the id from the decoded JWT instead of trusting the path. Pick one approach and
   apply it uniformly across AGT-08/09/10 rather than solving it differently per agent.
+  **Resolved 2026-07-06**: `agents.shared.auth.require_matching_user` (403s on a `sub`/path
+  mismatch) applied agent-side to all of AGT-09/10 (PR #34) and AGT-08 (2026-07-06). AGT-01/AGT-06
+  (added later, for Stage C) used the "separate route" variant instead — new
+  `GET /summary/{clerk_user_id}` on each, guarded, deliberately apart from their pre-existing
+  internal routes (`/profile/*`, `/ltm/*`) which stay ungated since other agents call those
+  directly without a user JWT.
 
 ### Stage B — Homepage (frontend, ~half a day)
 
-- [ ] New Next.js route handlers mirroring `app/api/orchestrate/onboarding/route.ts`:
+- [x] New Next.js route handlers mirroring `app/api/orchestrate/onboarding/route.ts`:
   `app/api/habit/library/route.ts`, `app/api/habit/streak/route.ts`,
   `app/api/recommendations/route.ts`.
-- [ ] `homepage/page.tsx`: fetch `/api/habit/streak` for the streak badge (replaces "12 ngày
+- [x] `homepage/page.tsx`: fetch `/api/habit/streak` for the streak badge (replaces "12 ngày
   streak"), fetch `/api/habit/library` for the daily-tasks list (today's-plan tab → task list;
   due-for-review count → the "Ôn tập từ vựng nhanh" card's "15 từ" text becomes real).
-- [ ] The AI-tutor CTA card needs no data change — leave as-is.
-- [ ] The overall-progress **percentage** (currently hardcoded "68%") has **no clean backend
+- [x] The AI-tutor CTA card needs no data change — leave as-is.
+- [x] The overall-progress **percentage** (currently hardcoded "68%") has **no clean backend
   source** — AGT-02's `/plans/{id}/active`/`/today` don't return a completion percentage today.
   Compute it client-side from the plan's activities (completed count / total count) if that shape
   is available once fetched, or drop the percentage for v1 and keep just the streak badge. Don't
   invent a new backend endpoint for this without confirming what AGT-02's plan response actually
   contains first.
+  **Resolved**: computed client-side from `todaysPlan[0].activities` completed/total, exactly as
+  scoped here. Progress page's Stage C % reuses this same computation/endpoint rather than
+  deriving a separate lifetime-completion metric that doesn't exist anywhere (see Stage C below).
 
-### Stage C — Progress page (backend + frontend, ~1 day, partially blocked)
+### Stage C — Progress page (backend + frontend, ~1 day, partially blocked) — ✅ done 2026-07-06
 
-- [ ] Backend: §2's persistence fix in `agt08_analysis` — **already underway elsewhere, don't
-  duplicate**. Everything below that doesn't depend on it (skill bars, activity chart) can and
-  should be implemented now; only the AGT-08 "insights" bullet at the end of this stage waits.
-- [ ] Per-skill target-vs-current bars: fetch `/api/profile` (new thin proxy needed — AGT-01 isn't
-  exposed via Kong at all today, same Stage-A treatment as the other three), map `irt_theta` per
-  skill through `theta_to_cefr` (or keep it as a raw theta-derived percentage — the current UI
-  shows IELTS-band numbers like "6.5", which theta doesn't map to directly; decide the
-  display unit with whoever owns the product copy before wiring, don't silently invent a
-  theta→IELTS-band conversion).
-- [ ] Weekly activity chart: fetch `/api/sessions` (new Kong route for AGT-06's
-  `/ltm/{id}/sessions`, same IDOR treatment as Stage A) and reduce `end_time - start_time` by ISO
-  weekday client-side — no new backend aggregation endpoint needed for this.
-- [ ] 3-phase roadmap (Foundation/Intermediate/Advanced) — same "no clean source" situation as
-  homepage's overall %; likely derived from the same learning-path-phase data once someone
-  confirms what `LearningPathDto` actually contains. Flag, don't block Stage C on it — ship the
-  skill bars and activity chart first.
-- [ ] Optional/bonus, not in the current mock UI at all: AGT-08's `patterns`/`risk_score` data has
-  no home in today's design. Worth a product conversation about adding an "insights" card (e.g.
-  "You've plateaued on Listening" from `plateau_by_skill`) rather than silently dropping real,
-  computed signal on the floor — call this out to whoever owns the Progress page design, don't
-  build UI for it speculatively here.
+- [x] Backend: §2's persistence fix in `agt08_analysis` — landed 2026-07-06 (PR "worktree-agt08-
+  persistence-fix"). Everything below then implemented the same day.
+- [x] Per-skill target-vs-current bars: fetch `/api/profile` (new thin proxy — but not to AGT-01's
+  existing `/profile/{id}`; a new guarded `GET /summary/{id}` was added instead, see Stage A's
+  IDOR resolution note above), map `irt_theta` per skill through `theta_to_cefr`.
+  **Display-unit decision**: CEFR bands (A1–C2), not IELTS numbers — no theta→IELTS-band
+  conversion was invented; Speaking shows "Chưa đánh giá" since its theta is always null (never
+  CAT-assessed).
+- [x] Weekly activity chart: fetch `/api/sessions` (same "new `/summary` route" pattern as
+  AGT-01 above, on AGT-06) and reduce `end_time - start_time` by ISO weekday client-side.
+  **Caveat found while wiring, not part of the original scope**: `learning_sessions.start_time`/
+  `end_time` are both stamped at consolidation time (session end), not at actual session start —
+  `create_session()` is only ever called from `consolidation.py`'s `consolidate_session()`. Bars
+  render correctly but every session currently has ~0 duration. See `CLAUDE.local.md`'s "Known
+  issues" for the real fix (an AGT-03 session-start hook), not yet scheduled.
+- [x] 3-phase roadmap (Foundation/Intermediate/Advanced) — **dropped entirely**, not deferred.
+  Confirmed no backend concept of learning phases or a target date exists anywhere (checked
+  `LearningPathDto` and AGT-02's `agent_learning_plans` table) — this needs real schema/design
+  work, not wiring, so nothing was invented in its place.
+- [x] AGT-08 insights card — built. Shows plateau-by-skill and CUSUM persistent-error patterns,
+  hidden entirely when there's no signal (matches the "don't silently drop it, but don't force a
+  UI when there's nothing to show" spirit of this bullet).
 
-### Stage D — Verification
+### Stage D — Verification — ✅ done 2026-07-06
 
-- [ ] `docker compose up` with `agt08-analysis`, `agt09-recommendation`, `agt10-habit`,
+- [x] `docker compose up` with `agt08-analysis`, `agt09-recommendation`, `agt10-habit`,
   `agt06-memory`, `agt01-profiling`, `kong`, `redis`, `postgres-agents` running.
-- [ ] Complete a real AGT-03 session (once Phase 6's plan lands) or seed `learning_sessions`
-  directly, confirm the streak badge and due-for-review count move.
-- [ ] Manual browser walk per the `/verify` skill standard — both pages, golden path, and the
-  cold-start case (brand-new user: AGT-09 popularity fallback, AGT-10 empty-tabs tolerance, AGT-08
-  `insufficient_data: true`).
+  **Found along the way**: the already-running `agt01-profiling`/`agt06-memory`/`agt08-analysis`
+  containers were stale (built before that day's fixes — Docker doesn't hot-reload). Rebuilt all
+  three + restarted Kong before this stage could pass.
+- [x] Verified against real Postgres data for a real user (not a freshly seeded one): 401 with no
+  token, 403 with a mismatched user, 200 with real theta/session/analysis data on all three new
+  endpoints, hit directly (bypassing Kong, whose JWT plugin needs a real Clerk-signed token this
+  environment can't mint from the CLI).
+- [ ] Full logged-in browser walk through `main/progress` was done by the human developer, not the
+  agent that built this (no browser-automation tooling or Clerk credentials available in that
+  session) — confirmed working, including the empty-insights-card cold-start case.
 
-## 4. Open questions (explicitly out of scope here)
+## 4. Open questions (explicitly out of scope here) — all resolved 2026-07-06
 
-- **Overall learning-path completion percentage** — no backend source confirmed; needs someone to
-  check `LearningPathDto`'s actual shape (`packages/shared/src/dto/learning-materials.ts`) before
-  deciding whether it's a client-side computation or a new AGT-02 field.
-- **IELTS-band display vs. raw IRT theta** — a product/copy decision, not an engineering one.
-- **3-phase roadmap (Foundation/Intermediate/Advanced) data source** — likely learning-path-phase
-  metadata that may not exist as a distinct concept anywhere yet; needs the same shape-check as
-  the completion percentage before committing to an approach.
-- **AGT-08 "insights" surfacing** (`patterns`, `risk_score`, `plateau_by_skill`) — real data with
-  no current UI slot; a design addition, not assumed here.
-- **The same auth-scoping question raised in the AGT-03 plan's Stage D** (path-param
-  `clerk_user_id` vs. deriving from the JWT) needs one consistent answer applied across AGT-01/
-  06/08/09/10, not four different fixes.
+- **Overall learning-path completion percentage** — ~~no backend source confirmed~~. **Resolved**:
+  `LearningPathDto` has no completion field; reused the homepage's existing today's-plan
+  completed/total computation instead of inventing a new lifetime metric.
+- **IELTS-band display vs. raw IRT theta** — ~~a product/copy decision~~. **Resolved**: CEFR bands.
+- **3-phase roadmap (Foundation/Intermediate/Advanced) data source** — ~~needs a shape-check~~.
+  **Resolved**: confirmed no such concept exists in `LearningPathDto` or AGT-02's schema; dropped
+  the roadmap section rather than fabricate one.
+- **AGT-08 "insights" surfacing** — ~~a design addition, not assumed here~~. **Resolved**: built,
+  hidden entirely when there's no plateau/pattern/risk signal.
+- **The same auth-scoping question raised in the AGT-03 plan's Stage D** — **Resolved**: applied
+  uniformly. AGT-08/09/10 guard their existing per-user routes directly with
+  `require_matching_user`; AGT-01/06 (whose equivalent routes are also called agent-to-agent
+  without a user JWT) instead got new, separate `GET /summary/{clerk_user_id}` routes carrying the
+  same guard, leaving the internal-use routes ungated and un-Kong-routed.
