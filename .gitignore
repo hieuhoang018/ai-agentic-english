@@ -6,6 +6,7 @@ build/
 .env
 .env.*
 !.env.example
+gateway/kong/kong.generated.yml
 *.log
 .DS_Store
 .claude/

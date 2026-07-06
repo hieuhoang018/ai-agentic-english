@@ -78,6 +78,21 @@ See `infra/.env.example` for the environment variables each service expects (cur
 docker-compose defaults are dev-only and hardcoded; the `.env.example` also documents
 variables needed by later phases such as Clerk and Novu).
 
+## Prod deploy
+
+```bash
+CLERK_ISSUER=https://your-real-app.clerk.accounts.dev npm run kong:render   # every deploy, not just the first
+docker compose -f infra/docker-compose.yml -f infra/docker-compose.prod.yml up -d --build
+```
+
+The render step swaps Kong's JWT config from the committed dev-Clerk test issuer to your real
+Clerk JWKS — see `gateway/kong/README.md` for detail. Also requires `GROQ_API_KEY`,
+`OPENROUTER_API_KEY`, and `INTERNAL_SECRET` set in the environment (see
+`docker-compose.prod.yml`'s header comment — services refuse to start under `INFERENCE_MODE=live`
+/ `DEPLOY_ENV=production` without a real `INTERNAL_SECRET`). Kong's Admin API is loopback-only in
+both dev and prod; prod additionally makes Kong itself refuse non-loopback admin connections (see
+`docs/kong-gateway-security-review.md`).
+
 ## MinIO-backed audio content (passages, assessment listening)
 
 `docker compose up` gives you an **empty** MinIO — the `passage-audio` and `assessment-audio`
