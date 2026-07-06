@@ -131,3 +131,22 @@ async def run_analysis(clerk_user_id: str) -> dict:
     }
     await _persist_latest(clerk_user_id, result)
     return result
+
+
+async def get_latest_analysis(clerk_user_id: str) -> dict:
+    """
+    Return the last persisted analysis for a user. A missing key means no
+    analysis has ever run for this user yet (e.g. a brand-new user who
+    hasn't completed a session to consolidate) — not an error.
+    """
+    r = await get_redis()
+    cached = await r.get(_analysis_key(clerk_user_id))
+    if cached:
+        return json.loads(cached)
+    return {
+        "clerk_user_id": clerk_user_id,
+        "patterns": [],
+        "plateau_by_skill": {},
+        "risk_score": None,
+        "insufficient_data": True,
+    }

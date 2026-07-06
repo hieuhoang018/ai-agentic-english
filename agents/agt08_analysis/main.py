@@ -1,8 +1,9 @@
 import asyncio
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
-from agents.agt08_analysis.service import run_analysis
+from fastapi import Depends, FastAPI
+from agents.agt08_analysis.service import run_analysis, get_latest_analysis
 from agents.agt08_analysis.consumers import start_consumers
+from agents.shared.auth import require_matching_user
 
 
 @asynccontextmanager
@@ -40,20 +41,12 @@ async def run(clerk_user_id: str):
 
 
 @app.get("/analysis/{clerk_user_id}/latest")
-async def latest(clerk_user_id: str):
+async def latest(clerk_user_id: str, _: str = Depends(require_matching_user)):
     """
-    Return the latest analysis results for a user.
-
-    Not yet implemented: there is no persistence layer for analysis results,
-    so this always returns an empty placeholder rather than real data. Use
-    POST /analysis/{clerk_user_id}/run to get a real, freshly computed
-    result. TODO Phase 8+: read from cached analysis results in LTM.
+    Return the latest persisted analysis for a user, written by
+    run_analysis() after every AGT-06 consolidation. A missing key means no
+    analysis has run for this user yet -> insufficient_data: true, not an
+    error. Use POST /analysis/{clerk_user_id}/run only for internal,
+    Kafka-triggered recomputation — it is not Kong-routed.
     """
-    return {
-        "clerk_user_id": clerk_user_id,
-        "patterns": [],
-        "velocity": {},
-        "forecast": {},
-        "insufficient_data": True,
-        "not_implemented": True,
-    }
+    return await get_latest_analysis(clerk_user_id)

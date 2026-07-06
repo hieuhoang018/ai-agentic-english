@@ -305,3 +305,32 @@ async def test_run_analysis_does_not_raise_when_redis_persist_fails(monkeypatch,
 
     assert "error" not in result
     assert "risk_score" in result
+
+
+async def test_get_latest_analysis_returns_insufficient_data_when_no_cache(fake_redis):
+    from agents.agt08_analysis.service import get_latest_analysis
+    result = await get_latest_analysis("user-never-analyzed")
+
+    assert result == {
+        "clerk_user_id": "user-never-analyzed",
+        "patterns": [],
+        "plateau_by_skill": {},
+        "risk_score": None,
+        "insufficient_data": True,
+    }
+
+
+async def test_get_latest_analysis_returns_cached_result(fake_redis):
+    cached = {
+        "clerk_user_id": "user-cached",
+        "patterns": [{"type": "persistent_weakness"}],
+        "plateau_by_skill": {"READING": {"plateau": True, "insufficient_data": False, "changepoints": []}},
+        "risk_score": 0.42,
+        "insufficient_data": False,
+    }
+    await fake_redis.set("agt08:latest:user-cached", json.dumps(cached))
+
+    from agents.agt08_analysis.service import get_latest_analysis
+    result = await get_latest_analysis("user-cached")
+
+    assert result == cached
