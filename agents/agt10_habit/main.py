@@ -49,9 +49,7 @@ async def exercise_library(
 @app.post("/streak/{clerk_user_id}/record")
 async def record_streak(clerk_user_id: str, body: RecordSessionRequest):
     """Record a completed qualifying session and update streak."""
-    return await record_session_complete(
-        clerk_user_id, body.current_streak, body.session_duration_minutes
-    )
+    return await record_session_complete(clerk_user_id, body.session_id)
 
 
 @app.get("/streak/{clerk_user_id}")
