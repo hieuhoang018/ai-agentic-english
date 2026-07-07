@@ -14,6 +14,7 @@ from agents.shared.config import settings as _settings
 
 AGT06_VOCAB_URL = f"{_settings.AGT06_BASE_URL}/ltm/user_test/vocabulary"
 AGT06_ERRORS_URL = f"{_settings.AGT06_BASE_URL}/ltm/user_test/errors"
+LMS_VOCAB_URL = f"{_settings.LMS_BASE_URL}/internal/vocab"
 
 VOCAB_RESPONSE = [
     {
@@ -308,6 +309,11 @@ async def test_build_daily_test_returns_empty_on_agt06_failure():
 @respx.mock
 async def test_pick_vocab_of_the_day_returns_least_encountered():
     respx.get(AGT06_VOCAB_URL + "?limit=50").mock(return_value=httpx.Response(200, json=VOCAB_RESPONSE))
+    respx.get(LMS_VOCAB_URL, params={"lemma": "ephemeral", "limit": "1"}).mock(
+        return_value=httpx.Response(
+            200, json=[{"senses": [{"definition": "lasting for a very short time"}]}]
+        )
+    )
 
     result = await service.pick_vocab_of_the_day("user_test")
 
@@ -315,7 +321,7 @@ async def test_pick_vocab_of_the_day_returns_least_encountered():
     # v1 has encounter_count=1, v2 has 5 → v1 is least familiar
     assert result["vocabItemId"] == "v1"
     assert result["term"] == "ephemeral"
-    assert result["meaning"] == ""
+    assert result["meaning"] == "lasting for a very short time"
     assert result["exampleSentence"] == "Life is ephemeral."
 
 
@@ -344,7 +350,23 @@ async def test_pick_vocab_of_the_day_null_example_sentence_when_no_context():
         "context_sentences": [],
     }]
     respx.get(AGT06_VOCAB_URL + "?limit=50").mock(return_value=httpx.Response(200, json=no_context))
+    respx.get(LMS_VOCAB_URL, params={"lemma": "numinous", "limit": "1"}).mock(
+        return_value=httpx.Response(200, json=[])
+    )
 
     result = await service.pick_vocab_of_the_day("user_test")
     assert result is not None
     assert result["exampleSentence"] is None
+    assert result["meaning"] == ""
+
+
+@respx.mock
+async def test_pick_vocab_of_the_day_meaning_empty_on_lms_failure():
+    respx.get(AGT06_VOCAB_URL + "?limit=50").mock(return_value=httpx.Response(200, json=VOCAB_RESPONSE))
+    respx.get(LMS_VOCAB_URL, params={"lemma": "ephemeral", "limit": "1"}).mock(
+        return_value=httpx.Response(500)
+    )
+
+    result = await service.pick_vocab_of_the_day("user_test")
+    assert result is not None
+    assert result["meaning"] == ""

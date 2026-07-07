@@ -283,6 +283,19 @@ describe('internal routes', () => {
         expect.objectContaining({ where: { cefrLevel: 'B1' } }),
       );
     });
+
+    it('filters by lemma query param case-insensitively', async () => {
+      prisma.vocabEntry.findMany.mockResolvedValue([vocabRow]);
+
+      const res = await request(createApp(prisma))
+        .get('/internal/vocab?lemma=Run')
+        .set(INTERNAL_HEADER, INTERNAL_SECRET);
+
+      expect(res.status).toBe(200);
+      expect(prisma.vocabEntry.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { lemma: { equals: 'Run', mode: 'insensitive' } } }),
+      );
+    });
   });
 
   describe('GET /internal/grammar', () => {

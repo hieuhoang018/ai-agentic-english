@@ -33,6 +33,7 @@ class AppendVocabRequest(BaseModel):
 class ConsolidateRequest(BaseModel):
     clerk_user_id: str
     skill_focus: str = "SPEAKING"
+    start_time: str | None = None
 
 
 class ReviewCenterQuery(BaseModel):

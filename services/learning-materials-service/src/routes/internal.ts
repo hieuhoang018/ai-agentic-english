@@ -130,11 +130,16 @@ export function createInternalRouter(prisma: AppPrismaClient): Router {
   router.get(
     '/vocab',
     asyncHandler(async (req, res) => {
-      const { cefrLevel, domainTag } = req.query as { cefrLevel?: string; domainTag?: string };
+      const { cefrLevel, domainTag, lemma } = req.query as {
+        cefrLevel?: string;
+        domainTag?: string;
+        lemma?: string;
+      };
       const entries = await prisma.vocabEntry.findMany({
         where: {
           ...(cefrLevel ? { cefrLevel } : {}),
           ...(domainTag ? { domainTag } : {}),
+          ...(lemma ? { lemma: { equals: lemma, mode: 'insensitive' } } : {}),
         },
         include: { senses: true, pronunciations: true },
         take: parseLimit(req.query.limit),

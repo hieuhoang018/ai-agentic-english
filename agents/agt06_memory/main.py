@@ -166,7 +166,7 @@ async def consolidate(session_id: str, body: ConsolidateRequest):
     Returns {consolidated: true} if done now, {consolidated: false} if already done.
     """
     result = await consolidation.consolidate_session(
-        session_id, body.clerk_user_id, body.skill_focus
+        session_id, body.clerk_user_id, body.skill_focus, start_time=body.start_time
     )
     return {"consolidated": result, "session_id": session_id}
 

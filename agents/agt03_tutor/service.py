@@ -453,7 +453,11 @@ async def end_session(session_id: str, clerk_user_id: str, skill_focus: str) -> 
         async with httpx.AsyncClient(timeout=10.0) as client:
             resp = await client.post(
                 f"{AGT06_BASE_URL}/sessions/{session_id}/consolidate",
-                json={"clerk_user_id": clerk_user_id, "skill_focus": skill_focus.upper()},
+                json={
+                    "clerk_user_id": clerk_user_id,
+                    "skill_focus": skill_focus.upper(),
+                    "start_time": start_time_iso,
+                },
             )
             resp.raise_for_status()
             consolidated = resp.json().get("consolidated", False)
