@@ -439,11 +439,14 @@ services:
       INFERENCE_MODE: mock
       INTERNAL_SECRET: dev-internal-secret
       AGT06_BASE_URL: http://agt06-memory:8106
+      LMS_BASE_URL: http://learning-materials-service:4002
       OLLAMA_BASE_URL: http://ollama:11434
     depends_on:
       postgres-agents:
         condition: service_healthy
       agt06-memory:
+        condition: service_started
+      learning-materials-service:
         condition: service_started
       ollama:
         condition: service_started

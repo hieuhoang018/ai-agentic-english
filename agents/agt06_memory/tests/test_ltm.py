@@ -38,6 +38,17 @@ async def test_session_create_close_idempotent():
     assert second_close is False
 
 
+async def test_session_create_honors_explicit_start_time():
+    clerk_id = f"test-user-{uuid.uuid4()}"
+    session_id = str(uuid.uuid4())
+    explicit_start = "2020-01-01T00:00:00+00:00"
+
+    await ltm.create_profile(clerk_id)
+    created = await ltm.create_session(session_id, clerk_id, "SPEAKING", start_time=explicit_start)
+
+    assert created["start_time"].isoformat() == "2020-01-01T00:00:00+00:00"
+
+
 async def test_insert_error_events_and_get_errors():
     clerk_id = f"test-user-{uuid.uuid4()}"
     session_id = str(uuid.uuid4())

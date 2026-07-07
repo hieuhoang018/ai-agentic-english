@@ -82,15 +82,25 @@ async def update_profile(clerk_user_id: str, fields: dict) -> dict | None:
 
 # ── learning_sessions ────────────────────────────────────────────────────────
 
-async def create_session(session_id: str, clerk_user_id: str, skill_focus: str) -> dict:
+async def create_session(
+    session_id: str, clerk_user_id: str, skill_focus: str, start_time: str | None = None
+) -> dict:
+    start_dt = None
+    if start_time is not None:
+        try:
+            start_dt = datetime.fromisoformat(start_time)
+            if start_dt.tzinfo is None:
+                start_dt = start_dt.replace(tzinfo=timezone.utc)  # treat naive as UTC rather than crashing
+        except ValueError:
+            start_dt = None  # malformed input — fall back to NOW() rather than failing consolidation
     row = await fetchrow(
         """
-        INSERT INTO learning_sessions (session_id, clerk_user_id, skill_focus)
-        VALUES ($1, $2, $3)
+        INSERT INTO learning_sessions (session_id, clerk_user_id, skill_focus, start_time)
+        VALUES ($1, $2, $3, COALESCE($4, NOW()))
         ON CONFLICT (session_id) DO NOTHING
         RETURNING *
         """,
-        session_id, clerk_user_id, skill_focus,
+        session_id, clerk_user_id, skill_focus, start_dt,
     )
     return dict(row) if row else {}
 
