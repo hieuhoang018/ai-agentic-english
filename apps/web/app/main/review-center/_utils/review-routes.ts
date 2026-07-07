@@ -1,5 +1,9 @@
 export const reviewCenterPath = '/main/review-center'
 
+export function duePath() {
+  return `${reviewCenterPath}/due`
+}
+
 export function flashcardsPath() {
   return `${reviewCenterPath}/flashcards`
 }

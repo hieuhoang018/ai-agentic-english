@@ -82,6 +82,23 @@ export type SpeakingSessionTicketResponse = {
   expires_in_seconds: number;
 };
 
+export type DueReviewItem = {
+  vocab_id: string;
+  word: string;
+  context_sentences: string[];
+  encounter_count: number;
+  sm_stability: number;
+  retrievability: number;
+  days_since: number;
+};
+
+export type RateReviewResponse = {
+  item_id: string;
+  quality: number;
+  new_stability: number;
+  next_review: string;
+};
+
 export type RecommendationItem = {
   id: string;
   title: string;
