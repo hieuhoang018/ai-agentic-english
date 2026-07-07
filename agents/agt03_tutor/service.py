@@ -460,9 +460,14 @@ async def end_session(session_id: str, clerk_user_id: str, skill_focus: str) -> 
     except Exception as exc:
         logger.warning("end_session: AGT-06 consolidate failed for %s: %s", session_id, exc)
 
-    # Only emit if this invocation actually owned the session (meta was present).
-    # Prevents a double-call from publishing a second event with durationMinutes=0.
-    if session_data is not None:
+    # Only emit if this invocation actually owned the session (meta was present)
+    # AND at least one turn happened. Prevents a double-call from publishing a
+    # second event with durationMinutes=0, and prevents a session that was
+    # opened and immediately abandoned (e.g. a page reload tears down the
+    # WebSocket before any "turn" message, hitting this same code path via the
+    # websocket_handler.py `finally` cleanup) from counting as a completed
+    # session downstream (AGT-10's streak, AGT-01's behavioral EWMA).
+    if session_data is not None and turns_completed > 0:
         await emit(
             "session.end",
             {

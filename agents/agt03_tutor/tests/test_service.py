@@ -233,6 +233,41 @@ async def test_end_session_consolidates_and_emits_event(monkeypatch):
 
 
 @respx.mock
+async def test_end_session_with_zero_turns_does_not_emit_session_end(monkeypatch):
+    """Opening the Tutor page (which auto-starts a session) and reloading it
+    before sending a single turn must NOT produce a session.end event —
+    otherwise every reload silently counts as a completed session downstream
+    (AGT-10's streak, AGT-01's behavioral_profile EWMA)."""
+    from datetime import datetime, timezone, timedelta
+    past_start = (datetime.now(timezone.utc) - timedelta(seconds=5)).isoformat()
+    respx.get(f"{service.AGT06_BASE_URL}/sessions/abc/meta").mock(
+        return_value=httpx.Response(200, json={
+            "start_time": past_start, "clerk_user_id": "user1",
+            "skill_focus": "SPEAKING", "profile": {}, "profile_loaded": True,
+        })
+    )
+    respx.get(f"{service.AGT06_BASE_URL}/sessions/abc/meta/turn-count").mock(
+        return_value=httpx.Response(200, json={"turn_count": 0})
+    )
+    respx.delete(f"{service.AGT06_BASE_URL}/sessions/abc/meta").mock(return_value=httpx.Response(204))
+    respx.post(f"{service.AGT06_BASE_URL}/sessions/abc/consolidate").mock(
+        return_value=httpx.Response(200, json={"consolidated": True, "session_id": "abc"})
+    )
+
+    emitted = []
+
+    async def fake_emit(topic, payload, agent_id, key=None):
+        emitted.append((topic, payload, agent_id))
+
+    monkeypatch.setattr(service, "emit", fake_emit)
+
+    result = await service.end_session("abc", "user1", "SPEAKING")
+
+    assert result["turns_completed"] == 0
+    assert emitted == [], "zero-turn session must not emit session.end"
+
+
+@respx.mock
 async def test_end_session_handles_agt06_unreachable(monkeypatch):
     from datetime import datetime, timezone, timedelta
     past_start = (datetime.now(timezone.utc) - timedelta(seconds=30)).isoformat()

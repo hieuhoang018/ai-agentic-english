@@ -516,13 +516,21 @@ Write-Host "today:$($lib.todaysPlan.Count) review:$($lib.dueForReview.Count) rec
 # 1b. CRITICAL — partial failure resilience
 # Stop AGT-07. GET library. PASS: dueForReview=[] but other 3 tabs still return 200
 
-# 2. Streak increments
+# 2. Streak increments (first qualifying session of the day -> streak 1;
+# run again the same day and confirm it stays at 1, not 2)
 $r = (Invoke-WebRequest -Uri "http://localhost:8110/streak/chk-u10/record" -Method POST `
   -ContentType "application/json" `
-  -Body '{"clerk_user_id":"chk-u10","current_streak":6,"session_duration_minutes":20}' `
+  -Body '{"clerk_user_id":"chk-u10","session_id":"chk-u10-verify-1"}' `
   -UseBasicParsing).Content | ConvertFrom-Json
 Write-Host "New streak: $($r.streak)"
-# PASS: 7 (and Novu milestone-celebration triggered in logs)
+# PASS: 1
+
+$r2 = (Invoke-WebRequest -Uri "http://localhost:8110/streak/chk-u10/record" -Method POST `
+  -ContentType "application/json" `
+  -Body '{"clerk_user_id":"chk-u10","session_id":"chk-u10-verify-2"}' `
+  -UseBasicParsing).Content | ConvertFrom-Json
+Write-Host "Same-day streak (must be unchanged): $($r2.streak)"
+# PASS: 1 (same day as the first call must not increment further)
 # Note: absence-based reminders (daily-reminder, weekly-progress-summary, etc.)
 # are NOT computed by AGT-10 — that logic lives in notification-service's
 # dailyReminder.ts scheduler, which pulls context from AGT-07 directly.
