@@ -76,6 +76,20 @@ def _parse_count(raw: bytes | None) -> int:
         return 0
 
 
+def _parse_last_active(raw: bytes | None) -> date | None:
+    """Best-effort parse of the stored last_active_date. Falls back to None
+    (treated as 'no prior record') if the field is missing or somehow
+    corrupted, rather than letting a ValueError/AttributeError propagate out
+    of a Kafka consumer."""
+    if raw is None:
+        return None
+    try:
+        return date.fromisoformat(raw.decode())
+    except (TypeError, ValueError):
+        logger.warning("streak last_active_date field is not a valid ISO date: %r", raw)
+        return None
+
+
 async def get_streak(clerk_user_id: str) -> int:
     """Return the current persisted streak count for a user (0 if never set)."""
     r = await get_redis()
@@ -111,8 +125,7 @@ async def record_session_complete(clerk_user_id: str, session_id: str) -> dict:
     today = _today()
     stored = await r.hgetall(key)
     count = _parse_count(stored.get(b"count"))
-    raw_last_active = stored.get(b"last_active_date")
-    last_active = date.fromisoformat(raw_last_active.decode()) if raw_last_active else None
+    last_active = _parse_last_active(stored.get(b"last_active_date"))
 
     if last_active == today:
         new_streak = count

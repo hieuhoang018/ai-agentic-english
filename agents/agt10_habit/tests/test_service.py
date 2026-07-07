@@ -129,6 +129,32 @@ async def test_record_session_complete_gap_of_two_days_resets_to_1(fake_redis, p
     assert result == {"streak": 1, "session_recorded": True}
 
 
+async def test_record_session_complete_recovers_from_corrupt_count_field(fake_redis, patch_emit_ts_event, monkeypatch):
+    """A corrupted (non-numeric) count field must not crash the consumer —
+    it should be treated like 'no prior record' and reset to 1."""
+    from agents.agt10_habit.service import _streak_key, record_session_complete
+
+    await fake_redis.hset(_streak_key("user_abc"), mapping={"count": "not-a-number", "last_active_date": "2026-07-06"})
+    set_today(monkeypatch, "2026-07-07")
+
+    result = await record_session_complete("user_abc", "sess-1")
+
+    assert result == {"streak": 1, "session_recorded": True}
+
+
+async def test_record_session_complete_recovers_from_corrupt_last_active_date_field(fake_redis, patch_emit_ts_event, monkeypatch):
+    """A corrupted (non-ISO-date) last_active_date field must not crash the
+    consumer — it should be treated like 'no prior record' and reset to 1."""
+    from agents.agt10_habit.service import _streak_key, record_session_complete
+
+    await fake_redis.hset(_streak_key("user_abc"), mapping={"count": 6, "last_active_date": "not-a-date"})
+    set_today(monkeypatch, "2026-07-07")
+
+    result = await record_session_complete("user_abc", "sess-1")
+
+    assert result == {"streak": 1, "session_recorded": True}
+
+
 async def test_record_session_complete_duplicate_session_id_is_not_double_counted(fake_redis, patch_emit_ts_event, monkeypatch):
     """Kafka delivery is at-least-once; a redelivered session.end for the
     same sessionId must not increment the streak a second time."""
