@@ -9,7 +9,7 @@ import { isApiError } from '@/lib/api/client'
 import type { AssessmentQuestionDto, AssessmentResultDto, CefrLevel, Skill } from '@/lib/api/types'
 
 import { placementSkillIds, type PlacementSkillId, type SkillId } from '../_types/onboarding'
-import { assessmentLevelsToScore, normalizeAssessmentLevels } from '../_utils/onboarding-request'
+import { applyA1FallbackToTestedSkills, assessmentLevelsToScore, normalizeAssessmentLevels } from '../_utils/onboarding-request'
 import { onboardingRoutes } from '../_utils/onboarding-routes'
 import { useOnboarding } from './OnboardingProvider'
 
@@ -215,7 +215,9 @@ export default function AssessmentQuestion() {
         }),
       })
       const result = await parseJsonResponse<AssessmentResultDto>(response)
-      const assessmentLevels = normalizeAssessmentLevels(result.levels as Partial<Record<SkillId, CefrLevel>>)
+      const scoredAssessmentLevels = normalizeAssessmentLevels(result.levels as Partial<Record<SkillId, CefrLevel>>)
+      const testedSkills = placementSkillIds.filter((skill) => questions.some((assessmentQuestion) => assessmentQuestion.skill === skill))
+      const assessmentLevels = applyA1FallbackToTestedSkills(scoredAssessmentLevels, testedSkills)
 
       updateProfile({
         assessmentMethod: 'test',

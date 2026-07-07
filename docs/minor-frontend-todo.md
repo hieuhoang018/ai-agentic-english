@@ -12,6 +12,9 @@
 4. Sign out button (done)
   - Add sign out button to the user profile page using Clerk's SignOutButton component. Try embed the SignOutButton component into the UserProfile component, if that is impossible, then put the SignOutButton component below the UserProfile component. Make the changes frontend-only.
 
-5. 
+5. onboarding assessment default level is A1 (done)
+  - Change the assessment logic of the testing part in the onboarding flow so that if the user have not passed the A1 level then the default level is A1. Try making the changes frontend-only.
 
 6. onboarding assessment UX fix
+
+7. Stream AI response text in speaking practice
