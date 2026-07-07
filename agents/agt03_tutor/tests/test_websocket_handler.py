@@ -34,29 +34,48 @@ def test_websocket_start_message_starts_session(monkeypatch):
     fake_start.assert_awaited_once_with("user1", "SPEAKING", "ws-sess-1")
 
 
-def test_websocket_turn_message_returns_turn_result(monkeypatch):
+def test_websocket_turn_message_returns_turn_result_then_turn_feedback(monkeypatch):
+    """The reply must arrive in a fast turn_result frame; grammar feedback
+    and translation must arrive afterward in a separate turn_feedback frame
+    carrying the same client_turn_id — this is the fix for the reply being
+    held back behind AGT-04/AGT-11."""
     fake_start = AsyncMock(return_value={
         "session_id": "ws-sess-2", "clerk_user_id": "user1", "skill_focus": "SPEAKING",
         "opening_message": "Hi!", "profile_loaded": True, "plan_loaded": False,
     })
-    fake_pipeline = AsyncMock(return_value={
+    fake_reply = AsyncMock(return_value={
         "session_id": "ws-sess-2", "assistant_message": "Tell me more.",
-        "transcript_text": "I work in finance.", "grammar_feedback": None,
-        "translated_message": None, "translation_zone": "en_only",
+        "transcript_text": "I work in finance.", "mock_feedback": None, "language": "en",
+        "clerk_user_id": "user1", "skill_focus": "SPEAKING",
+    })
+    fake_feedback = AsyncMock(return_value={
+        "grammar_feedback": None, "translated_message": None, "translation_zone": "en_only",
     })
     monkeypatch.setattr(websocket_handler, "start_session", fake_start)
-    monkeypatch.setattr(websocket_handler, "run_turn_pipeline", fake_pipeline)
+    monkeypatch.setattr(websocket_handler, "run_turn_pipeline_reply", fake_reply)
+    monkeypatch.setattr(websocket_handler, "run_turn_pipeline_feedback", fake_feedback)
 
     client = TestClient(app)
     with client.websocket_connect("/ws/sessions/ws-sess-2") as ws:
         ws.send_json({"type": "start", "clerk_user_id": "user1", "skill_focus": "SPEAKING"})
         ws.receive_json()
-        ws.send_json({"type": "turn", "user_message": "I work in finance."})
-        response = ws.receive_json()
+        ws.send_json({"type": "turn", "client_turn_id": "turn-1", "user_message": "I work in finance."})
+        turn_result = ws.receive_json()
+        turn_feedback = ws.receive_json()
 
-    assert response["type"] == "turn_result"
-    assert response["assistant_message"] == "Tell me more."
-    fake_pipeline.assert_awaited_once_with("ws-sess-2", "I work in finance.", None)
+    assert turn_result["type"] == "turn_result"
+    assert turn_result["client_turn_id"] == "turn-1"
+    assert turn_result["assistant_message"] == "Tell me more."
+    assert "grammar_feedback" not in turn_result
+
+    assert turn_feedback["type"] == "turn_feedback"
+    assert turn_feedback["client_turn_id"] == "turn-1"
+    assert turn_feedback["translation_zone"] == "en_only"
+
+    fake_reply.assert_awaited_once_with("ws-sess-2", "I work in finance.", None)
+    fake_feedback.assert_awaited_once_with(
+        "ws-sess-2", "I work in finance.", "Tell me more.", "user1", "SPEAKING",
+    )
 
 
 def test_websocket_end_message_ends_session_and_closes(monkeypatch):
@@ -125,48 +144,54 @@ def test_websocket_invalid_message_type_returns_error_not_crash(monkeypatch):
 
 
 def test_websocket_turn_before_start_returns_error(monkeypatch):
-    """A turn message sent before start must not call process_turn with an
-    unset clerk_user_id/skill_focus — it must return an error instead."""
-    fake_pipeline = AsyncMock()
-    monkeypatch.setattr(websocket_handler, "run_turn_pipeline", fake_pipeline)
+    """A turn message sent before start must not call the reply pipeline
+    with an unset clerk_user_id/skill_focus — it must return an error
+    instead."""
+    fake_reply = AsyncMock()
+    monkeypatch.setattr(websocket_handler, "run_turn_pipeline_reply", fake_reply)
 
     client = TestClient(app)
     with client.websocket_connect("/ws/sessions/ws-sess-6") as ws:
-        ws.send_json({"type": "turn", "user_message": "hello"})
+        ws.send_json({"type": "turn", "client_turn_id": "turn-1", "user_message": "hello"})
         response = ws.receive_json()
 
     assert response["type"] == "error"
     assert "start" in response["detail"].lower()
-    fake_pipeline.assert_not_awaited()
+    fake_reply.assert_not_awaited()
 
 
 def test_websocket_turn_message_with_audio_base64_invokes_pipeline(monkeypatch):
     """A turn sent with audio_base64 (no user_message) must reach
-    run_turn_pipeline with the audio payload — mirrors
+    run_turn_pipeline_reply with the audio payload — mirrors
     test_process_turn_with_audio_uses_asr in test_service.py, but at the
     WebSocket layer."""
     fake_start = AsyncMock(return_value={
         "session_id": "ws-sess-7", "clerk_user_id": "user1", "skill_focus": "SPEAKING",
         "opening_message": "Hi!", "profile_loaded": True, "plan_loaded": False,
     })
-    fake_pipeline = AsyncMock(return_value={
+    fake_reply = AsyncMock(return_value={
         "session_id": "ws-sess-7", "assistant_message": "Got your audio.",
-        "transcript_text": "Mock transcription of user speech.", "grammar_feedback": None,
-        "translated_message": None, "translation_zone": "en_only",
+        "transcript_text": "Mock transcription of user speech.", "mock_feedback": None, "language": "en",
+        "clerk_user_id": "user1", "skill_focus": "SPEAKING",
+    })
+    fake_feedback = AsyncMock(return_value={
+        "grammar_feedback": None, "translated_message": None, "translation_zone": "en_only",
     })
     monkeypatch.setattr(websocket_handler, "start_session", fake_start)
-    monkeypatch.setattr(websocket_handler, "run_turn_pipeline", fake_pipeline)
+    monkeypatch.setattr(websocket_handler, "run_turn_pipeline_reply", fake_reply)
+    monkeypatch.setattr(websocket_handler, "run_turn_pipeline_feedback", fake_feedback)
 
     client = TestClient(app)
     with client.websocket_connect("/ws/sessions/ws-sess-7") as ws:
         ws.send_json({"type": "start", "clerk_user_id": "user1", "skill_focus": "SPEAKING"})
         ws.receive_json()
-        ws.send_json({"type": "turn", "audio_base64": "ZmFrZS1hdWRpby1ieXRlcw=="})
-        response = ws.receive_json()
+        ws.send_json({"type": "turn", "client_turn_id": "turn-1", "audio_base64": "ZmFrZS1hdWRpby1ieXRlcw=="})
+        turn_result = ws.receive_json()
+        ws.receive_json()  # turn_feedback
 
-    assert response["type"] == "turn_result"
-    assert response["assistant_message"] == "Got your audio."
-    fake_pipeline.assert_awaited_once_with("ws-sess-7", None, "ZmFrZS1hdWRpby1ieXRlcw==")
+    assert turn_result["type"] == "turn_result"
+    assert turn_result["assistant_message"] == "Got your audio."
+    fake_reply.assert_awaited_once_with("ws-sess-7", None, "ZmFrZS1hdWRpby1ieXRlcw==")
 
 
 def test_websocket_malformed_json_returns_error_not_crash(monkeypatch):

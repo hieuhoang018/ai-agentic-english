@@ -194,15 +194,30 @@ export function useSpeakingRealtimeSession(): UseSpeakingRealtimeSessionResult {
             ...currentMessage,
             content: message.transcript_text ?? currentMessage.content,
             pendingTranscript: false,
-            grammarFeedback: message.grammar_feedback,
             mockFeedback: message.mock_feedback,
-            translationZone: message.translation_zone,
           }
         }),
       )
       setPendingTurnMessageId(null)
     },
     [setPendingTurnMessageId],
+  )
+
+  const applyTurnFeedback = useCallback(
+    (message: Extract<SpeakingRealtimeServerMessage, { type: 'turn_feedback' }>) => {
+      setMessages((currentMessages) =>
+        currentMessages.map((currentMessage) => {
+          if (currentMessage.id !== message.client_turn_id) return currentMessage
+
+          return {
+            ...currentMessage,
+            grammarFeedback: message.grammar_feedback,
+            translationZone: message.translation_zone,
+          }
+        }),
+      )
+    },
+    [],
   )
 
   const sendText = useCallback(
@@ -223,7 +238,7 @@ export function useSpeakingRealtimeSession(): UseSpeakingRealtimeSessionResult {
       setPendingTurnMessageId(messageId)
       setStatus('sending')
 
-      if (sendSocketMessage(createSpeakingTextTurnMessage(trimmedText))) {
+      if (sendSocketMessage(createSpeakingTextTurnMessage(trimmedText, messageId))) {
         setStatus('receiving')
         return
       }
@@ -251,7 +266,7 @@ export function useSpeakingRealtimeSession(): UseSpeakingRealtimeSessionResult {
       setPendingTurnMessageId(messageId)
       setStatus('sending')
 
-      if (sendSocketMessage(createSpeakingAudioTurnMessage(audioBase64))) {
+      if (sendSocketMessage(createSpeakingAudioTurnMessage(audioBase64, messageId))) {
         setStatus('receiving')
         return
       }
@@ -438,6 +453,11 @@ export function useSpeakingRealtimeSession(): UseSpeakingRealtimeSessionResult {
           return
         }
 
+        if (serverMessage.type === 'turn_feedback') {
+          applyTurnFeedback(serverMessage)
+          return
+        }
+
         if (serverMessage.type === 'session_ended') {
           startedRef.current = false
           closeRequestedRef.current = true
@@ -495,6 +515,7 @@ export function useSpeakingRealtimeSession(): UseSpeakingRealtimeSessionResult {
   }, [
     abortRecording,
     appendAssistantMessage,
+    applyTurnFeedback,
     cancelSpeech,
     isLoaded,
     sendSocketMessage,

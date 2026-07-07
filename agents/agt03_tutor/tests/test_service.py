@@ -667,3 +667,59 @@ def test_turn_request_clerk_user_id_still_accepted_when_provided():
     from agents.agt03_tutor.models import TurnRequest
     req = TurnRequest(session_id="sess-abc", clerk_user_id="user-1", user_message="hi")
     assert req.clerk_user_id == "user-1"
+
+
+# ---------------------------------------------------------------------------
+# process_turn_reply / process_turn_feedback split
+# ---------------------------------------------------------------------------
+
+@respx.mock
+async def test_process_turn_reply_does_not_call_agt04_or_agt11():
+    """process_turn_reply is the fast path — it must return the assistant's
+    reply without ever touching AGT-04 or AGT-11. No respx routes are
+    registered for either base URL, so this test fails loudly (a respx
+    AllMockedAssertionError) if process_turn_reply calls them."""
+    respx.post(f"{service.AGT06_BASE_URL}/sessions/abc/context").mock(return_value=httpx.Response(204))
+    respx.get(f"{service.AGT06_BASE_URL}/sessions/abc/context").mock(
+        return_value=httpx.Response(200, json=[])
+    )
+    _mock_session_meta(respx, "abc", clerk_user_id="user_reply", skill_focus="SPEAKING")
+
+    result = await service.process_turn_reply("abc", "I go there yesterday.", None)
+
+    assert result["assistant_message"].startswith("[MOCK LLM AGT03]")
+    assert result["transcript_text"] == "I go there yesterday."
+    assert result["clerk_user_id"] == "user_reply"
+    assert result["skill_focus"] == "SPEAKING"
+    assert "grammar_feedback" not in result
+    assert "translated_message" not in result
+
+
+@respx.mock
+async def test_process_turn_feedback_calls_agt04_and_agt11():
+    """process_turn_feedback must call AGT-04 and AGT-11 concurrently and
+    return their combined results, independent of process_turn_reply."""
+    agt04_response = {
+        "grammar_errors": [{"errorType": "verb_tense", "severity": 2}],
+        "fluency": {"wpm": 120},
+        "throttled": False,
+        "total_errors_detected": 1,
+        "surfaced_error_count": 1,
+    }
+    respx.post(f"{service.AGT04_BASE_URL}/feedback/speaking").mock(
+        return_value=httpx.Response(200, json=agt04_response)
+    )
+    respx.post(f"{service.AGT11_BASE_URL}/translate").mock(
+        return_value=httpx.Response(200, json={
+            "original": "test", "translated": "test", "zone": "en_only",
+            "zone_label": "English only (above B2)", "theta_r": 2.0, "cached": False,
+        })
+    )
+
+    result = await service.process_turn_feedback(
+        "abc", "I go there yesterday.", "Tell me more.", "user_fb", "SPEAKING",
+    )
+
+    assert result["grammar_feedback"]["total_errors_detected"] == 1
+    assert result["translated_message"] is None
+    assert result["translation_zone"] == "en_only"
