@@ -21,6 +21,7 @@ export type SpeakingStartClientMessage = {
 
 export type SpeakingTurnClientMessage = {
   type: 'turn'
+  client_turn_id: string
   user_message?: string | null
   audio_base64?: string | null
 }
@@ -46,10 +47,16 @@ export type SpeakingSessionStartedServerMessage = {
 
 export type SpeakingTurnResultServerMessage = {
   type: 'turn_result'
+  client_turn_id: string
   assistant_message: string
   transcript_text: string | null
-  grammar_feedback: SpeakingGrammarFeedback
   mock_feedback: string | null
+}
+
+export type SpeakingTurnFeedbackServerMessage = {
+  type: 'turn_feedback'
+  client_turn_id: string
+  grammar_feedback: SpeakingGrammarFeedback
   translation_zone: string | null
 }
 
@@ -65,6 +72,7 @@ export type SpeakingErrorServerMessage = {
 export type SpeakingRealtimeServerMessage =
   | SpeakingSessionStartedServerMessage
   | SpeakingTurnResultServerMessage
+  | SpeakingTurnFeedbackServerMessage
   | SpeakingSessionEndedServerMessage
   | SpeakingErrorServerMessage
 
@@ -90,16 +98,18 @@ export function createSpeakingStartMessage(clerkUserId: string): SpeakingStartCl
   }
 }
 
-export function createSpeakingTextTurnMessage(userMessage: string): SpeakingTurnClientMessage {
+export function createSpeakingTextTurnMessage(userMessage: string, clientTurnId: string): SpeakingTurnClientMessage {
   return {
     type: 'turn',
+    client_turn_id: clientTurnId,
     user_message: userMessage,
   }
 }
 
-export function createSpeakingAudioTurnMessage(audioBase64: string): SpeakingTurnClientMessage {
+export function createSpeakingAudioTurnMessage(audioBase64: string, clientTurnId: string): SpeakingTurnClientMessage {
   return {
     type: 'turn',
+    client_turn_id: clientTurnId,
     audio_base64: audioBase64,
   }
 }
