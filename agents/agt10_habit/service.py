@@ -25,7 +25,7 @@ _ACHIEVEMENT_TYPE_MAP = {
 }
 
 # Mirrors agents/agt01_profiling/consumers.py's dedup TTL for the same session.end event.
-_DEDUP_TTL_SECONDS = 172800  # 2 days
+_DEDUP_TTL_SECONDS = 86400  # 1 day
 
 
 async def send_milestone(clerk_user_id: str, milestone_name: str) -> None:
@@ -47,7 +47,10 @@ async def send_milestone(clerk_user_id: str, milestone_name: str) -> None:
 
 
 def _streak_key(clerk_user_id: str) -> str:
-    return f"streak:{clerk_user_id}"
+    # "v2" namespace avoids a WRONGTYPE crash against any pre-existing
+    # streak:{user} key — the old ungated INCR-based counter stored that
+    # same base name as a plain STRING; this rewrite stores a HASH.
+    return f"streak:v2:{clerk_user_id}"
 
 
 def _dedup_key(session_id: str) -> str:
@@ -60,11 +63,24 @@ def _today() -> date:
     return datetime.now(timezone.utc).date()
 
 
+def _parse_count(raw: bytes | None) -> int:
+    """Best-effort int parse of the stored count. Falls back to 0 (treated
+    as 'no prior record') if the field is missing or somehow corrupted,
+    rather than letting a ValueError propagate out of a Kafka consumer."""
+    if raw is None:
+        return 0
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        logger.warning("streak count field is not a valid integer: %r", raw)
+        return 0
+
+
 async def get_streak(clerk_user_id: str) -> int:
     """Return the current persisted streak count for a user (0 if never set)."""
     r = await get_redis()
     val = await r.hget(_streak_key(clerk_user_id), "count")
-    return int(val) if val else 0
+    return _parse_count(val)
 
 
 async def record_session_complete(clerk_user_id: str, session_id: str) -> dict:
@@ -94,7 +110,7 @@ async def record_session_complete(clerk_user_id: str, session_id: str) -> dict:
     key = _streak_key(clerk_user_id)
     today = _today()
     stored = await r.hgetall(key)
-    count = int(stored[b"count"]) if stored.get(b"count") else 0
+    count = _parse_count(stored.get(b"count"))
     raw_last_active = stored.get(b"last_active_date")
     last_active = date.fromisoformat(raw_last_active.decode()) if raw_last_active else None
 

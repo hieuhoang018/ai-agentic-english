@@ -143,9 +143,9 @@ async def test_record_session_complete_duplicate_session_id_is_not_double_counte
 
 
 async def test_record_session_complete_streak_7_emits_achievement(fake_redis, patch_emit_ts_event, monkeypatch):
-    from agents.agt10_habit.service import record_session_complete
+    from agents.agt10_habit.service import record_session_complete, _streak_key
 
-    await fake_redis.hset("streak:user_abc", mapping={"count": 6, "last_active_date": "2026-07-06"})
+    await fake_redis.hset(_streak_key("user_abc"), mapping={"count": 6, "last_active_date": "2026-07-06"})
     set_today(monkeypatch, "2026-07-07")
 
     result = await record_session_complete("user_abc", "sess-1")
@@ -160,9 +160,9 @@ async def test_record_session_complete_streak_7_emits_achievement(fake_redis, pa
 
 
 async def test_record_session_complete_streak_30_emits_achievement(fake_redis, patch_emit_ts_event, monkeypatch):
-    from agents.agt10_habit.service import record_session_complete
+    from agents.agt10_habit.service import record_session_complete, _streak_key
 
-    await fake_redis.hset("streak:user_abc", mapping={"count": 29, "last_active_date": "2026-07-06"})
+    await fake_redis.hset(_streak_key("user_abc"), mapping={"count": 29, "last_active_date": "2026-07-06"})
     set_today(monkeypatch, "2026-07-07")
 
     result = await record_session_complete("user_abc", "sess-1")
@@ -177,9 +177,9 @@ async def test_record_session_complete_streak_30_emits_achievement(fake_redis, p
 
 
 async def test_record_session_complete_streak_100_emits_achievement(fake_redis, patch_emit_ts_event, monkeypatch):
-    from agents.agt10_habit.service import record_session_complete
+    from agents.agt10_habit.service import record_session_complete, _streak_key
 
-    await fake_redis.hset("streak:user_abc", mapping={"count": 99, "last_active_date": "2026-07-06"})
+    await fake_redis.hset(_streak_key("user_abc"), mapping={"count": 99, "last_active_date": "2026-07-06"})
     set_today(monkeypatch, "2026-07-07")
 
     result = await record_session_complete("user_abc", "sess-1")
@@ -194,9 +194,9 @@ async def test_record_session_complete_streak_100_emits_achievement(fake_redis, 
 
 
 async def test_record_session_complete_non_milestone_does_not_emit(fake_redis, patch_emit_ts_event, monkeypatch):
-    from agents.agt10_habit.service import record_session_complete
+    from agents.agt10_habit.service import record_session_complete, _streak_key
 
-    await fake_redis.hset("streak:user_abc", mapping={"count": 3, "last_active_date": "2026-07-06"})
+    await fake_redis.hset(_streak_key("user_abc"), mapping={"count": 3, "last_active_date": "2026-07-06"})
     set_today(monkeypatch, "2026-07-07")
 
     result = await record_session_complete("user_abc", "sess-1")
@@ -208,9 +208,9 @@ async def test_record_session_complete_non_milestone_does_not_emit(fake_redis, p
 async def test_record_session_complete_second_session_on_milestone_day_does_not_refire(fake_redis, patch_emit_ts_event, monkeypatch):
     """A second qualifying session on the same day a milestone was already
     hit must not re-emit the achievement."""
-    from agents.agt10_habit.service import record_session_complete
+    from agents.agt10_habit.service import record_session_complete, _streak_key
 
-    await fake_redis.hset("streak:user_abc", mapping={"count": 6, "last_active_date": "2026-07-06"})
+    await fake_redis.hset(_streak_key("user_abc"), mapping={"count": 6, "last_active_date": "2026-07-06"})
     set_today(monkeypatch, "2026-07-07")
 
     await record_session_complete("user_abc", "sess-1")
@@ -231,9 +231,9 @@ async def test_get_streak_returns_zero_when_no_redis_state(fake_redis):
 
 
 async def test_get_streak_returns_persisted_value(fake_redis):
-    await fake_redis.hset("streak:user_abc", mapping={"count": 12, "last_active_date": "2026-07-06"})
+    from agents.agt10_habit.service import get_streak, _streak_key
 
-    from agents.agt10_habit.service import get_streak
+    await fake_redis.hset(_streak_key("user_abc"), mapping={"count": 12, "last_active_date": "2026-07-06"})
 
     result = await get_streak("user_abc")
     assert result == 12
