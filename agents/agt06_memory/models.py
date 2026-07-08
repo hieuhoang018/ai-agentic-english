@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Any
 
 
@@ -40,3 +40,7 @@ class ReviewCenterQuery(BaseModel):
     clerk_user_id: str
     query: str | None = None   # natural language semantic search query
     limit: int = 20
+
+
+class UpdateConversationTitleRequest(BaseModel):
+    title: str = Field(..., min_length=1, max_length=200)

@@ -138,3 +138,68 @@ def test_review_center_returns_bundle_for_matching_user(monkeypatch):
         "conversations": [{"conv_id": "c1"}],
         "semantic_search_available": False,
     }
+
+
+def test_update_conversation_title_requires_bearer_token():
+    resp = client.patch(f"/review-center/{USER}/conversations/c1/title", json={"title": "New title"})
+    assert resp.status_code == 401
+
+
+def test_update_conversation_title_rejects_mismatched_user():
+    resp = client.patch(
+        f"/review-center/{USER}/conversations/c1/title",
+        json={"title": "New title"},
+        headers=auth_header("someone-else"),
+    )
+    assert resp.status_code == 403
+
+
+def test_update_conversation_title_rejects_blank_title():
+    resp = client.patch(
+        f"/review-center/{USER}/conversations/c1/title",
+        json={"title": ""},
+        headers=auth_header(USER),
+    )
+    assert resp.status_code == 422
+
+
+def test_update_conversation_title_returns_404_for_unowned_conversation(monkeypatch):
+    async def _fake_update_conversation_title(clerk_user_id, conv_id, title):
+        return None  # simulates the WHERE clerk_user_id=$2 clause matching no row
+
+    monkeypatch.setattr(main_module.ltm, "update_conversation_title", _fake_update_conversation_title)
+
+    resp = client.patch(
+        f"/review-center/{USER}/conversations/someone-elses-conv/title",
+        json={"title": "New title"},
+        headers=auth_header(USER),
+    )
+
+    assert resp.status_code == 404
+
+
+def test_update_conversation_title_updates_and_returns_row(monkeypatch):
+    captured = {}
+
+    async def _fake_update_conversation_title(clerk_user_id, conv_id, title):
+        captured["args"] = (clerk_user_id, conv_id, title)
+        return {
+            "conv_id": conv_id,
+            "session_id": "s1",
+            "clerk_user_id": clerk_user_id,
+            "transcript": "[]",
+            "title": title,
+            "created_at": "2026-07-08T10:00:00+00:00",
+        }
+
+    monkeypatch.setattr(main_module.ltm, "update_conversation_title", _fake_update_conversation_title)
+
+    resp = client.patch(
+        f"/review-center/{USER}/conversations/c1/title",
+        json={"title": "Đặt bàn nhà hàng"},
+        headers=auth_header(USER),
+    )
+
+    assert resp.status_code == 200
+    assert resp.json()["title"] == "Đặt bàn nhà hàng"
+    assert captured["args"] == (USER, "c1", "Đặt bàn nhà hàng")

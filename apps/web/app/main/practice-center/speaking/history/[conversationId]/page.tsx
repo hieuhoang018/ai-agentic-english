@@ -1,60 +1,94 @@
-import { notFound } from 'next/navigation'
-import Link from 'next/link'
-import TranscriptThread from '../../../_components/TranscriptThread'
-import ProgressBar from '../../../_components/ProgressBar'
-import { getConversationDetail } from '../../../_data/speaking-content'
+'use client'
 
-type TranscriptPageProps = {
-  params: Promise<{
-    conversationId: string
-  }>
+import { useEffect, useState } from 'react'
+import { useParams } from 'next/navigation'
+import Link from 'next/link'
+import type { ReviewCenterBundle } from '@/lib/api/types'
+import type { ConversationDetail } from '../../../_types/speaking-history'
+import { buildConversationDetail } from '../../../_lib/speaking-history'
+import TranscriptThread from '../../../_components/TranscriptThread'
+import FeedbackInsightCard from '../../../_components/FeedbackInsightCard'
+
+type LoadState =
+  | { status: 'loading' }
+  | { status: 'success'; conversation: ConversationDetail | null }
+  | { status: 'error' }
+
+const SEVERITY_LABEL: Record<number, string> = {
+  1: 'Nhẹ',
+  2: 'Vừa',
+  3: 'Nghiêm trọng',
 }
 
-export default async function TranscriptPage({ params }: TranscriptPageProps) {
-  const { conversationId } = await params
-  const conversation = await getConversationDetail(conversationId)
+export default function TranscriptPage() {
+  const params = useParams<{ conversationId: string }>()
+  const conversationId = params.conversationId
+  const [state, setState] = useState<LoadState>({ status: 'loading' })
 
+  useEffect(() => {
+    fetch('/api/review-center')
+      .then((res) => {
+        if (!res.ok) throw new Error(`Request failed with ${res.status}`)
+        return res.json() as Promise<ReviewCenterBundle>
+      })
+      .then((bundle) => setState({ status: 'success', conversation: buildConversationDetail(bundle, conversationId) }))
+      .catch(() => setState({ status: 'error' }))
+  }, [conversationId])
+
+  if (state.status === 'loading') {
+    return <p className="text-center text-on-surface-variant">Đang tải dữ liệu...</p>
+  }
+
+  if (state.status === 'error') {
+    return (
+      <div className="rounded-lg border border-dashed border-outline-variant bg-surface-container-lowest p-10 text-center">
+        <span className="material-symbols-outlined text-5xl text-error">error</span>
+        <h2 className="mt-4 text-xl font-bold text-on-surface">Không thể tải dữ liệu</h2>
+        <p className="mt-2 text-on-surface-variant">Vui lòng thử lại sau.</p>
+      </div>
+    )
+  }
+
+  const { conversation } = state
   if (!conversation) {
-    notFound()
+    return (
+      <div className="rounded-lg border border-dashed border-outline-variant bg-surface-container-lowest p-10 text-center text-on-surface-variant">
+        Không tìm thấy cuộc hội thoại này.
+      </div>
+    )
+  }
+
+  function handleTitleSaved(title: string) {
+    setState((current) =>
+      current.status === 'success' && current.conversation
+        ? { ...current, conversation: { ...current.conversation, title } }
+        : current,
+    )
   }
 
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
-      <TranscriptThread conversation={conversation} />
+      <TranscriptThread conversation={conversation} onTitleSaved={handleTitleSaved} />
 
       <aside className="space-y-4">
         <section className="rounded-lg border border-outline-variant/70 bg-surface-container-lowest p-6">
           <h2 className="mb-6 flex items-center gap-2 text-2xl font-bold text-on-surface">
-            <span className="material-symbols-outlined text-primary">bar_chart</span>
-            Phân tích chi tiết
+            <span className="material-symbols-outlined text-primary">rule</span>
+            Lỗi ghi nhận
           </h2>
-          <div className="space-y-6">
-            <div>
-              <div className="mb-2 flex justify-between text-sm font-semibold">
-                <span>Pronunciation</span>
-                <span className="text-secondary">{conversation.analysis.pronunciation}%</span>
-              </div>
-              <ProgressBar value={conversation.analysis.pronunciation} tone="success" />
+          {conversation.errors.length === 0 ? (
+            <p className="text-on-surface-variant">Không phát hiện lỗi nào trong buổi học này.</p>
+          ) : (
+            <div className="space-y-4">
+              {conversation.errors.map((error) => (
+                <FeedbackInsightCard
+                  key={error.id}
+                  title={`${error.errorType} (${SEVERITY_LABEL[error.severity] ?? error.severity})`}
+                  issue={error.contextExcerpt ?? 'Không có trích dẫn ngữ cảnh.'}
+                />
+              ))}
             </div>
-            <div>
-              <div className="mb-2 flex justify-between text-sm font-semibold">
-                <span>Vocabulary</span>
-                <span className="text-primary">{conversation.analysis.vocabulary}%</span>
-              </div>
-              <ProgressBar value={conversation.analysis.vocabulary} />
-              <p className="mt-2 text-sm leading-6 text-on-surface-variant">{conversation.analysis.vocabularyNote}</p>
-            </div>
-            <div>
-              <div className="mb-2 flex justify-between text-sm font-semibold">
-                <span>Grammar</span>
-                <span className="text-error">{conversation.analysis.grammar}%</span>
-              </div>
-              <div className="h-2 w-full overflow-hidden rounded-full bg-surface-variant">
-                <div className="h-full rounded-full bg-error" style={{ width: `${conversation.analysis.grammar}%` }} />
-              </div>
-              <p className="mt-2 text-sm leading-6 text-on-surface-variant">{conversation.analysis.grammarNote}</p>
-            </div>
-          </div>
+          )}
         </section>
 
         <section className="rounded-lg bg-primary p-6 text-center text-white shadow-[0_8px_28px_-18px_rgba(15,98,254,0.8)]">

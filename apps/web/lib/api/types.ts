@@ -101,6 +101,7 @@ export type RateReviewResponse = {
 
 export type ReviewCenterErrorEvent = {
   event_id: string;
+  session_id: string;
   error_type: string;
   skill_domain: string;
   severity: number;
@@ -128,6 +129,7 @@ export type ReviewCenterConversation = {
   conv_id: string;
   session_id: string;
   transcript: unknown;
+  title: string | null;
   created_at: string;
 };
 
