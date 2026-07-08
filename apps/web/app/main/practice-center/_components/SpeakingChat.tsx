@@ -106,6 +106,8 @@ export default function SpeakingChat({ session }: SpeakingChatProps) {
 
         {messages.map((message) => {
           const isUser = message.speaker === 'user'
+          const messageContent =
+            !isUser && message.isSpeaking ? (message.displayContent ?? '') : message.content
           const detectedIssues =
             typeof message.grammarFeedback?.total_errors_detected === 'number'
               ? message.grammarFeedback.total_errors_detected
@@ -120,11 +122,11 @@ export default function SpeakingChat({ session }: SpeakingChatProps) {
               ) : null}
               <div className={`max-w-[86%] sm:max-w-[78%] ${isUser ? 'text-right' : ''}`}>
                 <div
-                  className={`rounded-lg px-4 py-3 text-left leading-7 shadow-sm ${
+                  className={`min-h-7 rounded-lg px-4 py-3 text-left leading-7 shadow-sm ${
                     isUser ? 'bg-primary text-white' : 'border border-outline-variant bg-white text-on-surface'
                   }`}
                 >
-                  {message.content}
+                  {messageContent}
                 </div>
                 <div
                   className={`mt-1 flex items-center gap-2 text-xs ${

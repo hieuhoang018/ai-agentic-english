@@ -52,6 +52,19 @@ export function normalizeAssessmentLevels(levels: Partial<Record<SkillId, CefrLe
   }, {})
 }
 
+export function applyA1FallbackToTestedSkills(
+  levels: Partial<Record<SkillId, CefrLevel>>,
+  testedSkills: readonly PlacementSkillId[],
+): Partial<Record<SkillId, CefrLevel>> {
+  const levelsWithFallbacks = { ...levels }
+
+  for (const skill of testedSkills) {
+    levelsWithFallbacks[skill] ??= 'A1'
+  }
+
+  return levelsWithFallbacks
+}
+
 export function assessmentLevelsToSkillEstimates(levels: Partial<Record<SkillId, CefrLevel>> | undefined): SkillEstimates | undefined {
   if (!levels) return undefined
 
