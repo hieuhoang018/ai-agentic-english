@@ -15,6 +15,7 @@ from unittest.mock import AsyncMock
 from fastapi.testclient import TestClient
 
 from agents.agt02_learning_path import service
+from agents.agt02_learning_path import main as main_module
 from agents.agt02_learning_path.main import app
 from agents.shared.config import settings
 
@@ -64,6 +65,29 @@ def test_replan_rejects_missing_internal_secret(monkeypatch):
 
     assert resp.status_code == 403
     mock.assert_not_called()
+
+
+async def test_lifespan_does_not_crash_when_kafka_producer_is_unreachable(monkeypatch):
+    """
+    Regression test for a real production incident: main.py's lifespan used
+    to `await get_producer()` unprotected, so a Kafka outage at container
+    boot crashed the whole app and relied on Docker's restart policy to
+    eventually retry. The producer call must now tolerate a Kafka outage at
+    startup, matching agents/agt_orchestrator/main.py's existing pattern.
+    """
+    monkeypatch.setattr(main_module, "get_pool", AsyncMock())
+    monkeypatch.setattr(main_module, "get_redis", AsyncMock())
+    monkeypatch.setattr(
+        main_module, "get_producer",
+        AsyncMock(side_effect=Exception("Unable to bootstrap from [('kafka', 9092)]")),
+    )
+    monkeypatch.setattr(main_module, "start_consumers", AsyncMock(return_value=[]))
+    monkeypatch.setattr(main_module, "close_pool", AsyncMock())
+    monkeypatch.setattr(main_module, "close_redis", AsyncMock())
+    monkeypatch.setattr(main_module, "close_producer", AsyncMock())
+
+    async with main_module.lifespan(main_module.app):
+        pass  # must not raise even though get_producer() raised inside
 
 
 def test_active_plan_rejects_missing_internal_secret(monkeypatch):

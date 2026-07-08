@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from contextlib import asynccontextmanager
 from fastapi import Depends, FastAPI, HTTPException, Body
 from agents.shared.auth import require_matching_user
@@ -12,12 +13,20 @@ from agents.agt06_memory.models import (
     AppendVocabRequest, ConsolidateRequest, ReviewCenterQuery,
 )
 
+logger = logging.getLogger(__name__)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await get_pool()
     await get_redis()
-    await get_producer()
+    # Kafka being unreachable at boot must not take the whole agent down —
+    # matches agents/agt_orchestrator/main.py's existing pattern. emit()
+    # retries the producer lazily on the next call once Kafka is back.
+    try:
+        await get_producer()
+    except Exception:
+        logger.error("Kafka producer startup failed; continuing without it", exc_info=True)
     consumer_tasks = await start_consumers()
     yield
     for task in consumer_tasks:

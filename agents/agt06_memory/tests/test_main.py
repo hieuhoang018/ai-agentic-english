@@ -3,6 +3,8 @@ Tests for AGT-06 HTTP endpoints (main.py): auth enforcement and field
 scoping on the frontend-facing GET /summary/{clerk_user_id}.
 """
 
+from unittest.mock import AsyncMock
+
 from fastapi.testclient import TestClient
 
 import agents.agt06_memory.main as main_module
@@ -12,6 +14,29 @@ from agents.shared.testing import auth_header
 client = TestClient(app)
 
 USER = "user_x"
+
+
+async def test_lifespan_does_not_crash_when_kafka_producer_is_unreachable(monkeypatch):
+    """
+    Regression test for a real production incident: main.py's lifespan used
+    to `await get_producer()` unprotected, so a Kafka outage at container
+    boot crashed the whole app and relied on Docker's restart policy to
+    eventually retry. The producer call must now tolerate a Kafka outage at
+    startup, matching agents/agt_orchestrator/main.py's existing pattern.
+    """
+    monkeypatch.setattr(main_module, "get_pool", AsyncMock())
+    monkeypatch.setattr(main_module, "get_redis", AsyncMock())
+    monkeypatch.setattr(
+        main_module, "get_producer",
+        AsyncMock(side_effect=Exception("Unable to bootstrap from [('kafka', 9092)]")),
+    )
+    monkeypatch.setattr(main_module, "start_consumers", AsyncMock(return_value=[]))
+    monkeypatch.setattr(main_module, "close_pool", AsyncMock())
+    monkeypatch.setattr(main_module, "close_redis", AsyncMock())
+    monkeypatch.setattr(main_module, "close_producer", AsyncMock())
+
+    async with main_module.lifespan(main_module.app):
+        pass  # must not raise even though get_producer() raised inside
 
 
 def test_health():
