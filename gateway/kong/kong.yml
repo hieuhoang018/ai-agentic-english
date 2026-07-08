@@ -441,6 +441,57 @@ services:
                 - exp
                 - nbf
 
+  - name: agt06-review-center
+    url: http://agt06-memory:8106/review-center
+    routes:
+      - name: agt06-review-center-route
+        paths:
+          - /api/review-center
+        strip_path: true
+        methods:
+          - GET
+          - OPTIONS
+        plugins:
+          - name: jwt
+            config:
+              claims_to_verify:
+                - exp
+                - nbf
+
+  - name: agt02-replan
+    url: http://agt02-learning-path:8102/replan
+    routes:
+      - name: agt02-replan-route
+        paths:
+          - /api/plan/replan
+        strip_path: true
+        methods:
+          - POST
+          - OPTIONS
+        plugins:
+          - name: jwt
+            config:
+              claims_to_verify:
+                - exp
+                - nbf
+
+  - name: agt11-translate
+    url: http://agt11-translation:8111/translate
+    routes:
+      - name: agt11-translate-route
+        paths:
+          - /api/translate
+        strip_path: true
+        methods:
+          - POST
+          - OPTIONS
+        plugins:
+          - name: jwt
+            config:
+              claims_to_verify:
+                - exp
+                - nbf
+
   - name: notification-service
     url: http://notification-service:4005/health
     routes:

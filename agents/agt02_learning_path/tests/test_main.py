@@ -18,6 +18,7 @@ from agents.agt02_learning_path import service
 from agents.agt02_learning_path import main as main_module
 from agents.agt02_learning_path.main import app
 from agents.shared.config import settings
+from agents.shared.testing import auth_header
 
 client = TestClient(app)
 
@@ -233,3 +234,47 @@ def test_generate_plan_accepts_boundary_values(monkeypatch):
 
     assert resp_low.status_code == 200
     assert resp_high.status_code == 200
+
+
+# --- POST /replan/{clerk_user_id}: user-facing, JWT-scoped ---
+
+
+def test_replan_for_user_requires_bearer_token(monkeypatch):
+    mock = AsyncMock()
+    monkeypatch.setattr(service, "generate_plan", mock)
+
+    resp = client.post("/replan/user1", json={"daily_minutes": 30, "goals": []})
+
+    assert resp.status_code == 401
+    mock.assert_not_called()
+
+
+def test_replan_for_user_rejects_mismatched_user(monkeypatch):
+    mock = AsyncMock()
+    monkeypatch.setattr(service, "generate_plan", mock)
+
+    resp = client.post(
+        "/replan/user1",
+        json={"daily_minutes": 30, "goals": []},
+        headers=auth_header("someone-else"),
+    )
+
+    assert resp.status_code == 403
+    mock.assert_not_called()
+
+
+def test_replan_for_user_accepts_matching_user_and_delegates_to_service(monkeypatch):
+    mock = AsyncMock(return_value={"plan_id": "p3", "version": 3})
+    monkeypatch.setattr(service, "generate_plan", mock)
+
+    resp = client.post(
+        "/replan/user1",
+        json={"daily_minutes": 45, "goals": []},
+        headers=auth_header("user1"),
+    )
+
+    assert resp.status_code == 200
+    assert resp.json()["plan_id"] == "p3"
+    mock.assert_awaited_once_with(
+        "user1", {"skill_estimates": None, "daily_minutes": 45, "goals": []}
+    )

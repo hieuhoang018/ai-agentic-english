@@ -1,11 +1,11 @@
 'use client';
 
 import { useAuth } from '@clerk/nextjs';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { usePresignedAudioUrl } from '@/lib/audio';
 import { isApiError } from '@/lib/api/client';
-import type { GradingRequest, GradingResponse } from '@/lib/api/types';
+import type { GradingRequest, GradingResponse, TranslateResponse } from '@/lib/api/types';
 
 import type { PracticeQuestion } from '../_types/practice';
 import AnswerOption from './AnswerOption';
@@ -20,12 +20,62 @@ type GradingState =
   | { status: 'success'; result: GradingResponse }
   | { status: 'error'; message: string };
 
+type TranslationState =
+  | { status: 'idle' }
+  | { status: 'loading' }
+  | { status: 'ready'; result: TranslateResponse }
+  | { status: 'error'; message: string };
+
 export default function QuestionPanel({ question }: QuestionPanelProps) {
   const { userId } = useAuth();
   const [selectedOptionId, setSelectedOptionId] = useState<string | null>(null);
   const [textAnswer, setTextAnswer] = useState('');
   const [grading, setGrading] = useState<GradingState>({ status: 'idle' });
+  const [translationVisible, setTranslationVisible] = useState(false);
+  const [translationsByQuestionId, setTranslationsByQuestionId] = useState<Record<string, TranslationState>>({});
   const audio = usePresignedAudioUrl(question.audioBucket, question.audioKey);
+
+  useEffect(() => {
+    setTranslationVisible(false);
+  }, [question.id]);
+
+  const translation = translationsByQuestionId[question.id] ?? { status: 'idle' };
+
+  const toggleTranslation = async () => {
+    if (translationVisible) {
+      setTranslationVisible(false);
+      return;
+    }
+
+    setTranslationVisible(true);
+    if (translation.status === 'ready' || translation.status === 'loading' || !question.sourceText) return;
+
+    setTranslationsByQuestionId((current) => ({ ...current, [question.id]: { status: 'loading' } }));
+
+    try {
+      const response = await fetch('/api/translate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: question.sourceText, session_type: 'exercise' }),
+      });
+
+      if (!response.ok) {
+        const body = await response.json().catch(() => undefined);
+        throw new Error(typeof body?.message === 'string' ? body.message : 'Translation request failed.');
+      }
+
+      const result = (await response.json()) as TranslateResponse;
+      setTranslationsByQuestionId((current) => ({ ...current, [question.id]: { status: 'ready', result } }));
+    } catch (error) {
+      setTranslationsByQuestionId((current) => ({
+        ...current,
+        [question.id]: {
+          status: 'error',
+          message: error instanceof Error ? error.message : 'Unable to translate this content right now.',
+        },
+      }));
+    }
+  };
 
   const selectedOption = question.options?.find((option) => option.id === selectedOptionId);
   const attemptedAnswer = question.type === 'mcq' ? (selectedOption?.label ?? '') : textAnswer;
@@ -141,8 +191,30 @@ export default function QuestionPanel({ question }: QuestionPanelProps) {
 
       {question.sourceText && !shouldHideSourceText ? (
         <div className="mb-6 rounded-lg border border-outline-variant/50 bg-surface p-4 leading-7 text-on-surface">
-          <p className="mb-2 font-semibold">{question.sourceLabel}</p>
+          <div className="mb-2 flex items-center justify-between gap-3">
+            <p className="font-semibold">{question.sourceLabel}</p>
+            <button
+              type="button"
+              onClick={() => void toggleTranslation()}
+              disabled={translation.status === 'loading'}
+              className="inline-flex shrink-0 items-center gap-1 rounded-full border border-outline-variant px-3 py-1 text-xs font-semibold text-on-surface-variant transition-colors hover:border-primary hover:text-primary disabled:cursor-wait disabled:opacity-70"
+            >
+              <span className="material-symbols-outlined text-sm">translate</span>
+              {translation.status === 'loading' ? 'Đang dịch...' : translationVisible ? 'Ẩn bản dịch' : 'Xem bản dịch'}
+            </button>
+          </div>
           <p>{question.sourceText}</p>
+          {translationVisible && translation.status === 'ready' ? (
+            <div className="mt-3 rounded-lg border-l-4 border-primary bg-primary-container/10 p-3">
+              <p>{translation.result.translated}</p>
+              <p className="mt-2 text-xs text-on-surface-variant">Vùng ngôn ngữ: {translation.result.zone_label}</p>
+            </div>
+          ) : null}
+          {translationVisible && translation.status === 'error' ? (
+            <p className="mt-3 text-sm text-error" role="alert">
+              {translation.message}
+            </p>
+          ) : null}
         </div>
       ) : null}
 

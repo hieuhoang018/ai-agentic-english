@@ -4,6 +4,10 @@ export function duePath() {
   return `${reviewCenterPath}/due`
 }
 
+export function dashboardPath() {
+  return `${reviewCenterPath}/dashboard`
+}
+
 export function flashcardsPath() {
   return `${reviewCenterPath}/flashcards`
 }
