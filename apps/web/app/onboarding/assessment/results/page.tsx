@@ -80,47 +80,9 @@ export default function AssessmentResultsPage() {
     >
       <section className="mx-auto max-w-3xl">
         <div className="rounded-lg border border-primary/20 bg-primary-container p-7 text-center">
-          <p className="text-sm font-bold uppercase tracking-wide text-primary">Điểm trình độ hiện tại</p>
-          <p className="mt-2 text-6xl font-bold text-primary">{score}<span className="text-3xl">/10</span></p>
+          <p className="text-lg font-bold uppercase tracking-wide text-white">Trình độ hiện tại</p>
           <span className="mt-4 inline-flex rounded-full bg-white px-4 py-2 font-bold text-primary">{evaluation.level}</span>
         </div>
-
-        <div className="mt-6 grid gap-4 sm:grid-cols-2">
-          <article className="rounded-lg border border-outline-variant bg-white p-5">
-            <span className="material-symbols-outlined text-primary">quiz</span>
-            <h2 className="mt-3 font-bold text-on-surface">Câu trả lời đúng</h2>
-            <p className="mt-1 text-2xl font-bold text-primary">{correctAnswerCount} / {questionCount}</p>
-            <p className="mt-1 text-sm text-on-surface-variant">câu hỏi từ kho học liệu</p>
-          </article>
-          <article className="rounded-lg border border-outline-variant bg-white p-5">
-            <span className="material-symbols-outlined text-primary">verified</span>
-            <h2 className="mt-3 font-bold text-on-surface">Kỹ năng đạt ngưỡng</h2>
-            <p className="mt-1 text-2xl font-bold text-primary">{assessedSkills.length}</p>
-            <p className="mt-1 text-sm text-on-surface-variant">kỹ năng có mức CEFR được xác định</p>
-          </article>
-        </div>
-
-        <section className="mt-6 rounded-lg border border-outline-variant bg-white p-5">
-          <div className="flex flex-wrap items-end justify-between gap-2">
-            <div>
-              <h2 className="font-bold text-on-surface">Thang năng lực</h2>
-              <p className="mt-1 text-sm text-on-surface-variant">A1 · A2 · B1 · B2 · C1 · C2</p>
-            </div>
-            <span className="font-bold text-primary">Mức {score}/10</span>
-          </div>
-          <div className="mt-6 overflow-x-auto pb-1">
-            <div className="flex min-w-[600px] items-start justify-between gap-1">
-              {Array.from({ length: 11 }, (_, value) => (
-                <div key={value} className="flex flex-1 flex-col items-center gap-2">
-                  <span className={`flex h-9 w-9 items-center justify-center rounded-full border-2 text-sm font-bold ${value === score ? 'border-primary bg-primary text-white shadow-md' : value < score ? 'border-primary bg-primary-container/10 text-primary' : 'border-outline-variant bg-white text-on-surface-variant'}`}>{value}</span>
-                  {value === 0 ? <span className="text-xs text-on-surface-variant">Cơ bản</span> : null}
-                  {value === 5 ? <span className="text-xs text-on-surface-variant">Trung cấp</span> : null}
-                  {value === 10 ? <span className="text-xs text-on-surface-variant">Nâng cao</span> : null}
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
 
         <section className="mt-6">
           <h2 className="text-xl font-bold text-on-surface">Tóm tắt theo kỹ năng</h2>

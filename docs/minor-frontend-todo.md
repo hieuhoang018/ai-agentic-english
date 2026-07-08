@@ -15,6 +15,7 @@
 5. onboarding assessment default level is A1 (done)
   - Change the assessment logic of the testing part in the onboarding flow so that if the user have not passed the A1 level then the default level is A1. Try making the changes frontend-only.
 
-6. onboarding assessment UX fix
+6. onboarding assessment UX fix (done)
+  - Make the listening audio in the testing part in the onboarding flow unable to fast-forward or rewind, the audio should be displayed already if available without pressing any button, and should be auto-played when the user take the question. Any error should be handled gracefully on the frontend. Make the changes frontend-only.
 
 7. Stream AI response text in speaking practice

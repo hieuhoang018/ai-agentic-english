@@ -96,6 +96,191 @@ async function parseJsonResponse<TResponse>(response: Response): Promise<TRespon
   return response.json() as Promise<TResponse>
 }
 
+type LockedAssessmentAudioPlayerProps = {
+  questionId: string
+  audio: ReturnType<typeof usePresignedAudioUrl>
+}
+
+function formatAudioTime(value: number) {
+  if (!Number.isFinite(value) || value <= 0) return '0:00'
+
+  const minutes = Math.floor(value / 60)
+  const seconds = Math.floor(value % 60)
+  return `${minutes}:${seconds.toString().padStart(2, '0')}`
+}
+
+function LockedAssessmentAudioPlayer({ questionId, audio }: LockedAssessmentAudioPlayerProps) {
+  const audioRef = useRef<HTMLAudioElement | null>(null)
+  const lastKnownTimeRef = useRef(0)
+  const isRestoringTimeRef = useRef(false)
+  const [isPlaying, setIsPlaying] = useState(false)
+  const [currentTime, setCurrentTime] = useState(0)
+  const [duration, setDuration] = useState(0)
+  const [playbackNotice, setPlaybackNotice] = useState<string | null>(null)
+  const audioStatus = audio.status
+  const loadAudio = audio.load
+
+  useEffect(() => {
+    if (audioStatus === 'idle') {
+      void loadAudio()
+    }
+  }, [audioStatus, loadAudio])
+
+  useEffect(() => {
+    if (audio.status !== 'ready') return
+
+    const element = audioRef.current
+    if (!element) return
+
+    let isCancelled = false
+    isRestoringTimeRef.current = true
+    element.currentTime = 0
+    window.setTimeout(() => {
+      isRestoringTimeRef.current = false
+    }, 0)
+
+    const playAudio = async () => {
+      try {
+        setPlaybackNotice(null)
+        await element.play()
+        if (!isCancelled) setIsPlaying(true)
+      } catch {
+        if (!isCancelled) {
+          setIsPlaying(false)
+          setPlaybackNotice('Autoplay was blocked by the browser. Press play to listen.')
+        }
+      }
+    }
+
+    void playAudio()
+
+    return () => {
+      isCancelled = true
+      element.pause()
+    }
+  }, [audio.status, audio.url, questionId])
+
+  const togglePlayback = async () => {
+    const element = audioRef.current
+    if (!element || audio.status !== 'ready') return
+
+    if (!element.paused) {
+      element.pause()
+      setIsPlaying(false)
+      return
+    }
+
+    try {
+      setPlaybackNotice(null)
+      await element.play()
+      setIsPlaying(true)
+    } catch {
+      setIsPlaying(false)
+      setPlaybackNotice('Unable to play this audio right now. Please try again.')
+    }
+  }
+
+  const updatePlaybackTime = () => {
+    const element = audioRef.current
+    if (!element) return
+
+    const nextTime = element.currentTime
+    setCurrentTime(nextTime)
+
+    if (!element.seeking && nextTime >= lastKnownTimeRef.current) {
+      lastKnownTimeRef.current = nextTime
+    }
+  }
+
+  const keepPlaybackPositionLocked = () => {
+    const element = audioRef.current
+    if (!element || isRestoringTimeRef.current) return
+
+    const nextTime = element.currentTime
+    const lastKnownTime = lastKnownTimeRef.current
+    if (Math.abs(nextTime - lastKnownTime) < 1) return
+
+    isRestoringTimeRef.current = true
+    element.currentTime = lastKnownTime
+    setCurrentTime(lastKnownTime)
+    window.setTimeout(() => {
+      isRestoringTimeRef.current = false
+    }, 0)
+  }
+
+  const progressPercent = duration > 0 ? Math.min(100, Math.max(0, (currentTime / duration) * 100)) : 0
+
+  if (audio.status === 'error') {
+    return (
+      <div className="mt-3 rounded-lg border border-error/30 bg-error-container/30 p-4" role="alert">
+        <p className="text-sm font-semibold text-error">{audio.message}</p>
+        <button
+          type="button"
+          onClick={() => void audio.load()}
+          className="mt-3 inline-flex h-10 items-center gap-2 rounded-lg bg-primary px-4 text-sm font-semibold text-white"
+        >
+          <span className="material-symbols-outlined text-base">refresh</span>
+          Try again
+        </button>
+      </div>
+    )
+  }
+
+  if (audio.status !== 'ready') {
+    return (
+      <div className="mt-3 flex items-center gap-3 rounded-lg bg-surface p-4 text-sm font-semibold text-on-surface-variant" role="status">
+        <span className="material-symbols-outlined animate-spin text-primary">progress_activity</span>
+        Preparing audio...
+      </div>
+    )
+  }
+
+  return (
+    <div className="mt-3 rounded-lg bg-surface p-4">
+      <audio
+        ref={audioRef}
+        preload="auto"
+        src={audio.url}
+        onLoadedMetadata={(event) => setDuration(event.currentTarget.duration)}
+        onTimeUpdate={updatePlaybackTime}
+        onSeeking={keepPlaybackPositionLocked}
+        onPlay={() => setIsPlaying(true)}
+        onPause={() => setIsPlaying(false)}
+        onEnded={() => setIsPlaying(false)}
+        onError={() => {
+          setIsPlaying(false)
+          setPlaybackNotice(null)
+          audio.markPlaybackFailed()
+        }}
+      />
+      <div className="flex flex-wrap items-center gap-3">
+        <button
+          type="button"
+          onClick={() => void togglePlayback()}
+          className="flex h-11 w-11 items-center justify-center rounded-full bg-primary text-white transition-colors hover:bg-[#0047bb] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+          aria-label={isPlaying ? 'Pause listening audio' : 'Play listening audio'}
+        >
+          <span className="material-symbols-outlined">{isPlaying ? 'pause' : 'play_arrow'}</span>
+        </button>
+        <div className="min-w-0 flex-1">
+          <div className="h-2 overflow-hidden rounded-full bg-outline-variant" aria-hidden="true">
+            <div className="h-full rounded-full bg-primary transition-[width]" style={{ width: `${progressPercent}%` }} />
+          </div>
+          <div className="mt-2 flex justify-between text-xs font-semibold text-on-surface-variant">
+            <span>{formatAudioTime(currentTime)}</span>
+            <span>{formatAudioTime(duration)}</span>
+          </div>
+        </div>
+      </div>
+      {playbackNotice ? (
+        <p className="mt-3 text-sm text-error" role="alert">
+          {playbackNotice}
+        </p>
+      ) : null}
+    </div>
+  )
+}
+
 export default function AssessmentQuestion() {
   const { isLoaded: isAuthLoaded, isSignedIn } = useAuth()
   const router = useRouter()
@@ -256,29 +441,7 @@ export default function AssessmentQuestion() {
             <span className="material-symbols-outlined text-primary">headphones</span>
             Listening audio
           </div>
-          {activeAudio.status === 'ready' ? (
-            <audio
-              key={question.id}
-              controls
-              preload="metadata"
-              src={activeAudio.url}
-              onError={activeAudio.markPlaybackFailed}
-              className="mt-3 w-full"
-            />
-          ) : (
-            <div className="mt-3 flex flex-wrap items-center gap-3">
-              <button
-                type="button"
-                onClick={() => void activeAudio.load()}
-                disabled={activeAudio.status === 'loading'}
-                className="inline-flex h-10 items-center gap-2 rounded-lg bg-primary px-4 text-sm font-semibold text-white disabled:cursor-wait disabled:opacity-70"
-              >
-                <span className="material-symbols-outlined text-base">{activeAudio.status === 'loading' ? 'progress_activity' : 'play_arrow'}</span>
-                {activeAudio.status === 'loading' ? 'Loading audio...' : 'Load audio'}
-              </button>
-              {activeAudio.status === 'error' ? <p className="text-sm text-error" role="alert">{activeAudio.message}</p> : null}
-            </div>
-          )}
+          <LockedAssessmentAudioPlayer key={question.id} questionId={question.id} audio={activeAudio} />
         </section>
       ) : null}
       {prompt.passage ? <div className="mb-5 rounded-lg border-l-4 border-primary bg-surface p-4 leading-7 text-on-surface-variant">{prompt.passage}</div> : null}
