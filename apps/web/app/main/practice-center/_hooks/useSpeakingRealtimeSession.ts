@@ -21,12 +21,32 @@ export type SpeakingRealtimeTranscriptMessage = {
   id: string
   speaker: 'ai' | 'user'
   content: string
+  displayContent?: string
+  revealedCharCount?: number
+  isSpeaking?: boolean
   timestamp: string
   pendingTranscript?: boolean
   grammarFeedback?: SpeakingGrammarFeedback
   mockFeedback?: string | null
   translationZone?: string | null
 }
+
+type ActiveAssistantSpeech = {
+  messageId: string
+  content: string
+  utterance: SpeechSynthesisUtterance
+  wordEndIndices: number[]
+  revealedCharCount: number
+  fallbackWordIndex: number
+  fallbackStartTimerId: number | null
+  fallbackIntervalId: number | null
+  completed: boolean
+}
+
+const ASSISTANT_SPEECH_LANG = 'en-US'
+const ASSISTANT_SPEECH_RATE = 0.95
+const FALLBACK_REVEAL_START_DELAY_MS = 900
+const FALLBACK_BASE_WORDS_PER_MINUTE = 165
 
 export type UseSpeakingRealtimeSessionResult = {
   sessionId: string | null
@@ -84,6 +104,40 @@ function blobToBase64(blob: Blob) {
   })
 }
 
+function isWhitespace(character: string) {
+  return /\s/.test(character)
+}
+
+function getWordEndIndices(content: string) {
+  return Array.from(content.matchAll(/\S+/g), (match) => (match.index ?? 0) + match[0].length)
+}
+
+function getFirstWordEndCharCount(content: string) {
+  return getWordEndIndices(content)[0] ?? content.length
+}
+
+function getRevealCharCountForBoundary(content: string, charIndex: number) {
+  let index = Math.max(0, Math.min(charIndex, content.length))
+
+  while (index < content.length && isWhitespace(content[index] ?? '')) {
+    index += 1
+  }
+
+  if (index >= content.length) return content.length
+
+  let wordEnd = index
+
+  while (wordEnd < content.length && !isWhitespace(content[wordEnd] ?? '')) {
+    wordEnd += 1
+  }
+
+  return wordEnd
+}
+
+function getFallbackWordIntervalMs() {
+  return Math.round(60_000 / (FALLBACK_BASE_WORDS_PER_MINUTE * ASSISTANT_SPEECH_RATE))
+}
+
 function parseServerMessage(data: unknown): SpeakingRealtimeServerMessage {
   if (typeof data !== 'string') {
     throw new Error('Speaking socket received an unsupported message format.')
@@ -118,6 +172,7 @@ export function useSpeakingRealtimeSession(): UseSpeakingRealtimeSessionResult {
   const mediaStreamRef = useRef<MediaStream | null>(null)
   const audioChunksRef = useRef<Blob[]>([])
   const cancelRecordingRef = useRef(false)
+  const activeSpeechRef = useRef<ActiveAssistantSpeech | null>(null)
 
   const setPendingTurnMessageId = useCallback((messageId: string | null) => {
     pendingTurnMessageIdRef.current = messageId
@@ -129,28 +184,219 @@ export function useSpeakingRealtimeSession(): UseSpeakingRealtimeSessionResult {
     mediaStreamRef.current = null
   }, [])
 
-  const speakAssistantReply = useCallback((reply: string) => {
-    if (
-      typeof window === 'undefined' ||
-      !('speechSynthesis' in window) ||
-      typeof SpeechSynthesisUtterance === 'undefined'
-    ) {
-      return
+  const clearSpeechTimers = useCallback((activeSpeech: ActiveAssistantSpeech) => {
+    if (activeSpeech.fallbackStartTimerId !== null) {
+      window.clearTimeout(activeSpeech.fallbackStartTimerId)
+      activeSpeech.fallbackStartTimerId = null
     }
 
-    window.speechSynthesis.cancel()
-
-    const utterance = new SpeechSynthesisUtterance(reply)
-    utterance.lang = 'en-US'
-    utterance.rate = 0.95
-    window.speechSynthesis.speak(utterance)
+    if (activeSpeech.fallbackIntervalId !== null) {
+      window.clearInterval(activeSpeech.fallbackIntervalId)
+      activeSpeech.fallbackIntervalId = null
+    }
   }, [])
+
+  const finishAssistantMessageReveal = useCallback((messageId: string) => {
+    setMessages((currentMessages) =>
+      currentMessages.map((currentMessage) => {
+        if (currentMessage.id !== messageId) return currentMessage
+
+        return {
+          ...currentMessage,
+          displayContent: currentMessage.content,
+          revealedCharCount: currentMessage.content.length,
+          isSpeaking: false,
+        }
+      }),
+    )
+  }, [])
+
+  const revealAssistantMessage = useCallback((messageId: string, charCount: number) => {
+    setMessages((currentMessages) =>
+      currentMessages.map((currentMessage) => {
+        if (currentMessage.id !== messageId) return currentMessage
+
+        const boundedCharCount = Math.max(0, Math.min(charCount, currentMessage.content.length))
+        const revealedCharCount = Math.max(currentMessage.revealedCharCount ?? 0, boundedCharCount)
+
+        return {
+          ...currentMessage,
+          displayContent: currentMessage.content.slice(0, revealedCharCount),
+          revealedCharCount,
+          isSpeaking: true,
+        }
+      }),
+    )
+  }, [])
+
+  const stopActiveSpeech = useCallback(
+    (revealFullMessage = true) => {
+      const activeSpeech = activeSpeechRef.current
+
+      if (activeSpeech) {
+        activeSpeech.completed = true
+        clearSpeechTimers(activeSpeech)
+        activeSpeechRef.current = null
+
+        if (revealFullMessage) {
+          finishAssistantMessageReveal(activeSpeech.messageId)
+        }
+      }
+
+      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+        window.speechSynthesis.cancel()
+      }
+    },
+    [clearSpeechTimers, finishAssistantMessageReveal],
+  )
+
+  const startFallbackReveal = useCallback(
+    (activeSpeech: ActiveAssistantSpeech) => {
+      if (activeSpeechRef.current !== activeSpeech || activeSpeech.completed) return
+
+      if (activeSpeech.fallbackStartTimerId !== null) {
+        window.clearTimeout(activeSpeech.fallbackStartTimerId)
+        activeSpeech.fallbackStartTimerId = null
+      }
+
+      if (activeSpeech.fallbackIntervalId !== null) return
+
+      activeSpeech.fallbackWordIndex = activeSpeech.wordEndIndices.findIndex(
+        (wordEndIndex) => wordEndIndex > activeSpeech.revealedCharCount,
+      )
+
+      if (activeSpeech.fallbackWordIndex < 0) return
+
+      const revealNextFallbackWord = () => {
+        if (activeSpeechRef.current !== activeSpeech || activeSpeech.completed) return
+
+        const nextCharCount = activeSpeech.wordEndIndices[activeSpeech.fallbackWordIndex]
+
+        if (typeof nextCharCount !== 'number') {
+          if (activeSpeech.fallbackIntervalId !== null) {
+            window.clearInterval(activeSpeech.fallbackIntervalId)
+            activeSpeech.fallbackIntervalId = null
+          }
+          return
+        }
+
+        activeSpeech.fallbackWordIndex += 1
+        activeSpeech.revealedCharCount = Math.max(activeSpeech.revealedCharCount, nextCharCount)
+        revealAssistantMessage(activeSpeech.messageId, activeSpeech.revealedCharCount)
+      }
+
+      activeSpeech.fallbackIntervalId = window.setInterval(revealNextFallbackWord, getFallbackWordIntervalMs())
+      revealNextFallbackWord()
+    },
+    [revealAssistantMessage],
+  )
+
+  const speakAssistantReply = useCallback(
+    (messageId: string, reply: string) => {
+      stopActiveSpeech()
+
+      if (
+        typeof window === 'undefined' ||
+        !('speechSynthesis' in window) ||
+        typeof SpeechSynthesisUtterance === 'undefined'
+      ) {
+        finishAssistantMessageReveal(messageId)
+        return
+      }
+
+      const wordEndIndices = getWordEndIndices(reply)
+
+      if (reply.length === 0 || wordEndIndices.length === 0) {
+        finishAssistantMessageReveal(messageId)
+        return
+      }
+
+      const utterance = new SpeechSynthesisUtterance(reply)
+      utterance.lang = ASSISTANT_SPEECH_LANG
+      utterance.rate = ASSISTANT_SPEECH_RATE
+
+      const activeSpeech: ActiveAssistantSpeech = {
+        messageId,
+        content: reply,
+        utterance,
+        wordEndIndices,
+        revealedCharCount: 0,
+        fallbackWordIndex: 0,
+        fallbackStartTimerId: null,
+        fallbackIntervalId: null,
+        completed: false,
+      }
+
+      const revealActiveSpeech = (charCount: number) => {
+        if (activeSpeechRef.current !== activeSpeech || activeSpeech.completed) return
+
+        activeSpeech.revealedCharCount = Math.max(
+          activeSpeech.revealedCharCount,
+          Math.min(charCount, activeSpeech.content.length),
+        )
+        revealAssistantMessage(activeSpeech.messageId, activeSpeech.revealedCharCount)
+      }
+
+      const finishActiveSpeech = () => {
+        if (activeSpeechRef.current !== activeSpeech || activeSpeech.completed) return
+
+        activeSpeech.completed = true
+        clearSpeechTimers(activeSpeech)
+        activeSpeechRef.current = null
+        finishAssistantMessageReveal(activeSpeech.messageId)
+      }
+
+      utterance.onstart = () => {
+        revealActiveSpeech(wordEndIndices[0] ?? getFirstWordEndCharCount(reply))
+      }
+
+      utterance.onboundary = (event) => {
+        if (typeof event.charIndex !== 'number' || Number.isNaN(event.charIndex)) return
+
+        const revealCharCount = getRevealCharCountForBoundary(reply, event.charIndex)
+        revealActiveSpeech(revealCharCount)
+
+        if ((!event.name || event.name === 'word') && event.charIndex > 0) {
+          if (activeSpeech.fallbackStartTimerId !== null) {
+            window.clearTimeout(activeSpeech.fallbackStartTimerId)
+            activeSpeech.fallbackStartTimerId = null
+          }
+
+          if (activeSpeech.fallbackIntervalId !== null) {
+            window.clearInterval(activeSpeech.fallbackIntervalId)
+            activeSpeech.fallbackIntervalId = null
+          }
+        }
+      }
+
+      utterance.onend = finishActiveSpeech
+      utterance.onerror = finishActiveSpeech
+
+      activeSpeechRef.current = activeSpeech
+      activeSpeech.fallbackStartTimerId = window.setTimeout(() => {
+        startFallbackReveal(activeSpeech)
+      }, FALLBACK_REVEAL_START_DELAY_MS)
+
+      try {
+        window.speechSynthesis.speak(utterance)
+      } catch {
+        finishActiveSpeech()
+      }
+    },
+    [
+      clearSpeechTimers,
+      finishAssistantMessageReveal,
+      revealAssistantMessage,
+      startFallbackReveal,
+      stopActiveSpeech,
+    ],
+  )
 
   const cancelSpeech = useCallback(() => {
     if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-      window.speechSynthesis.cancel()
+      stopActiveSpeech()
     }
-  }, [])
+  }, [stopActiveSpeech])
 
   const sendSocketMessage = useCallback((message: SpeakingRealtimeClientMessage) => {
     const socket = socketRef.current
@@ -167,16 +413,21 @@ export function useSpeakingRealtimeSession(): UseSpeakingRealtimeSessionResult {
 
   const appendAssistantMessage = useCallback(
     (content: string) => {
+      const messageId = createMessageId('ai')
+
       setMessages((currentMessages) => [
         ...currentMessages,
         {
-          id: createMessageId('ai'),
+          id: messageId,
           speaker: 'ai',
           content,
+          displayContent: '',
+          revealedCharCount: 0,
+          isSpeaking: true,
           timestamp: getDisplayTimestamp(),
         },
       ])
-      speakAssistantReply(content)
+      speakAssistantReply(messageId, content)
     },
     [speakAssistantReply],
   )
