@@ -1,7 +1,7 @@
 type FeedbackInsightCardProps = {
   title: string
   issue: string
-  suggestion: string
+  suggestion?: string
 }
 
 export default function FeedbackInsightCard({ title, issue, suggestion }: FeedbackInsightCardProps) {
@@ -12,9 +12,11 @@ export default function FeedbackInsightCard({ title, issue, suggestion }: Feedba
         {title}
       </p>
       <p>{issue}</p>
-      <div className="mt-3 rounded border border-outline-variant bg-white px-3 py-2 font-semibold text-secondary">
-        ✓ {suggestion}
-      </div>
+      {suggestion ? (
+        <div className="mt-3 rounded border border-outline-variant bg-white px-3 py-2 font-semibold text-secondary">
+          ✓ {suggestion}
+        </div>
+      ) : null}
     </div>
   )
 }

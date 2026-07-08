@@ -252,7 +252,7 @@ async def insert_conversation(
 async def get_conversations(clerk_user_id: str, limit: int = 20) -> list[dict]:
     rows = await fetch(
         """
-        SELECT conv_id, session_id, clerk_user_id, transcript, created_at
+        SELECT conv_id, session_id, clerk_user_id, transcript, title, created_at
         FROM conversation_archive
         WHERE clerk_user_id = $1
         ORDER BY created_at DESC
@@ -261,6 +261,24 @@ async def get_conversations(clerk_user_id: str, limit: int = 20) -> list[dict]:
         clerk_user_id, limit,
     )
     return [dict(r) for r in rows]
+
+
+async def update_conversation_title(clerk_user_id: str, conv_id: str, title: str) -> dict | None:
+    """
+    Rename a saved conversation. Returns the updated row, or None if conv_id
+    doesn't exist or doesn't belong to clerk_user_id (ownership enforced in
+    the WHERE clause, not just by the caller's require_matching_user check).
+    """
+    row = await fetchrow(
+        """
+        UPDATE conversation_archive
+        SET title = $3
+        WHERE conv_id = $1 AND clerk_user_id = $2
+        RETURNING conv_id, session_id, clerk_user_id, transcript, title, created_at
+        """,
+        conv_id, clerk_user_id, title,
+    )
+    return dict(row) if row else None
 
 
 # ── assessment_history ────────────────────────────────────────────────────────

@@ -11,6 +11,7 @@ from agents.agt06_memory.consumers import start_consumers
 from agents.agt06_memory.models import (
     AppendErrorRequest, SetStateRequest, AppendContextRequest,
     AppendVocabRequest, ConsolidateRequest, ReviewCenterQuery,
+    UpdateConversationTitleRequest,
 )
 
 logger = logging.getLogger(__name__)
@@ -252,3 +253,22 @@ async def review_center(
         "conversations": conversations,
         "semantic_search_available": False,  # True once IVFFlat index exists
     }
+
+
+@app.patch("/review-center/{clerk_user_id}/conversations/{conv_id}/title")
+async def update_conversation_title(
+    clerk_user_id: str,
+    conv_id: str,
+    body: UpdateConversationTitleRequest,
+    _: str = Depends(require_matching_user),
+):
+    """
+    Rename a saved conversation. Same require_matching_user guard as the rest
+    of this router; ltm.update_conversation_title also scopes the UPDATE's
+    WHERE clause to clerk_user_id so a conv_id from another user 404s rather
+    than silently no-op'ing or leaking existence via a 403.
+    """
+    updated = await ltm.update_conversation_title(clerk_user_id, conv_id, body.title)
+    if updated is None:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    return updated
