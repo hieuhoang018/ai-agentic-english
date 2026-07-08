@@ -219,9 +219,16 @@ async def get_sessions_summary(clerk_user_id: str, limit: int = 50, _: str = Dep
 # ── Review Center ─────────────────────────────────────────────────────────────
 
 @app.get("/review-center/{clerk_user_id}")
-async def review_center(clerk_user_id: str, query: str | None = None, limit: int = 20):
+async def review_center(
+    clerk_user_id: str,
+    query: str | None = None,
+    limit: int = 20,
+    _: str = Depends(require_matching_user),
+):
     """
     Returns structured LTM data for the Review Center.
+    JWT-protected via Kong; require_matching_user prevents one user reading
+    another's errors/vocabulary/sessions/conversations by editing the URL.
     Semantic search over conversation_archive when query is provided.
     TODO Phase 8+: implement pgvector IVFFlat similarity search once index exists.
     """

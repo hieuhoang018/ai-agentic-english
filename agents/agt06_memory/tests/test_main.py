@@ -73,3 +73,43 @@ def test_summary_passes_limit_through(monkeypatch):
 
     assert resp.status_code == 200
     assert captured["limit"] == 7
+
+
+def test_review_center_requires_bearer_token():
+    resp = client.get(f"/review-center/{USER}")
+    assert resp.status_code == 401
+
+
+def test_review_center_rejects_mismatched_user():
+    resp = client.get(f"/review-center/{USER}", headers=auth_header("someone-else"))
+    assert resp.status_code == 403
+
+
+def test_review_center_returns_bundle_for_matching_user(monkeypatch):
+    async def _fake_get_errors(clerk_user_id, limit=50):
+        return [{"event_id": "e1"}]
+
+    async def _fake_get_vocabulary(clerk_user_id, limit=100):
+        return [{"vocab_id": "v1"}]
+
+    async def _fake_get_sessions(clerk_user_id, limit=20):
+        return [{"session_id": "s1"}]
+
+    async def _fake_get_conversations(clerk_user_id, limit=20):
+        return [{"conv_id": "c1"}]
+
+    monkeypatch.setattr(main_module.ltm, "get_errors", _fake_get_errors)
+    monkeypatch.setattr(main_module.ltm, "get_vocabulary", _fake_get_vocabulary)
+    monkeypatch.setattr(main_module.ltm, "get_sessions", _fake_get_sessions)
+    monkeypatch.setattr(main_module.ltm, "get_conversations", _fake_get_conversations)
+
+    resp = client.get(f"/review-center/{USER}", headers=auth_header(USER))
+
+    assert resp.status_code == 200
+    assert resp.json() == {
+        "errors": [{"event_id": "e1"}],
+        "vocabulary": [{"vocab_id": "v1"}],
+        "sessions": [{"session_id": "s1"}],
+        "conversations": [{"conv_id": "c1"}],
+        "semantic_search_available": False,
+    }
