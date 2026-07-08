@@ -21,13 +21,16 @@ export type SpeakingRealtimeTranscriptMessage = {
   id: string
   speaker: 'ai' | 'user'
   content: string
+  clientTurnId?: string
   displayContent?: string
   revealedCharCount?: number
   isSpeaking?: boolean
+  language?: string | null
   timestamp: string
   pendingTranscript?: boolean
   grammarFeedback?: SpeakingGrammarFeedback
   mockFeedback?: string | null
+  translatedMessage?: string | null
   translationZone?: string | null
 }
 
@@ -392,10 +395,8 @@ export function useSpeakingRealtimeSession(): UseSpeakingRealtimeSessionResult {
     ],
   )
 
-  const cancelSpeech = useCallback(() => {
-    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-      stopActiveSpeech()
-    }
+  const cancelSpeech = useCallback((revealFullMessage = true) => {
+    stopActiveSpeech(revealFullMessage)
   }, [stopActiveSpeech])
 
   const sendSocketMessage = useCallback((message: SpeakingRealtimeClientMessage) => {
@@ -412,7 +413,7 @@ export function useSpeakingRealtimeSession(): UseSpeakingRealtimeSessionResult {
   }, [])
 
   const appendAssistantMessage = useCallback(
-    (content: string) => {
+    (content: string, clientTurnId?: string) => {
       const messageId = createMessageId('ai')
 
       setMessages((currentMessages) => [
@@ -421,6 +422,7 @@ export function useSpeakingRealtimeSession(): UseSpeakingRealtimeSessionResult {
           id: messageId,
           speaker: 'ai',
           content,
+          clientTurnId,
           displayContent: '',
           revealedCharCount: 0,
           isSpeaking: true,
@@ -434,22 +436,25 @@ export function useSpeakingRealtimeSession(): UseSpeakingRealtimeSessionResult {
 
   const updatePendingUserTurn = useCallback(
     (message: Extract<SpeakingRealtimeServerMessage, { type: 'turn_result' }>) => {
-      const pendingMessageId = pendingTurnMessageIdRef.current
-      if (!pendingMessageId) return
+      const turnMessageId = message.client_turn_id || pendingTurnMessageIdRef.current
+      if (!turnMessageId) return
 
       setMessages((currentMessages) =>
         currentMessages.map((currentMessage) => {
-          if (currentMessage.id !== pendingMessageId) return currentMessage
+          if (currentMessage.id !== turnMessageId) return currentMessage
 
           return {
             ...currentMessage,
             content: message.transcript_text ?? currentMessage.content,
             pendingTranscript: false,
             mockFeedback: message.mock_feedback,
+            language: message.language,
           }
         }),
       )
-      setPendingTurnMessageId(null)
+      if (pendingTurnMessageIdRef.current === turnMessageId) {
+        setPendingTurnMessageId(null)
+      }
     },
     [setPendingTurnMessageId],
   )
@@ -458,11 +463,19 @@ export function useSpeakingRealtimeSession(): UseSpeakingRealtimeSessionResult {
     (message: Extract<SpeakingRealtimeServerMessage, { type: 'turn_feedback' }>) => {
       setMessages((currentMessages) =>
         currentMessages.map((currentMessage) => {
-          if (currentMessage.id !== message.client_turn_id) return currentMessage
+          if (currentMessage.id === message.client_turn_id) {
+            return {
+              ...currentMessage,
+              grammarFeedback: message.grammar_feedback,
+              translationZone: message.translation_zone,
+            }
+          }
+
+          if (currentMessage.clientTurnId !== message.client_turn_id) return currentMessage
 
           return {
             ...currentMessage,
-            grammarFeedback: message.grammar_feedback,
+            translatedMessage: message.translated_message,
             translationZone: message.translation_zone,
           }
         }),
@@ -699,7 +712,7 @@ export function useSpeakingRealtimeSession(): UseSpeakingRealtimeSessionResult {
 
         if (serverMessage.type === 'turn_result') {
           updatePendingUserTurn(serverMessage)
-          appendAssistantMessage(serverMessage.assistant_message)
+          appendAssistantMessage(serverMessage.assistant_message, serverMessage.client_turn_id)
           if (!closeRequestedRef.current) setStatus('ready')
           return
         }
@@ -749,7 +762,7 @@ export function useSpeakingRealtimeSession(): UseSpeakingRealtimeSessionResult {
 
     return () => {
       cancelled = true
-      cancelSpeech()
+      cancelSpeech(false)
       abortRecording()
 
       if (!socket || socketRef.current !== socket) return

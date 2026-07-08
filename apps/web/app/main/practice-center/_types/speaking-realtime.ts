@@ -51,12 +51,14 @@ export type SpeakingTurnResultServerMessage = {
   assistant_message: string
   transcript_text: string | null
   mock_feedback: string | null
+  language: string
 }
 
 export type SpeakingTurnFeedbackServerMessage = {
   type: 'turn_feedback'
   client_turn_id: string
   grammar_feedback: SpeakingGrammarFeedback
+  translated_message: string | null
   translation_zone: string | null
 }
 
