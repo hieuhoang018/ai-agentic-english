@@ -72,4 +72,11 @@ async def consume(
             )
             await asyncio.sleep(_RECONNECT_DELAY_SECONDS)
         finally:
-            await consumer.stop()
+            # Defensively wrapped like the startup-failure path above — an
+            # unguarded failure here would propagate out of this finally and
+            # kill the retry loop for good, silently reintroducing the exact
+            # bug this function exists to prevent, just through a narrower door.
+            try:
+                await consumer.stop()
+            except Exception:
+                pass

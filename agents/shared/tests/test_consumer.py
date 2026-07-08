@@ -63,6 +63,32 @@ async def test_consume_cleans_up_a_consumer_that_failed_to_start(monkeypatch):
     always_failing.stop.assert_awaited()
 
 
+async def test_consume_survives_a_failing_stop_after_a_mid_stream_error(monkeypatch):
+    """The finally block's consumer.stop() must be defensively wrapped too —
+    an unguarded failure there would propagate out of the finally and kill
+    the while-True retry loop for good, reintroducing this exact bug class
+    through a narrower door (a mid-stream drop instead of a failed initial
+    connect)."""
+    async def _broken_aiter(self):
+        raise ConnectionError("Connection lost mid-stream")
+        yield  # pragma: no cover - unreachable, but required to make this an async generator function
+
+    broken_consumer = AsyncMock()
+    broken_consumer.__aiter__ = _broken_aiter
+    broken_consumer.stop.side_effect = Exception("stop() also failed during cleanup")
+
+    fake_consumer_cls = MagicMock(return_value=broken_consumer)
+    monkeypatch.setattr(consumer_module, "AIOKafkaConsumer", fake_consumer_cls)
+
+    handler = AsyncMock()
+    await _run_briefly_then_cancel(consumer_module.consume(["session.end"], "test-group", handler))
+
+    # If a failing stop() during cleanup killed the loop, this would be 1
+    # forever. A working retry loop reconnects (and hits the same failure)
+    # repeatedly until cancelled.
+    assert fake_consumer_cls.call_count >= 2, "a failing stop() during cleanup must not kill the retry loop"
+
+
 async def test_consume_cancellation_stops_the_retry_loop(monkeypatch):
     """CancelledError arriving while consume() is asleep between retries
     must actually stop the loop — it must not be swallowed as just another
