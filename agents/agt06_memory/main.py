@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from contextlib import asynccontextmanager
 from fastapi import Depends, FastAPI, HTTPException, Body
 from agents.shared.auth import require_matching_user
@@ -12,12 +13,20 @@ from agents.agt06_memory.models import (
     AppendVocabRequest, ConsolidateRequest, ReviewCenterQuery,
 )
 
+logger = logging.getLogger(__name__)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await get_pool()
     await get_redis()
-    await get_producer()
+    # Kafka being unreachable at boot must not take the whole agent down —
+    # matches agents/agt_orchestrator/main.py's existing pattern. emit()
+    # retries the producer lazily on the next call once Kafka is back.
+    try:
+        await get_producer()
+    except Exception:
+        logger.error("Kafka producer startup failed; continuing without it", exc_info=True)
     consumer_tasks = await start_consumers()
     yield
     for task in consumer_tasks:
@@ -166,7 +175,7 @@ async def consolidate(session_id: str, body: ConsolidateRequest):
     Returns {consolidated: true} if done now, {consolidated: false} if already done.
     """
     result = await consolidation.consolidate_session(
-        session_id, body.clerk_user_id, body.skill_focus
+        session_id, body.clerk_user_id, body.skill_focus, start_time=body.start_time
     )
     return {"consolidated": result, "session_id": session_id}
 
@@ -219,9 +228,16 @@ async def get_sessions_summary(clerk_user_id: str, limit: int = 50, _: str = Dep
 # ── Review Center ─────────────────────────────────────────────────────────────
 
 @app.get("/review-center/{clerk_user_id}")
-async def review_center(clerk_user_id: str, query: str | None = None, limit: int = 20):
+async def review_center(
+    clerk_user_id: str,
+    query: str | None = None,
+    limit: int = 20,
+    _: str = Depends(require_matching_user),
+):
     """
     Returns structured LTM data for the Review Center.
+    JWT-protected via Kong; require_matching_user prevents one user reading
+    another's errors/vocabulary/sessions/conversations by editing the URL.
     Semantic search over conversation_archive when query is provided.
     TODO Phase 8+: implement pgvector IVFFlat similarity search once index exists.
     """

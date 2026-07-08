@@ -4,7 +4,12 @@ import { useUser } from '@clerk/nextjs';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 
-import type { ExerciseLibraryResponse, OnboardingActivity, StreakResponse } from '@/lib/api/types';
+import type {
+  ExerciseLibraryResponse,
+  OnboardingActivity,
+  RecommendationItem,
+  StreakResponse,
+} from '@/lib/api/types';
 
 type LoadState<T> = { status: 'loading' } | { status: 'success'; data: T } | { status: 'error' };
 
@@ -20,6 +25,18 @@ const SKILL_ROUTES: Record<string, string> = {
   R: '/main/practice-center/reading',
   W: '/main/practice-center/writing',
 };
+
+const RECOMMENDATION_SKILL_ROUTES: Record<string, string> = {
+  LISTENING: '/main/practice-center/listening',
+  SPEAKING: '/main/practice-center/speaking',
+  READING: '/main/practice-center/reading',
+  WRITING: '/main/practice-center/writing',
+};
+
+function recommendationHref(item: RecommendationItem): string {
+  const domain = item.skillDomain?.toUpperCase();
+  return (domain && RECOMMENDATION_SKILL_ROUTES[domain]) || '/main/practice-center';
+}
 
 const SKILL_LABELS: Record<string, string> = {
   L: 'Nghe',
@@ -41,8 +58,9 @@ export default function HomePage() {
   const { user } = useUser();
   const [library, setLibrary] = useState<LoadState<ExerciseLibraryResponse>>({ status: 'loading' });
   const [streak, setStreak] = useState<LoadState<StreakResponse>>({ status: 'loading' });
-
-  console.log(library);
+  const [recommendations, setRecommendations] = useState<LoadState<RecommendationItem[]>>({
+    status: 'loading',
+  });
 
   useEffect(() => {
     fetchJson<ExerciseLibraryResponse>('/api/habit/library')
@@ -52,6 +70,10 @@ export default function HomePage() {
     fetchJson<StreakResponse>('/api/habit/streak')
       .then((data) => setStreak({ status: 'success', data }))
       .catch(() => setStreak({ status: 'error' }));
+
+    fetchJson<RecommendationItem[]>('/api/recommendations')
+      .then((data) => setRecommendations({ status: 'success', data }))
+      .catch(() => setRecommendations({ status: 'error' }));
   }, []);
 
   const activities: OnboardingActivity[] =
@@ -115,7 +137,7 @@ export default function HomePage() {
         <section className="grid grid-cols-1 lg:grid-cols-2 gap-gutter w-full">
           <div className="flex flex-col gap-gutter h-full">
             <Link
-              href="/main/review-center/flashcards"
+              href="/main/review-center/due"
               className="bg-surface-container-lowest dark:bg-surface-container-high rounded-lg p-card-padding shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] border border-outline-variant/20 dark:border-outline/20 hover:-translate-y-1 transition-transform cursor-pointer"
             >
               <div className="flex items-center gap-3 mb-3">
@@ -233,6 +255,42 @@ export default function HomePage() {
             </div>
           </div>
         </section>
+
+        {recommendations.status === 'success' && recommendations.data.length > 0 && (
+          <section className="w-full">
+            <h3 className="text-2xl font-semibold text-on-surface dark:text-on-primary mb-4">
+              Đề xuất cho bạn
+            </h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-gutter">
+              {recommendations.data.slice(0, 3).map((item) => (
+                <Link
+                  key={item.id}
+                  href={recommendationHref(item)}
+                  className="bg-surface-container-lowest dark:bg-surface-container-high rounded-lg p-card-padding shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] border border-outline-variant/20 dark:border-outline/20 hover:-translate-y-1 transition-transform cursor-pointer flex flex-col"
+                >
+                  <div className="flex items-center justify-between mb-2 gap-2">
+                    <span className="text-sm bg-primary-container/10 text-primary px-2 py-0.5 rounded-md font-medium">
+                      {item.cefrLevel ?? 'Gợi ý'}
+                    </span>
+                    {item.cold_start && (
+                      <span className="text-xs text-on-surface-variant dark:text-surface-dim">
+                        Mới bắt đầu
+                      </span>
+                    )}
+                  </div>
+                  <h4 className="text-base font-bold text-on-surface dark:text-on-primary">
+                    {item.title}
+                  </h4>
+                  {item.rationale && (
+                    <p className="text-sm text-on-surface-variant dark:text-surface-dim mt-1 line-clamp-2">
+                      {item.rationale}
+                    </p>
+                  )}
+                </Link>
+              ))}
+            </div>
+          </section>
+        )}
       </div>
     </div>
   );

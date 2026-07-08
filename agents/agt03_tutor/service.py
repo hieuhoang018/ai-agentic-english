@@ -9,21 +9,33 @@ Session lifecycle:
     opening message (canned per skill_focus in mock mode), append it to STM
     context, and emit session.start.
 
-  process_turn: optionally transcribe audio via asr.transcribe (already
+  process_turn_reply: optionally transcribe audio via asr.transcribe (already
     implemented, unchanged), append the user turn to STM context, call the
     LLM router for a reply (canned echo in mock mode), append the assistant
-    turn to STM context.
+    turn to STM context. This is the fast path — it does not call AGT-04 or
+    AGT-11, so callers get the visible reply as soon as it's ready.
+
+  process_turn_feedback: best-effort AGT-04 (grammar feedback) and AGT-11
+    (translation) calls, run concurrently via asyncio.gather. Split out of
+    the reply path because both were previously awaited before the turn
+    response was sent — on a live LLM stack that can silently fall back to
+    the slow Ollama tier (see shared/llm/router.py), that held up every
+    visible reply by several seconds even though both calls are optional.
+
+  process_turn: process_turn_reply followed by process_turn_feedback,
+    merged into one dict. Used by both the HTTP route (POST /sessions/turn)
+    and, currently, the WebSocket route — process_turn_reply and
+    process_turn_feedback exist as separate functions so a future
+    WebSocket-layer change can call them separately, sending the reply
+    immediately and the feedback in a later frame, instead of only through
+    the combined process_turn below.
 
   end_session: compute session duration, trigger AGT-06 consolidation
     (idempotent), and emit session.end with durationMinutes — this is
     what AGT-01's handle_session_end consumer reacts to.
 
-pipeline.py wraps process_turn as the single turn-processing path shared by
-both the HTTP route (POST /sessions/turn) and the WebSocket route
-(websocket_handler.py, /ws/sessions/{session_id} — text-only, client-side
-SpeechSynthesis TTS). process_turn calls AGT-04 (grammar feedback) and AGT-11
-(translation) concurrently via asyncio.gather, both best-effort — failures
-return None and never block the turn response.
+pipeline.py wraps these as the single turn-processing path shared by both the
+HTTP route and the WebSocket route.
 """
 
 from __future__ import annotations
@@ -297,14 +309,17 @@ async def start_session(clerk_user_id: str, skill_focus: str, session_id: str | 
     }
 
 
-async def process_turn(session_id: str, user_message: str | None, audio_base64: str | None) -> dict:
+async def process_turn_reply(session_id: str, user_message: str | None, audio_base64: str | None) -> dict:
+    """Fast path: transcribe (if audio), get the AGT-03 chat reply, persist
+    STM context. Returns as soon as the reply is ready — no AGT-04/AGT-11
+    calls happen here. See process_turn_feedback for those."""
     if user_message is None and audio_base64 is None:
-        raise ValueError("process_turn requires either user_message or audio_base64")
+        raise ValueError("process_turn_reply requires either user_message or audio_base64")
 
     session_data = await _stm_get_meta(session_id)
     if session_data is None:
         raise ValueError(
-            f"process_turn: session '{session_id}' is not active — "
+            f"process_turn_reply: session '{session_id}' is not active — "
             "call start_session first or session has already ended"
         )
 
@@ -321,12 +336,12 @@ async def process_turn(session_id: str, user_message: str | None, audio_base64: 
     try:
         await _stm_append_context(session_id, "user", transcript_text)
     except Exception as exc:
-        logger.warning("process_turn: AGT-06 append_context (user) failed for %s: %s", session_id, exc)
+        logger.warning("process_turn_reply: AGT-06 append_context (user) failed for %s: %s", session_id, exc)
 
     try:
         context = await _stm_get_context(session_id)
     except Exception as exc:
-        logger.warning("process_turn: AGT-06 get_context failed for %s: %s", session_id, exc)
+        logger.warning("process_turn_reply: AGT-06 get_context failed for %s: %s", session_id, exc)
         context = []
 
     clerk_user_id = session_data.get("clerk_user_id", "")
@@ -347,15 +362,9 @@ async def process_turn(session_id: str, user_message: str | None, audio_base64: 
     try:
         await _stm_append_context(session_id, "assistant", assistant_message)
     except Exception as exc:
-        logger.warning("process_turn: AGT-06 append_context (assistant) failed for %s: %s", session_id, exc)
+        logger.warning("process_turn_reply: AGT-06 append_context (assistant) failed for %s: %s", session_id, exc)
 
     await _stm_incr_turn(session_id)
-
-    # Best-effort AGT-04 grammar feedback and AGT-11 translation run concurrently.
-    grammar_feedback, (translated_message, translation_zone) = await asyncio.gather(
-        _fetch_grammar_feedback(transcript_text or "", session_id, clerk_user_id, skill_focus),
-        _fetch_translation(assistant_message, clerk_user_id, skill_focus),
-    )
 
     return {
         "session_id": session_id,
@@ -363,9 +372,58 @@ async def process_turn(session_id: str, user_message: str | None, audio_base64: 
         "transcript_text": transcript_text,
         "mock_feedback": mock_feedback,
         "language": "en",
+        "clerk_user_id": clerk_user_id,
+        "skill_focus": skill_focus,
+    }
+
+
+async def process_turn_feedback(
+    session_id: str,
+    transcript_text: str,
+    assistant_message: str,
+    clerk_user_id: str,
+    skill_focus: str,
+) -> dict:
+    """Slow path: best-effort AGT-04 grammar feedback + AGT-11 translation,
+    run concurrently. Exists as a separate function (rather than being
+    inlined into process_turn) so a future WebSocket-layer change can call
+    it after already sending the reply to the client, instead of only
+    through the combined process_turn below."""
+    grammar_feedback, (translated_message, translation_zone) = await asyncio.gather(
+        _fetch_grammar_feedback(transcript_text, session_id, clerk_user_id, skill_focus),
+        _fetch_translation(assistant_message, clerk_user_id, skill_focus),
+    )
+    return {
         "grammar_feedback": grammar_feedback,
         "translated_message": translated_message,
         "translation_zone": translation_zone,
+    }
+
+
+async def process_turn(session_id: str, user_message: str | None, audio_base64: str | None) -> dict:
+    """Combined reply+feedback, used by the single-shot HTTP route
+    (POST /sessions/turn), which cannot push a second async frame, and
+    currently also by the WebSocket route. process_turn_reply and
+    process_turn_feedback exist as separate functions so a future
+    WebSocket-layer change can call them separately instead — see
+    websocket_handler.py."""
+    reply = await process_turn_reply(session_id, user_message, audio_base64)
+    feedback = await process_turn_feedback(
+        session_id,
+        reply["transcript_text"],
+        reply["assistant_message"],
+        reply["clerk_user_id"],
+        reply["skill_focus"],
+    )
+    return {
+        "session_id": reply["session_id"],
+        "assistant_message": reply["assistant_message"],
+        "transcript_text": reply["transcript_text"],
+        "mock_feedback": reply["mock_feedback"],
+        "language": reply["language"],
+        "grammar_feedback": feedback["grammar_feedback"],
+        "translated_message": feedback["translated_message"],
+        "translation_zone": feedback["translation_zone"],
     }
 
 
@@ -395,16 +453,25 @@ async def end_session(session_id: str, clerk_user_id: str, skill_focus: str) -> 
         async with httpx.AsyncClient(timeout=10.0) as client:
             resp = await client.post(
                 f"{AGT06_BASE_URL}/sessions/{session_id}/consolidate",
-                json={"clerk_user_id": clerk_user_id, "skill_focus": skill_focus.upper()},
+                json={
+                    "clerk_user_id": clerk_user_id,
+                    "skill_focus": skill_focus.upper(),
+                    "start_time": start_time_iso,
+                },
             )
             resp.raise_for_status()
             consolidated = resp.json().get("consolidated", False)
     except Exception as exc:
         logger.warning("end_session: AGT-06 consolidate failed for %s: %s", session_id, exc)
 
-    # Only emit if this invocation actually owned the session (meta was present).
-    # Prevents a double-call from publishing a second event with durationMinutes=0.
-    if session_data is not None:
+    # Only emit if this invocation actually owned the session (meta was present)
+    # AND at least one turn happened. Prevents a double-call from publishing a
+    # second event with durationMinutes=0, and prevents a session that was
+    # opened and immediately abandoned (e.g. a page reload tears down the
+    # WebSocket before any "turn" message, hitting this same code path via the
+    # websocket_handler.py `finally` cleanup) from counting as a completed
+    # session downstream (AGT-10's streak, AGT-01's behavioral EWMA).
+    if session_data is not None and turns_completed > 0:
         await emit(
             "session.end",
             {

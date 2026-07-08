@@ -14,6 +14,27 @@ from agents.shared.db.postgres import fetchrow, execute
 logger = logging.getLogger(__name__)
 
 AGT06_BASE = settings.AGT06_BASE_URL
+LMS_BASE = settings.LMS_BASE_URL
+
+
+async def _lookup_meaning(word: str) -> str:
+    """Best-effort definition lookup against the vocab spine on learning-materials-service."""
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            r = await client.get(
+                f"{LMS_BASE}/internal/vocab",
+                params={"lemma": word, "limit": 1},
+                headers={"x-internal-secret": settings.INTERNAL_SECRET},
+            )
+            r.raise_for_status()
+            entries = r.json()
+    except Exception as exc:
+        logger.warning("Could not look up meaning for word=%s: %s", word, exc)
+        return ""
+
+    if not entries or not entries[0].get("senses"):
+        return ""
+    return entries[0]["senses"][0].get("definition", "")
 
 
 async def get_due_items(clerk_user_id: str) -> list[dict]:
@@ -133,6 +154,6 @@ async def pick_vocab_of_the_day(clerk_user_id: str) -> dict | None:
     return {
         "vocabItemId": item["vocab_id"],
         "term": item["word"],
-        "meaning": "",
+        "meaning": await _lookup_meaning(item["word"]),
         "exampleSentence": item["context_sentences"][0] if item.get("context_sentences") else None,
     }

@@ -44,18 +44,22 @@ async def health():
 
 
 @app.get("/schedule/{clerk_user_id}/due")
-async def due_items(clerk_user_id: str):
+async def due_items(clerk_user_id: str, _: str = Depends(require_matching_user)):
     """
     Return vocabulary items due for review, ordered by retrievability ascending.
+    JWT-protected via Kong; require_matching_user prevents one user reading
+    another's due queue by editing the URL.
     TODO Phase 8+: include grammar categories and pronunciation targets.
     """
     return await get_due_items(clerk_user_id)
 
 
 @app.post("/schedule/{clerk_user_id}/rate")
-async def rate(clerk_user_id: str, body: RateRequest):
+async def rate(clerk_user_id: str, body: RateRequest, _: str = Depends(require_matching_user)):
     """
     Record a review rating and update SM-2 state.
+    JWT-protected via Kong; require_matching_user prevents one user rating
+    another's vocab items by editing the URL.
     TODO Phase 8+: full SM-2 stability/retrievability update.
     """
     try:

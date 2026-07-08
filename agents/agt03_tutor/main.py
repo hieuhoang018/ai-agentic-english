@@ -1,3 +1,4 @@
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Header, HTTPException, WebSocket
@@ -16,12 +17,20 @@ from agents.agt03_tutor.models import (
 from agents.agt03_tutor.tickets import SpeakingTicketRequest, SpeakingTicketResponse, issue_ticket
 from agents.agt03_tutor.websocket_handler import handle_session
 
+logger = logging.getLogger(__name__)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await get_pool()
     await get_redis()
-    await get_producer()
+    # Kafka being unreachable at boot must not take the whole agent down —
+    # matches agents/agt_orchestrator/main.py's existing pattern. emit()
+    # retries the producer lazily on the next call once Kafka is back.
+    try:
+        await get_producer()
+    except Exception:
+        logger.error("Kafka producer startup failed; continuing without it", exc_info=True)
     yield
     await close_pool()
     await close_redis()

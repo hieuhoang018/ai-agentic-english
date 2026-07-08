@@ -291,6 +291,29 @@ services:
               hour: 60
               policy: local
 
+  - name: agt07-schedule
+    url: http://agt07-review:8107/schedule
+    routes:
+      - name: agt07-schedule-route
+        paths:
+          - /api/schedule
+        strip_path: true
+        methods:
+          - GET
+          - POST
+          - OPTIONS
+        plugins:
+          - name: jwt
+            config:
+              claims_to_verify:
+                - exp
+                - nbf
+          - name: rate-limiting
+            config:
+              minute: 30
+              hour: 300
+              policy: local
+
   - name: agt07-offline
     url: http://agt07-review:8107/offline
     routes:
@@ -410,6 +433,57 @@ services:
         strip_path: true
         methods:
           - GET
+          - OPTIONS
+        plugins:
+          - name: jwt
+            config:
+              claims_to_verify:
+                - exp
+                - nbf
+
+  - name: agt06-review-center
+    url: http://agt06-memory:8106/review-center
+    routes:
+      - name: agt06-review-center-route
+        paths:
+          - /api/review-center
+        strip_path: true
+        methods:
+          - GET
+          - OPTIONS
+        plugins:
+          - name: jwt
+            config:
+              claims_to_verify:
+                - exp
+                - nbf
+
+  - name: agt02-replan
+    url: http://agt02-learning-path:8102/replan
+    routes:
+      - name: agt02-replan-route
+        paths:
+          - /api/plan/replan
+        strip_path: true
+        methods:
+          - POST
+          - OPTIONS
+        plugins:
+          - name: jwt
+            config:
+              claims_to_verify:
+                - exp
+                - nbf
+
+  - name: agt11-translate
+    url: http://agt11-translation:8111/translate
+    routes:
+      - name: agt11-translate-route
+        paths:
+          - /api/translate
+        strip_path: true
+        methods:
+          - POST
           - OPTIONS
         plugins:
           - name: jwt

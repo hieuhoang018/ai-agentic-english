@@ -82,6 +82,78 @@ export type SpeakingSessionTicketResponse = {
   expires_in_seconds: number;
 };
 
+export type DueReviewItem = {
+  vocab_id: string;
+  word: string;
+  context_sentences: string[];
+  encounter_count: number;
+  sm_stability: number;
+  retrievability: number;
+  days_since: number;
+};
+
+export type RateReviewResponse = {
+  item_id: string;
+  quality: number;
+  new_stability: number;
+  next_review: string;
+};
+
+export type ReviewCenterErrorEvent = {
+  event_id: string;
+  error_type: string;
+  skill_domain: string;
+  severity: number;
+  context_excerpt: string | null;
+  created_at: string;
+};
+
+export type ReviewCenterVocabItem = {
+  vocab_id: string;
+  word: string;
+  encounter_count: number;
+  sm_retrievability: number;
+  last_encounter: string | null;
+  context_sentences: string[];
+};
+
+export type ReviewCenterSession = {
+  session_id: string;
+  start_time: string;
+  end_time: string | null;
+  skill_focus: string;
+};
+
+export type ReviewCenterConversation = {
+  conv_id: string;
+  session_id: string;
+  transcript: unknown;
+  created_at: string;
+};
+
+export type ReviewCenterBundle = {
+  errors: ReviewCenterErrorEvent[];
+  vocabulary: ReviewCenterVocabItem[];
+  sessions: ReviewCenterSession[];
+  conversations: ReviewCenterConversation[];
+  semantic_search_available: boolean;
+};
+
+export type ReplanResponse = {
+  plan_id: string;
+  version: number;
+  rationale: string;
+};
+
+export type TranslateResponse = {
+  original: string;
+  translated: string;
+  zone: string;
+  zone_label: string;
+  theta_r: number;
+  cached: boolean;
+};
+
 export type RecommendationItem = {
   id: string;
   title: string;

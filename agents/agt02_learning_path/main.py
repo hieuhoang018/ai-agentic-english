@@ -1,8 +1,10 @@
 import asyncio
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI, Header, HTTPException
 
+from agents.shared.auth import require_matching_user
 from agents.shared.config import settings
 from agents.shared.db.postgres import get_pool, close_pool
 from agents.shared.db.redis_client import get_redis, close_redis
@@ -11,12 +13,20 @@ from agents.agt02_learning_path import service
 from agents.agt02_learning_path.models import GeneratePlanRequest
 from agents.agt02_learning_path.consumers import start_consumers
 
+logger = logging.getLogger(__name__)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await get_pool()
     await get_redis()
-    await get_producer()
+    # Kafka being unreachable at boot must not take the whole agent down —
+    # matches agents/agt_orchestrator/main.py's existing pattern. emit()
+    # retries the producer lazily on the next call once Kafka is back.
+    try:
+        await get_producer()
+    except Exception:
+        logger.error("Kafka producer startup failed; continuing without it", exc_info=True)
     tasks = await start_consumers()
     yield
     for t in tasks:
@@ -69,4 +79,21 @@ async def get_today_plan(clerk_user_id: str):
 @app.post("/plans/{clerk_user_id}/replan", dependencies=[Depends(verify_internal_secret)])
 async def replan(clerk_user_id: str, body: GeneratePlanRequest):
     """Force regeneration of the active plan (e.g. after profile drift)."""
+    return await service.generate_plan(clerk_user_id, body.model_dump())
+
+
+@app.post("/replan/{clerk_user_id}")
+async def replan_for_user(
+    clerk_user_id: str,
+    body: GeneratePlanRequest,
+    _: str = Depends(require_matching_user),
+):
+    """
+    User-facing replan trigger, deliberately a separate top-level prefix from
+    /plans/* (same split as AGT-01/06/08's /summary/*): /plans/* stays
+    internal-secret-gated for the orchestrator/AGT-10, this route is
+    JWT-scoped via Kong for the browser (e.g. Settings page after the user
+    changes their daily time budget). Delegates to the same service.generate_plan
+    the internal route uses.
+    """
     return await service.generate_plan(clerk_user_id, body.model_dump())

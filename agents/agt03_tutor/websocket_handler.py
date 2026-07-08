@@ -3,22 +3,37 @@ WebSocket session handler for real-time speaking sessions.
 
 Protocol (client -> server JSON messages):
   {"type": "start", "clerk_user_id": str, "skill_focus": str}
-  {"type": "turn", "user_message": str | None, "audio_base64": str | None}
+  {"type": "turn", "client_turn_id": str, "user_message": str | None, "audio_base64": str | None}
   {"type": "end"}
 
 Protocol (server -> client JSON messages):
   {"type": "session_started", ...same shape as POST /sessions/start response...}
-  {"type": "turn_result", ...same shape as POST /sessions/turn response...}
+  {"type": "turn_result", "client_turn_id": str, "assistant_message": str,
+   "transcript_text": str | None, "mock_feedback": str | None, "language": str}
+  {"type": "turn_feedback", "client_turn_id": str, "grammar_feedback": dict | None,
+   "translated_message": str | None, "translation_zone": str | None}
   {"type": "session_ended", ...same shape as POST /sessions/end response...}
   {"type": "error", "detail": str}
 
+A "turn" is answered by exactly two server messages, in order: turn_result
+arrives as soon as the AGT-03 chat reply is ready, and turn_feedback follows
+once the best-effort AGT-04 grammar-feedback and AGT-11 translation calls
+finish. They share the same client_turn_id (echoed verbatim from the
+client's "turn" message) so the client can attach turn_feedback to the right
+message once it arrives. This two-frame split exists because grammar
+feedback and translation both route through a three-tier LLM fallback
+(agents/shared/llm/router.py) that can silently land on a CPU-only backstop
+model — waiting for them before sending turn_result made every reply feel
+slow even though the chat reply itself was usually ready in under a second.
+
 Error handling: a non-JSON text frame, an unknown "type", a "turn" sent before
-"start", or an exception raised by start_session/run_turn_pipeline/end_session
-(e.g. AGT-06 unreachable, unknown session) all produce a {"type": "error", ...}
-response and keep the connection alive — mirroring the HTTP route's
-try/except ValueError -> 422 handling instead of crashing the socket.
-WebSocketDisconnect is the one exception NOT converted into an error message,
-since by the time it's raised the socket is already gone.
+"start", or an exception raised by start_session/run_turn_pipeline_reply/
+run_turn_pipeline_feedback/end_session (e.g. AGT-06 unreachable, unknown
+session) all produce a {"type": "error", ...} response and keep the
+connection alive — mirroring the HTTP route's try/except ValueError -> 422
+handling instead of crashing the socket. WebSocketDisconnect is the one
+exception NOT converted into an error message, since by the time it's
+raised the socket is already gone.
 
 No server-side TTS: the assistant_message field in turn_result is plain text.
 The client speaks it via the browser's SpeechSynthesis API. This mirrors the
@@ -54,7 +69,7 @@ import logging
 from fastapi import WebSocket, WebSocketDisconnect
 
 from agents.agt03_tutor.service import start_session, end_session
-from agents.agt03_tutor.pipeline import run_turn_pipeline
+from agents.agt03_tutor.pipeline import run_turn_pipeline_reply, run_turn_pipeline_feedback
 from agents.agt03_tutor.tickets import TICKET_REJECTED_CLOSE_CODE, consume_ticket
 from agents.shared.config import settings
 
@@ -131,10 +146,32 @@ async def handle_session(websocket: WebSocket, session_id: str) -> None:
                             "detail": "Must send a 'start' message before any 'turn' message.",
                         })
                         continue
-                    result = await run_turn_pipeline(
+                    client_turn_id = message.get("client_turn_id")
+                    reply = await run_turn_pipeline_reply(
                         session_id, message.get("user_message"), message.get("audio_base64")
                     )
-                    await websocket.send_json({"type": "turn_result", **result})
+                    await websocket.send_json({
+                        "type": "turn_result",
+                        "client_turn_id": client_turn_id,
+                        "assistant_message": reply["assistant_message"],
+                        "transcript_text": reply["transcript_text"],
+                        "mock_feedback": reply["mock_feedback"],
+                        "language": reply["language"],
+                    })
+                    feedback = await run_turn_pipeline_feedback(
+                        session_id,
+                        reply["transcript_text"],
+                        reply["assistant_message"],
+                        reply["clerk_user_id"],
+                        reply["skill_focus"],
+                    )
+                    await websocket.send_json({
+                        "type": "turn_feedback",
+                        "client_turn_id": client_turn_id,
+                        "grammar_feedback": feedback["grammar_feedback"],
+                        "translated_message": feedback["translated_message"],
+                        "translation_zone": feedback["translation_zone"],
+                    })
 
                 elif msg_type == "end":
                     if started:
@@ -156,8 +193,8 @@ async def handle_session(websocket: WebSocket, session_id: str) -> None:
             except WebSocketDisconnect:
                 raise
             except Exception as exc:
-                # start_session/run_turn_pipeline/end_session can all raise
-                # (e.g. AGT-06 unavailable, unknown session). Report it to the
+                # start_session/run_turn_pipeline_reply/run_turn_pipeline_feedback/end_session
+                # can all raise (e.g. AGT-06 unavailable, unknown session). Report it to the
                 # client and keep the connection alive rather than crashing —
                 # mirrors the HTTP route's try/except ValueError -> 422 handling.
                 logger.warning(

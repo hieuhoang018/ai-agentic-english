@@ -25,7 +25,9 @@ from agents.shared.events.producer import emit
 logger = logging.getLogger(__name__)
 
 
-async def consolidate_session(session_id: str, clerk_user_id: str, skill_focus: str = "SPEAKING") -> bool:
+async def consolidate_session(
+    session_id: str, clerk_user_id: str, skill_focus: str = "SPEAKING", start_time: str | None = None
+) -> bool:
     """
     Returns True if consolidated now, False if already done.
     Raises on unexpected errors after partial writes — callers should retry.
@@ -37,7 +39,7 @@ async def consolidate_session(session_id: str, clerk_user_id: str, skill_focus: 
     vocab_items = data["vocab"] or []
 
     # Step 2: Ensure session row exists, then close it
-    await ltm.create_session(session_id, clerk_user_id, skill_focus)
+    await ltm.create_session(session_id, clerk_user_id, skill_focus, start_time=start_time)
     closed = await ltm.close_session(session_id)
     if not closed:
         logger.info("consolidate_session: session %s already closed — skipping", session_id)

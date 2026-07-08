@@ -1,11 +1,10 @@
 """
 AGT-10 Kafka consumers.
 
-  agent.session.end -> handle_session_end
-    Reads the persisted Redis streak, increments it, and records the session.
-    At-least-once — record_session_complete reads authoritative state from Redis
-    before writing, so duplicate events increment at most once per real session
-    (Redis SET is idempotent if streak already updated).
+  session.end -> handle_session_end
+    Delegates to record_session_complete, which advances a day-keyed streak
+    counter (see service.py). Idempotent per sessionId — at-least-once Kafka
+    delivery must not double-count a redelivered event.
 """
 from __future__ import annotations
 
@@ -13,28 +12,30 @@ import asyncio
 import logging
 
 from agents.shared.events.consumer import consume
-from agents.agt10_habit.service import get_streak, record_session_complete
+from agents.agt10_habit.service import record_session_complete
 
 logger = logging.getLogger(__name__)
 
 
 async def handle_session_end(topic: str, event: dict) -> None:
     """
-    event fields: clerkUserId (required), durationMinutes (optional, defaults 0).
-    Emitted by AGT-03 at session end.
+    event fields: clerkUserId (required), sessionId (required).
+    Emitted by AGT-03 at session end. AGT-03 only emits this event for
+    sessions with at least one completed turn (see
+    agents/agt03_tutor/service.py end_session), so every event reaching this
+    handler already represents a qualifying session.
     """
     clerk_user_id = event.get("clerkUserId")
-    if not clerk_user_id:
-        logger.warning("handle_session_end: missing clerkUserId in %s", event)
+    session_id = event.get("sessionId")
+    if not clerk_user_id or not session_id:
+        logger.warning("handle_session_end: missing clerkUserId/sessionId in %s", event)
         return
 
-    duration = float(event.get("durationMinutes", 0))
     try:
-        current = await get_streak(clerk_user_id)
-        result = await record_session_complete(clerk_user_id, current, duration)
+        result = await record_session_complete(clerk_user_id, session_id)
         logger.info(
-            "handle_session_end: streak updated user=%s streak=%d",
-            clerk_user_id, result["streak"],
+            "handle_session_end: streak updated user=%s streak=%d recorded=%s",
+            clerk_user_id, result["streak"], result["session_recorded"],
         )
     except Exception as exc:
         logger.error(

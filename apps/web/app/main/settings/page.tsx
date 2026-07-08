@@ -38,6 +38,7 @@ export default function SettingsPage() {
   const [saveState, setSaveState] = useState<SaveState>({ status: 'idle' });
 
   const [dailyTimeBudgetMinutes, setDailyTimeBudgetMinutes] = useState(20);
+  const [lastSyncedDailyTimeBudgetMinutes, setLastSyncedDailyTimeBudgetMinutes] = useState(20);
   const [reminderEnabled, setReminderEnabled] = useState(false);
   const [reminderTime, setReminderTime] = useState('08:00');
   const [preferredLanguage, setPreferredLanguage] = useState('vi');
@@ -48,6 +49,7 @@ export default function SettingsPage() {
       .then((user) => {
         setState({ status: 'success', user });
         setDailyTimeBudgetMinutes(user.settings.dailyTimeBudgetMinutes);
+        setLastSyncedDailyTimeBudgetMinutes(user.settings.dailyTimeBudgetMinutes);
         setReminderEnabled(user.settings.reminderTime !== null);
         setReminderTime(user.settings.reminderTime ?? '08:00');
         setPreferredLanguage(user.settings.preferredLanguage);
@@ -82,6 +84,19 @@ export default function SettingsPage() {
         body: JSON.stringify(update),
       });
       setSaveState({ status: 'success' });
+
+      if (dailyTimeBudgetMinutes !== lastSyncedDailyTimeBudgetMinutes) {
+        setLastSyncedDailyTimeBudgetMinutes(dailyTimeBudgetMinutes);
+        // Best-effort: keep the daily plan in sync with the new time budget.
+        // Must never block or fail the settings save itself.
+        fetch('/api/plan/replan', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ daily_minutes: dailyTimeBudgetMinutes, goals: [] }),
+        }).catch((error: unknown) => {
+          console.error('Failed to regenerate learning plan after settings save:', error);
+        });
+      }
     } catch (error) {
       setSaveState({
         status: 'error',

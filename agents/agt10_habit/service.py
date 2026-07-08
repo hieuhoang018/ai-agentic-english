@@ -7,6 +7,8 @@ from AGT-07 directly — this agent does not compute or trigger those.
 """
 
 import logging
+from datetime import date, datetime, timezone
+
 from agents.shared.db.redis_client import get_redis
 from agents.shared.events.producer import emit_ts_event
 
@@ -21,6 +23,9 @@ _ACHIEVEMENT_TYPE_MAP = {
     # it represents a CEFR level advancement (A1→A2, etc.) and belongs in AGT-05 (assessment)
     # once IRT theta thresholds are defined. Tracked in: TODO implement level-up in AGT-05.
 }
+
+# Mirrors agents/agt01_profiling/consumers.py's dedup TTL for the same session.end event.
+_DEDUP_TTL_SECONDS = 86400  # 1 day
 
 
 async def send_milestone(clerk_user_id: str, milestone_name: str) -> None:
@@ -42,35 +47,96 @@ async def send_milestone(clerk_user_id: str, milestone_name: str) -> None:
 
 
 def _streak_key(clerk_user_id: str) -> str:
-    return f"streak:{clerk_user_id}"
+    # "v2" namespace avoids a WRONGTYPE crash against any pre-existing
+    # streak:{user} key — the old ungated INCR-based counter stored that
+    # same base name as a plain STRING; this rewrite stores a HASH.
+    return f"streak:v2:{clerk_user_id}"
+
+
+def _dedup_key(session_id: str) -> str:
+    return f"agt10:processed:session_end:{session_id}"
+
+
+def _today() -> date:
+    """UTC calendar date — kept as its own function (not inlined) so tests
+    can monkeypatch 'today' instead of freezing wall-clock time."""
+    return datetime.now(timezone.utc).date()
+
+
+def _parse_count(raw: bytes | None) -> int:
+    """Best-effort int parse of the stored count. Falls back to 0 (treated
+    as 'no prior record') if the field is missing or somehow corrupted,
+    rather than letting a ValueError propagate out of a Kafka consumer."""
+    if raw is None:
+        return 0
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        logger.warning("streak count field is not a valid integer: %r", raw)
+        return 0
+
+
+def _parse_last_active(raw: bytes | None) -> date | None:
+    """Best-effort parse of the stored last_active_date. Falls back to None
+    (treated as 'no prior record') if the field is missing or somehow
+    corrupted, rather than letting a ValueError/AttributeError propagate out
+    of a Kafka consumer."""
+    if raw is None:
+        return None
+    try:
+        return date.fromisoformat(raw.decode())
+    except (TypeError, ValueError):
+        logger.warning("streak last_active_date field is not a valid ISO date: %r", raw)
+        return None
 
 
 async def get_streak(clerk_user_id: str) -> int:
-    """Return the current persisted streak for a user (0 if never set)."""
+    """Return the current persisted streak count for a user (0 if never set)."""
     r = await get_redis()
-    val = await r.get(_streak_key(clerk_user_id))
-    return int(val) if val else 0
+    val = await r.hget(_streak_key(clerk_user_id), "count")
+    return _parse_count(val)
 
 
-async def record_session_complete(
-    clerk_user_id: str,
-    current_streak: int,
-    session_duration_minutes: float,
-) -> dict:
+async def record_session_complete(clerk_user_id: str, session_id: str) -> dict:
     """
-    Process a completed session for streak and goal tracking.
-    Reads from Redis to get authoritative streak, increments, persists back.
-    The `current_streak` parameter is used as a fallback when Redis has no record.
+    Process a qualifying completed session (AGT-03's end_session only emits
+    session.end for sessions with at least one turn — see
+    agents/agt03_tutor/service.py) and advance the user's day-based streak.
+
+    Streak semantics, keyed on UTC calendar day:
+      - No prior record, or the last active day was more than one day ago
+        (the streak was broken) -> count resets to 1.
+      - The last active day was exactly one day ago -> count increments by 1.
+      - The last active day IS today -> no-op, count unchanged (a second
+        qualifying session on the same day does not advance the streak).
+
+    Idempotent per session_id via a Redis SET NX EX guard, since Kafka
+    delivery is at-least-once — mirrors the same guard
+    agents/agt01_profiling/consumers.py applies to this same session.end
+    event.
     """
     r = await get_redis()
+
+    was_new = await r.set(_dedup_key(session_id), b"1", nx=True, ex=_DEDUP_TTL_SECONDS)
+    if not was_new:
+        return {"streak": await get_streak(clerk_user_id), "session_recorded": False}
+
     key = _streak_key(clerk_user_id)
-    await r.setnx(key, current_streak)
-    new_streak = await r.incr(key)
+    today = _today()
+    stored = await r.hgetall(key)
+    count = _parse_count(stored.get(b"count"))
+    last_active = _parse_last_active(stored.get(b"last_active_date"))
 
-    if new_streak in (7, 30, 100):
+    if last_active == today:
+        new_streak = count
+    elif last_active is not None and (today - last_active).days == 1:
+        new_streak = count + 1
+    else:
+        new_streak = 1
+
+    await r.hset(key, mapping={"count": new_streak, "last_active_date": today.isoformat()})
+
+    if new_streak in (7, 30, 100) and new_streak != count:
         await send_milestone(clerk_user_id, f"{new_streak}-day streak")
 
-    return {
-        "streak": new_streak,
-        "session_recorded": True,
-    }
+    return {"streak": new_streak, "session_recorded": True}

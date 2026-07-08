@@ -233,6 +233,41 @@ async def test_end_session_consolidates_and_emits_event(monkeypatch):
 
 
 @respx.mock
+async def test_end_session_with_zero_turns_does_not_emit_session_end(monkeypatch):
+    """Opening the Tutor page (which auto-starts a session) and reloading it
+    before sending a single turn must NOT produce a session.end event —
+    otherwise every reload silently counts as a completed session downstream
+    (AGT-10's streak, AGT-01's behavioral_profile EWMA)."""
+    from datetime import datetime, timezone, timedelta
+    past_start = (datetime.now(timezone.utc) - timedelta(seconds=5)).isoformat()
+    respx.get(f"{service.AGT06_BASE_URL}/sessions/abc/meta").mock(
+        return_value=httpx.Response(200, json={
+            "start_time": past_start, "clerk_user_id": "user1",
+            "skill_focus": "SPEAKING", "profile": {}, "profile_loaded": True,
+        })
+    )
+    respx.get(f"{service.AGT06_BASE_URL}/sessions/abc/meta/turn-count").mock(
+        return_value=httpx.Response(200, json={"turn_count": 0})
+    )
+    respx.delete(f"{service.AGT06_BASE_URL}/sessions/abc/meta").mock(return_value=httpx.Response(204))
+    respx.post(f"{service.AGT06_BASE_URL}/sessions/abc/consolidate").mock(
+        return_value=httpx.Response(200, json={"consolidated": True, "session_id": "abc"})
+    )
+
+    emitted = []
+
+    async def fake_emit(topic, payload, agent_id, key=None):
+        emitted.append((topic, payload, agent_id))
+
+    monkeypatch.setattr(service, "emit", fake_emit)
+
+    result = await service.end_session("abc", "user1", "SPEAKING")
+
+    assert result["turns_completed"] == 0
+    assert emitted == [], "zero-turn session must not emit session.end"
+
+
+@respx.mock
 async def test_end_session_handles_agt06_unreachable(monkeypatch):
     from datetime import datetime, timezone, timedelta
     past_start = (datetime.now(timezone.utc) - timedelta(seconds=30)).isoformat()
@@ -667,3 +702,59 @@ def test_turn_request_clerk_user_id_still_accepted_when_provided():
     from agents.agt03_tutor.models import TurnRequest
     req = TurnRequest(session_id="sess-abc", clerk_user_id="user-1", user_message="hi")
     assert req.clerk_user_id == "user-1"
+
+
+# ---------------------------------------------------------------------------
+# process_turn_reply / process_turn_feedback split
+# ---------------------------------------------------------------------------
+
+@respx.mock
+async def test_process_turn_reply_does_not_call_agt04_or_agt11():
+    """process_turn_reply is the fast path — it must return the assistant's
+    reply without ever touching AGT-04 or AGT-11. No respx routes are
+    registered for either base URL, so this test fails loudly (a respx
+    AllMockedAssertionError) if process_turn_reply calls them."""
+    respx.post(f"{service.AGT06_BASE_URL}/sessions/abc/context").mock(return_value=httpx.Response(204))
+    respx.get(f"{service.AGT06_BASE_URL}/sessions/abc/context").mock(
+        return_value=httpx.Response(200, json=[])
+    )
+    _mock_session_meta(respx, "abc", clerk_user_id="user_reply", skill_focus="SPEAKING")
+
+    result = await service.process_turn_reply("abc", "I go there yesterday.", None)
+
+    assert result["assistant_message"].startswith("[MOCK LLM AGT03]")
+    assert result["transcript_text"] == "I go there yesterday."
+    assert result["clerk_user_id"] == "user_reply"
+    assert result["skill_focus"] == "SPEAKING"
+    assert "grammar_feedback" not in result
+    assert "translated_message" not in result
+
+
+@respx.mock
+async def test_process_turn_feedback_calls_agt04_and_agt11():
+    """process_turn_feedback must call AGT-04 and AGT-11 concurrently and
+    return their combined results, independent of process_turn_reply."""
+    agt04_response = {
+        "grammar_errors": [{"errorType": "verb_tense", "severity": 2}],
+        "fluency": {"wpm": 120},
+        "throttled": False,
+        "total_errors_detected": 1,
+        "surfaced_error_count": 1,
+    }
+    respx.post(f"{service.AGT04_BASE_URL}/feedback/speaking").mock(
+        return_value=httpx.Response(200, json=agt04_response)
+    )
+    respx.post(f"{service.AGT11_BASE_URL}/translate").mock(
+        return_value=httpx.Response(200, json={
+            "original": "test", "translated": "test", "zone": "en_only",
+            "zone_label": "English only (above B2)", "theta_r": 2.0, "cached": False,
+        })
+    )
+
+    result = await service.process_turn_feedback(
+        "abc", "I go there yesterday.", "Tell me more.", "user_fb", "SPEAKING",
+    )
+
+    assert result["grammar_feedback"]["total_errors_detected"] == 1
+    assert result["translated_message"] is None
+    assert result["translation_zone"] == "en_only"
