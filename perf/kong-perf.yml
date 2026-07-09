@@ -1,6 +1,22 @@
 _format_version: '3.0'
 _transform: true
 
+# PERF-TEST-ONLY Kong config. Generated from gateway/kong/kong.yml with one
+# addition: a second consumer accepting TEST_ISSUER-signed tokens (the
+# self-signed test JWT keypair in packages/shared/src/testing/index.ts,
+# already used by every service's test suite via signTestToken()). This lets
+# perf/generate-tokens.mjs mint tokens locally for arbitrary synthetic
+# clerkUserIds with no Clerk dependency, while leaving the real `clerk-test`
+# consumer (pinned to the real Clerk app) untouched below - both are valid
+# simultaneously, Kong picks whichever consumer's key matches the token's
+# `iss` claim. Do NOT use this file for anything but local perf runs - see
+# perf/README.md. Never deploy this file; gateway/kong/kong.yml (and its
+# rendered kong.generated.yml) are the real configs.
+#
+# Regenerate this file from the real config whenever gateway/kong/kong.yml
+# changes: `cp gateway/kong/kong.yml perf/kong-perf.yml`, then re-add the
+# perf-test-clerk consumer block below.
+#
 # Phase 0: routing only, no auth yet.
 #
 # Phase 1: `/api/<service>/*` routes are validated with the Kong `jwt`
@@ -29,6 +45,21 @@ consumers:
           xcDLIELHlH9mJA1xxcRLU0tSel3fSsbuDX/FNC5+ifx94WC6tuaTAzRa5gsonrN2
           5mGZM4fWjt4l+FNuyA1qUoyp5XqOQQSBueIGJmvGI0vJLofCzD4E8iwVaZS4ZMS8
           wQIDAQAB
+          -----END PUBLIC KEY-----
+  # PERF-TEST-ONLY: accepts perf/generate-tokens.mjs's self-signed tokens.
+  - username: perf-test-clerk
+    jwt_secrets:
+      - key: https://test-clerk.example.com
+        algorithm: RS256
+        rsa_public_key: |
+          -----BEGIN PUBLIC KEY-----
+          MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAyW0PfHI1+phKKjJF6iMD
+          8JrhmwPmqO104SjgdiTRA+VC8pnXrLOH8vVeB8O64CPrJjxi6AVUt9qkacUIUs20
+          YZA7deGxsTcUCW+0fylB5kHmIH/wQepwufz829v4Mh29GIpjPyZblztFA6tQth1m
+          6HppOD9XjOupxqirUEfm4OABF4zDdCfiU094KkzpIJ9khXK4JSwsrqHs/z2nghgp
+          jyoT5w8WtQ7Df53SeX/Qxx4le5h/gr1dQ4uX1q+VAeIkQHlcbuFsxhHnD92mL2Te
+          3+8+j3mmneGoBvMWT3Lw+tbbLiKkLa3HkE+RxcJU414XAnDe4A3M/shiLoaNw6lP
+          EQIDAQAB
           -----END PUBLIC KEY-----
 
 # The web app calls Kong directly from the browser during local development.

@@ -1,0 +1,10 @@
+# Perf-run-only override: mounts perf/kong-perf.yml (adds a consumer for
+# perf/generate-tokens.mjs's self-signed test tokens) instead of the real
+# gateway/kong/kong.yml. Additive only - does not touch the real config.
+#
+# Apply:   docker compose -f infra/docker-compose.yml -f perf/docker-compose.perf.yml up -d --force-recreate kong
+# Revert:  docker compose -f infra/docker-compose.yml up -d --force-recreate kong
+services:
+  kong:
+    volumes:
+      - ../perf/kong-perf.yml:/kong/declarative/kong.yml:ro
