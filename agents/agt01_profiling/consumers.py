@@ -24,10 +24,9 @@ import asyncio
 import logging
 import os
 
-import httpx
-
 from agents.shared.db.redis_client import get_redis
 from agents.shared.events.consumer import consume
+from agents.shared.http.client import get_http_client
 from agents.agt01_profiling.service import update_profile, _get_base_profile
 from agents.agt01_profiling.behavioral import update_behavioral_profile
 from agents.agt01_profiling import irt
@@ -43,10 +42,10 @@ async def _get_session_error_count(session_id: str) -> int:
     Best-effort — returns 0 on any failure so the IRT update still proceeds.
     """
     try:
-        async with httpx.AsyncClient(timeout=2.0) as client:
-            resp = await client.get(f"{AGT06_BASE_URL}/sessions/{session_id}/errors")
-            resp.raise_for_status()
-            return len(resp.json())
+        client = await get_http_client()
+        resp = await client.get(f"{AGT06_BASE_URL}/sessions/{session_id}/errors", timeout=2.0)
+        resp.raise_for_status()
+        return len(resp.json())
     except Exception as exc:
         logger.warning(
             "handle_session_end: AGT-06 error fetch failed session=%s err=%s", session_id, exc

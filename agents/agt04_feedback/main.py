@@ -8,12 +8,15 @@ from agents.agt04_feedback.models import (
     ComprehensionFeedbackRequest, SessionEndRequest,
 )
 from agents.shared.events.producer import close_producer
+from agents.shared.http.client import get_http_client, close_http_client
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    await get_http_client()
     yield
     await close_producer()
+    await close_http_client()
 
 
 app = FastAPI(

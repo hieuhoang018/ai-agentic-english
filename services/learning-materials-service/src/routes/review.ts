@@ -4,6 +4,7 @@ import { AppPrismaClient } from '../lib/prisma';
 import {
   REVIEW_CEFR_LEVELS,
   isReviewCefrLevel,
+  toReviewCategoryId,
   toReviewFlashcardDto,
   toReviewFlashcardTopicDto,
   toReviewGrammarLessonDto,
@@ -31,13 +32,27 @@ function parseCefrLevel(raw: unknown): CefrLevel | undefined {
   return value;
 }
 
-async function getGrammarSections(prisma: AppPrismaClient) {
+async function getGrammarSections(prisma: AppPrismaClient, category?: string) {
   const points = await prisma.grammarPoint.findMany({
+    where: category ? { category } : undefined,
     include: { _count: { select: { examples: true } } },
     orderBy: [{ category: 'asc' }, { cefrLevel: 'asc' }, { title: 'asc' }],
   });
 
   return toReviewGrammarSectionsDto(points);
+}
+
+async function findCategoryByCategoryId(
+  prisma: AppPrismaClient,
+  categoryId: string,
+): Promise<string | undefined> {
+  const categories = await prisma.grammarPoint.findMany({
+    distinct: ['category'],
+    select: { category: true },
+  });
+
+  return categories.find((candidate) => toReviewCategoryId(candidate.category) === categoryId)
+    ?.category;
 }
 
 export function createReviewRouter(prisma: AppPrismaClient): Router {
@@ -113,7 +128,10 @@ export function createReviewRouter(prisma: AppPrismaClient): Router {
     '/grammar/sections/:categoryId',
     requireAuth,
     asyncHandler(async (req, res) => {
-      const section = (await getGrammarSections(prisma)).find(
+      const category = await findCategoryByCategoryId(prisma, req.params.categoryId);
+      if (!category) throw new NotFoundError('Grammar section not found');
+
+      const section = (await getGrammarSections(prisma, category)).find(
         (candidate) => candidate.id === req.params.categoryId,
       );
       if (!section) throw new NotFoundError('Grammar section not found');

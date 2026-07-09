@@ -112,8 +112,7 @@ describe('catalog routes', () => {
     });
 
     it('returns lessons for the module', async () => {
-      prisma.module.findUnique.mockResolvedValue(moduleRow);
-      prisma.lesson.findMany.mockResolvedValue([lessonRow]);
+      prisma.module.findUnique.mockResolvedValue({ ...moduleRow, lessons: [lessonRow] });
 
       const res = await request(createApp(prisma))
         .get('/modules/mod-1/lessons')
@@ -160,8 +159,7 @@ describe('catalog routes', () => {
     });
 
     it('returns exercises for the lesson without answer keys', async () => {
-      prisma.lesson.findUnique.mockResolvedValue(lessonRow);
-      prisma.exercise.findMany.mockResolvedValue([exerciseRow]);
+      prisma.lesson.findUnique.mockResolvedValue({ ...lessonRow, exercises: [exerciseRow] });
 
       const res = await request(createApp(prisma))
         .get('/lessons/les-1/exercises')

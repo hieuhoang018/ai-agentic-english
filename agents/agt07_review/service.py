@@ -37,19 +37,34 @@ async def _lookup_meaning(word: str) -> str:
     return entries[0]["senses"][0].get("definition", "")
 
 
-async def get_due_items(clerk_user_id: str) -> list[dict]:
+async def fetch_vocabulary(clerk_user_id: str, limit: int | None = None) -> list[dict]:
     """
-    Return vocabulary items due for review (retrievability below threshold).
-    Ordered by retrievability ascending (most urgent first).
+    Fetch a user's vocabulary from AGT-06. Shared by get_due_items and
+    pick_vocab_of_the_day so callers that need both (e.g. reminder_context)
+    can fetch once and pass the result to both instead of hitting AGT-06's
+    /ltm/{id}/vocabulary endpoint twice for largely overlapping data.
+    Returns [] on any fetch failure (best-effort, same as before).
     """
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
-            r = await client.get(f"{AGT06_BASE}/ltm/{clerk_user_id}/vocabulary")
+            params = {"limit": limit} if limit is not None else None
+            r = await client.get(f"{AGT06_BASE}/ltm/{clerk_user_id}/vocabulary", params=params)
             r.raise_for_status()
-            vocab = r.json()
+            return r.json()
     except Exception as exc:
         logger.warning("Could not fetch vocab for %s: %s", clerk_user_id, exc)
         return []
+
+
+async def get_due_items(clerk_user_id: str, vocab: list[dict] | None = None) -> list[dict]:
+    """
+    Return vocabulary items due for review (retrievability below threshold).
+    Ordered by retrievability ascending (most urgent first).
+    Pass a pre-fetched `vocab` (e.g. from fetch_vocabulary) to avoid an extra
+    AGT-06 round-trip when the caller also needs pick_vocab_of_the_day.
+    """
+    if vocab is None:
+        vocab = await fetch_vocabulary(clerk_user_id)
 
     now = datetime.now(timezone.utc)
     due = []
@@ -130,22 +145,15 @@ async def build_daily_test(clerk_user_id: str, size: int = 10) -> list[dict]:
     return compose_test_stub(vocab, errors, size)
 
 
-async def pick_vocab_of_the_day(clerk_user_id: str) -> dict | None:
+async def pick_vocab_of_the_day(clerk_user_id: str, vocab: list[dict] | None = None) -> dict | None:
     """
-    Fetch vocabulary from AGT-06 and return the least-familiar item.
+    Return the least-familiar vocab item, for the daily-reminder job.
     Returns None if the user has no vocab or AGT-06 is unreachable.
+    Pass a pre-fetched `vocab` (e.g. from fetch_vocabulary) to avoid an extra
+    AGT-06 round-trip when the caller also needs get_due_items.
     """
-    try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            r = await client.get(
-                f"{AGT06_BASE}/ltm/{clerk_user_id}/vocabulary",
-                params={"limit": 50},
-            )
-            r.raise_for_status()
-            vocab = r.json()
-    except Exception as exc:
-        logger.warning("Could not fetch vocab for vocab-of-the-day %s: %s", clerk_user_id, exc)
-        return None
+    if vocab is None:
+        vocab = await fetch_vocabulary(clerk_user_id, limit=50)
 
     if not vocab:
         return None

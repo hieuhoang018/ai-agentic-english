@@ -3,6 +3,7 @@ from fastapi import Depends, FastAPI, HTTPException
 from agents.shared.auth import require_matching_user
 from agents.shared.db.postgres import get_pool, close_pool
 from agents.shared.db.redis_client import get_redis, close_redis
+from agents.shared.http.client import get_http_client, close_http_client
 from agents.agt01_profiling.service import get_profile, create_profile, update_profile
 from agents.agt01_profiling.models import CreateProfileRequest, UpdateProfileRequest
 from agents.agt01_profiling.consumers import start_consumers
@@ -12,12 +13,14 @@ from agents.agt01_profiling.consumers import start_consumers
 async def lifespan(app: FastAPI):
     await get_pool()
     await get_redis()
+    await get_http_client()
     consumer_tasks = await start_consumers()
     yield
     for task in consumer_tasks:
         task.cancel()
     await close_pool()
     await close_redis()
+    await close_http_client()
 
 
 app = FastAPI(

@@ -20,14 +20,13 @@ export function createLessonsRouter(prisma: AppPrismaClient): Router {
     '/:id/exercises',
     requireAuth,
     asyncHandler(async (req, res) => {
-      const lesson = await prisma.lesson.findUnique({ where: { id: req.params.id } });
+      const lesson = await prisma.lesson.findUnique({
+        where: { id: req.params.id },
+        include: { exercises: { orderBy: { createdAt: 'asc' } } },
+      });
       if (!lesson) throw new NotFoundError('Lesson not found');
 
-      const exercises = await prisma.exercise.findMany({
-        where: { lessonId: req.params.id },
-        orderBy: { createdAt: 'asc' },
-      });
-      res.json(exercises.map(toExerciseDto));
+      res.json(lesson.exercises.map(toExerciseDto));
     }),
   );
 

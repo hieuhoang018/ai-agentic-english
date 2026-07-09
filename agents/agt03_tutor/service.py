@@ -47,10 +47,9 @@ import os
 import uuid
 from datetime import datetime, timezone
 
-import httpx
-
 from agents.shared.config import settings
 from agents.shared.events.producer import emit
+from agents.shared.http.client import get_http_client
 from agents.shared.llm.router import call_llm, AgentID
 from agents.agt03_tutor import asr
 
@@ -71,72 +70,75 @@ _OPENING_MESSAGES: dict[str, str] = {
 
 
 async def _stm_set_state(session_id: str, skill_focus: str) -> None:
-    async with httpx.AsyncClient(timeout=5.0) as client:
-        resp = await client.post(
-            f"{AGT06_BASE_URL}/sessions/{session_id}/state",
-            json={"skill_focus": skill_focus, "phase": "warm_up"},
-        )
-        resp.raise_for_status()  # critical path — non-2xx must propagate
+    client = await get_http_client()
+    resp = await client.post(
+        f"{AGT06_BASE_URL}/sessions/{session_id}/state",
+        json={"skill_focus": skill_focus, "phase": "warm_up"},
+        timeout=5.0,
+    )
+    resp.raise_for_status()  # critical path — non-2xx must propagate
 
 
 async def _stm_append_context(session_id: str, role: str, content: str) -> None:
-    async with httpx.AsyncClient(timeout=5.0) as client:
-        await client.post(
-            f"{AGT06_BASE_URL}/sessions/{session_id}/context",
-            json={"role": role, "content": content},
-        )
+    client = await get_http_client()
+    await client.post(
+        f"{AGT06_BASE_URL}/sessions/{session_id}/context",
+        json={"role": role, "content": content},
+        timeout=5.0,
+    )
 
 
 async def _stm_get_context(session_id: str) -> list[dict]:
-    async with httpx.AsyncClient(timeout=5.0) as client:
-        resp = await client.get(f"{AGT06_BASE_URL}/sessions/{session_id}/context")
-        resp.raise_for_status()
-        return resp.json()
+    client = await get_http_client()
+    resp = await client.get(f"{AGT06_BASE_URL}/sessions/{session_id}/context", timeout=5.0)
+    resp.raise_for_status()
+    return resp.json()
 
 
 async def _stm_set_meta(session_id: str, meta: dict) -> None:
-    async with httpx.AsyncClient(timeout=5.0) as client:
-        resp = await client.post(f"{AGT06_BASE_URL}/sessions/{session_id}/meta", json=meta)
-        resp.raise_for_status()
+    client = await get_http_client()
+    resp = await client.post(f"{AGT06_BASE_URL}/sessions/{session_id}/meta", json=meta, timeout=5.0)
+    resp.raise_for_status()
 
 
 async def _stm_get_meta(session_id: str) -> dict | None:
-    async with httpx.AsyncClient(timeout=5.0) as client:
-        resp = await client.get(f"{AGT06_BASE_URL}/sessions/{session_id}/meta")
-        if resp.status_code == 404:
-            return None
-        resp.raise_for_status()
-        return resp.json()
+    client = await get_http_client()
+    resp = await client.get(f"{AGT06_BASE_URL}/sessions/{session_id}/meta", timeout=5.0)
+    if resp.status_code == 404:
+        return None
+    resp.raise_for_status()
+    return resp.json()
 
 
 async def _stm_delete_meta(session_id: str) -> None:
-    async with httpx.AsyncClient(timeout=5.0) as client:
-        await client.delete(f"{AGT06_BASE_URL}/sessions/{session_id}/meta")
+    client = await get_http_client()
+    await client.delete(f"{AGT06_BASE_URL}/sessions/{session_id}/meta", timeout=5.0)
 
 
 async def _stm_incr_turn(session_id: str) -> int:
-    async with httpx.AsyncClient(timeout=5.0) as client:
-        resp = await client.post(f"{AGT06_BASE_URL}/sessions/{session_id}/meta/increment-turn")
-        resp.raise_for_status()
-        return resp.json()["turn_count"]
+    client = await get_http_client()
+    resp = await client.post(f"{AGT06_BASE_URL}/sessions/{session_id}/meta/increment-turn", timeout=5.0)
+    resp.raise_for_status()
+    return resp.json()["turn_count"]
 
 
 async def _stm_get_turn_count(session_id: str) -> int:
-    async with httpx.AsyncClient(timeout=5.0) as client:
-        resp = await client.get(f"{AGT06_BASE_URL}/sessions/{session_id}/meta/turn-count")
-        resp.raise_for_status()
-        return resp.json()["turn_count"]
+    client = await get_http_client()
+    resp = await client.get(f"{AGT06_BASE_URL}/sessions/{session_id}/meta/turn-count", timeout=5.0)
+    resp.raise_for_status()
+    return resp.json()["turn_count"]
 
 
 async def _fetch_profile(clerk_user_id: str, session_id: str) -> tuple[dict, bool]:
     try:
-        async with httpx.AsyncClient(timeout=5.0) as client:
-            resp = await client.get(
-                f"{AGT01_BASE_URL}/profile/{clerk_user_id}",
-                params={"session_id": session_id},
-            )
-            resp.raise_for_status()
-            return resp.json(), True
+        client = await get_http_client()
+        resp = await client.get(
+            f"{AGT01_BASE_URL}/profile/{clerk_user_id}",
+            params={"session_id": session_id},
+            timeout=5.0,
+        )
+        resp.raise_for_status()
+        return resp.json(), True
     except Exception as exc:
         logger.warning("start_session: AGT-01 profile fetch failed for %s: %s", clerk_user_id, exc)
         return {"cold_start_flag": True}, False
@@ -159,25 +161,25 @@ async def _fetch_grammar_feedback(
 
     endpoint = "speaking" if skill_focus in {"SPEAKING", "LISTENING"} else "writing"
     try:
-        async with httpx.AsyncClient(timeout=8.0) as client:
-            if endpoint == "speaking":
-                payload = {
-                    "transcript": transcript,
-                    "session_id": session_id,
-                    "clerk_user_id": clerk_user_id,
-                    "duration_seconds": 0.0,
-                    "skill_domain": skill_focus,
-                }
-            else:
-                payload = {
-                    "draft": transcript,
-                    "prompt": "",
-                    "session_id": session_id,
-                    "clerk_user_id": clerk_user_id,
-                }
-            r = await client.post(f"{AGT04_BASE_URL}/feedback/{endpoint}", json=payload)
-            r.raise_for_status()
-            return r.json()
+        client = await get_http_client()
+        if endpoint == "speaking":
+            payload = {
+                "transcript": transcript,
+                "session_id": session_id,
+                "clerk_user_id": clerk_user_id,
+                "duration_seconds": 0.0,
+                "skill_domain": skill_focus,
+            }
+        else:
+            payload = {
+                "draft": transcript,
+                "prompt": "",
+                "session_id": session_id,
+                "clerk_user_id": clerk_user_id,
+            }
+        r = await client.post(f"{AGT04_BASE_URL}/feedback/{endpoint}", json=payload, timeout=8.0)
+        r.raise_for_status()
+        return r.json()
     except Exception as exc:
         logger.warning("process_turn: AGT-04 feedback failed for session=%s: %s", session_id, exc)
         return None
@@ -195,21 +197,22 @@ async def _fetch_translation(
     """
     session_type = "conversation" if skill_focus == "SPEAKING" else "exercise"
     try:
-        async with httpx.AsyncClient(timeout=6.0) as client:
-            r = await client.post(
-                f"{AGT11_BASE_URL}/translate",
-                json={
-                    "content": content,
-                    "clerk_user_id": clerk_user_id,
-                    "session_type": session_type,
-                },
-            )
-            r.raise_for_status()
-            data = r.json()
-            zone = data.get("zone", "en_only")
-            if zone == "en_only":
-                return None, zone
-            return data.get("translated"), zone
+        client = await get_http_client()
+        r = await client.post(
+            f"{AGT11_BASE_URL}/translate",
+            json={
+                "content": content,
+                "clerk_user_id": clerk_user_id,
+                "session_type": session_type,
+            },
+            timeout=6.0,
+        )
+        r.raise_for_status()
+        data = r.json()
+        zone = data.get("zone", "en_only")
+        if zone == "en_only":
+            return None, zone
+        return data.get("translated"), zone
     except Exception as exc:
         logger.warning("process_turn: AGT-11 translation failed for user=%s: %s", clerk_user_id, exc)
         return None, None
@@ -217,15 +220,16 @@ async def _fetch_translation(
 
 async def _fetch_plan(clerk_user_id: str) -> bool:
     try:
-        async with httpx.AsyncClient(timeout=5.0) as client:
-            resp = await client.get(
-                f"{AGT02_BASE_URL}/plans/{clerk_user_id}/active",
-                headers={"x-internal-secret": settings.INTERNAL_SECRET},
-            )
-            if resp.status_code == 404:
-                return False
-            resp.raise_for_status()
-            return True
+        client = await get_http_client()
+        resp = await client.get(
+            f"{AGT02_BASE_URL}/plans/{clerk_user_id}/active",
+            headers={"x-internal-secret": settings.INTERNAL_SECRET},
+            timeout=5.0,
+        )
+        if resp.status_code == 404:
+            return False
+        resp.raise_for_status()
+        return True
     except Exception as exc:
         logger.warning("start_session: AGT-02 plan fetch failed for %s: %s", clerk_user_id, exc)
         return False
@@ -264,8 +268,10 @@ async def start_session(clerk_user_id: str, skill_focus: str, session_id: str | 
     session_id = session_id or str(uuid.uuid4())
     skill_focus = skill_focus.upper()
 
-    _profile, profile_loaded = await _fetch_profile(clerk_user_id, session_id)
-    plan_loaded = await _fetch_plan(clerk_user_id)
+    (_profile, profile_loaded), plan_loaded = await asyncio.gather(
+        _fetch_profile(clerk_user_id, session_id),
+        _fetch_plan(clerk_user_id),
+    )
 
     # Critical path: raises if AGT-06 STM is unavailable.
     await _stm_set_state(session_id, skill_focus)
@@ -450,17 +456,18 @@ async def end_session(session_id: str, clerk_user_id: str, skill_focus: str) -> 
 
     consolidated = False
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.post(
-                f"{AGT06_BASE_URL}/sessions/{session_id}/consolidate",
-                json={
-                    "clerk_user_id": clerk_user_id,
-                    "skill_focus": skill_focus.upper(),
-                    "start_time": start_time_iso,
-                },
-            )
-            resp.raise_for_status()
-            consolidated = resp.json().get("consolidated", False)
+        client = await get_http_client()
+        resp = await client.post(
+            f"{AGT06_BASE_URL}/sessions/{session_id}/consolidate",
+            json={
+                "clerk_user_id": clerk_user_id,
+                "skill_focus": skill_focus.upper(),
+                "start_time": start_time_iso,
+            },
+            timeout=10.0,
+        )
+        resp.raise_for_status()
+        consolidated = resp.json().get("consolidated", False)
     except Exception as exc:
         logger.warning("end_session: AGT-06 consolidate failed for %s: %s", session_id, exc)
 
@@ -492,9 +499,9 @@ async def end_session(session_id: str, clerk_user_id: str, skill_focus: str) -> 
 
 
 async def get_session_state(session_id: str) -> dict:
-    async with httpx.AsyncClient(timeout=5.0) as client:
-        resp = await client.get(f"{AGT06_BASE_URL}/sessions/{session_id}/state")
-        if resp.status_code == 404:
-            return {"session_id": session_id, "state": None}
-        resp.raise_for_status()
-        return {"session_id": session_id, "state": resp.json()}
+    client = await get_http_client()
+    resp = await client.get(f"{AGT06_BASE_URL}/sessions/{session_id}/state", timeout=5.0)
+    if resp.status_code == 404:
+        return {"session_id": session_id, "state": None}
+    resp.raise_for_status()
+    return {"session_id": session_id, "state": resp.json()}

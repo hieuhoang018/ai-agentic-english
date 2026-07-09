@@ -7,6 +7,7 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
 from agents.shared.events.producer import close_producer, emit, emit_ts_event, get_producer
+from agents.shared.http.client import get_http_client, close_http_client
 from agents.shared.security import assert_internal_secret_is_safe
 
 logger = logging.getLogger(__name__)
@@ -22,12 +23,14 @@ assert_internal_secret_is_safe(INTERNAL_SECRET, INFERENCE_MODE)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    await get_http_client()
     try:
         await get_producer()
     except Exception:
         logger.error("Kafka producer startup failed; continuing without it", exc_info=True)
     yield
     await close_producer()
+    await close_http_client()
 
 
 app = FastAPI(title="AGT-Orchestrator", version="0.1.0", lifespan=lifespan)
@@ -62,6 +65,7 @@ async def _fetch_learning_materials_path_definition(client: httpx.AsyncClient, l
         response = await client.get(
             f"{LM_SERVICE_BASE_URL}/internal/learning-paths/{lm_plan_id}",
             headers={"x-internal-secret": INTERNAL_SECRET},
+            timeout=10.0,
         )
     except httpx.HTTPError as exc:
         logger.error("Learning Materials path lookup failed for path=%s: %s", lm_plan_id, exc)
@@ -92,49 +96,51 @@ async def health():
 
 @app.post("/orchestrate/onboarding", status_code=201)
 async def orchestrate_onboarding(body: OnboardingRequest):
-    async with httpx.AsyncClient(timeout=10.0) as client:
-        try:
-            r1 = await client.post(
-                f"{AGT01_BASE_URL}/profile/{body.userId}",
-                json={
-                    "clerk_user_id": body.userId,
-                    "goal_profile": {"currentLevel": body.currentLevel, "goals": body.goals},
-                },
-            )
-        except httpx.HTTPError as exc:
-            logger.error("AGT-01 unreachable: %s", exc)
-            raise HTTPException(status_code=502, detail="AGT-01 profile creation failed")
-        if not r1.is_success:
-            raise HTTPException(status_code=502, detail="AGT-01 profile creation failed")
+    client = await get_http_client()
+    try:
+        r1 = await client.post(
+            f"{AGT01_BASE_URL}/profile/{body.userId}",
+            json={
+                "clerk_user_id": body.userId,
+                "goal_profile": {"currentLevel": body.currentLevel, "goals": body.goals},
+            },
+            timeout=10.0,
+        )
+    except httpx.HTTPError as exc:
+        logger.error("AGT-01 unreachable: %s", exc)
+        raise HTTPException(status_code=502, detail="AGT-01 profile creation failed")
+    if not r1.is_success:
+        raise HTTPException(status_code=502, detail="AGT-01 profile creation failed")
 
-        try:
-            r2 = await client.post(
-                f"{AGT02_BASE_URL}/plans/{body.userId}/generate",
-                json={
-                    "skill_estimates": body.skillEstimates,
-                    "daily_minutes": body.dailyTimeBudgetMinutes,
-                    "goals": body.goals,
-                },
-                headers={"x-internal-secret": INTERNAL_SECRET},
-            )
-        except httpx.HTTPError as exc:
-            logger.error("AGT-02 unreachable: %s", exc)
-            raise HTTPException(status_code=502, detail="AGT-02 plan generation failed")
-        if not r2.is_success:
-            raise HTTPException(status_code=502, detail="AGT-02 plan generation failed")
+    try:
+        r2 = await client.post(
+            f"{AGT02_BASE_URL}/plans/{body.userId}/generate",
+            json={
+                "skill_estimates": body.skillEstimates,
+                "daily_minutes": body.dailyTimeBudgetMinutes,
+                "goals": body.goals,
+            },
+            headers={"x-internal-secret": INTERNAL_SECRET},
+            timeout=10.0,
+        )
+    except httpx.HTTPError as exc:
+        logger.error("AGT-02 unreachable: %s", exc)
+        raise HTTPException(status_code=502, detail="AGT-02 plan generation failed")
+    if not r2.is_success:
+        raise HTTPException(status_code=502, detail="AGT-02 plan generation failed")
 
-        try:
-            plan = r2.json()
-        except ValueError:
-            raise HTTPException(status_code=502, detail="AGT-02 plan generation failed")
+    try:
+        plan = r2.json()
+    except ValueError:
+        raise HTTPException(status_code=502, detail="AGT-02 plan generation failed")
 
-        plan_id = plan.get("plan_id")
-        if not isinstance(plan_id, str) or not plan_id:
-            raise HTTPException(status_code=502, detail="AGT-02 plan generation response missing plan_id")
+    plan_id = plan.get("plan_id")
+    if not isinstance(plan_id, str) or not plan_id:
+        raise HTTPException(status_code=502, detail="AGT-02 plan generation response missing plan_id")
 
-        path_definition = plan.get("path_definition")
-        if not isinstance(path_definition, dict):
-            path_definition = await _fetch_learning_materials_path_definition(client, plan.get("lm_plan_id"))
+    path_definition = plan.get("path_definition")
+    if not isinstance(path_definition, dict):
+        path_definition = await _fetch_learning_materials_path_definition(client, plan.get("lm_plan_id"))
 
     if not _has_database_backed_modules(path_definition):
         raise HTTPException(status_code=502, detail="Generated path has no database-backed modules")
@@ -161,11 +167,12 @@ async def orchestrate_onboarding(body: OnboardingRequest):
 @app.post("/orchestrate/grading")
 async def orchestrate_grading(body: GradingRequest):
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            r = await client.get(
-                f"{LM_SERVICE_BASE_URL}/internal/exercises/{body.exerciseId}",
-                headers={"x-internal-secret": INTERNAL_SECRET},
-            )
+        client = await get_http_client()
+        r = await client.get(
+            f"{LM_SERVICE_BASE_URL}/internal/exercises/{body.exerciseId}",
+            headers={"x-internal-secret": INTERNAL_SECRET},
+            timeout=10.0,
+        )
     except httpx.HTTPError as exc:
         logger.error("LMS unreachable for exercise=%s: %s", body.exerciseId, exc)
         raise HTTPException(status_code=502, detail="LMS service unreachable")
