@@ -33,6 +33,7 @@ model Lesson {
   createdAt DateTime   @default(now())
   updatedAt DateTime   @updatedAt
 
+  @@index([moduleId])
   @@map("lessons")
 }
 
@@ -48,6 +49,7 @@ model Exercise {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
+  @@index([lessonId])
   @@map("exercises")
 }
 
@@ -59,6 +61,7 @@ model LearningPath {
   generatedAt    DateTime @default(now())
   pathDefinition Json
 
+  @@index([userId, status])
   @@map("learning_paths")
 }
 
@@ -89,6 +92,7 @@ model VocabEntry {
   updatedAt      DateTime     @updatedAt
 
   @@unique([lemma, pos])
+  @@index([cefrLevel])
   @@map("vocab_entries")
 }
 
@@ -103,6 +107,7 @@ model VocabSense {
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 
+  @@index([vocabEntryId])
   @@map("vocab_senses")
 }
 
@@ -117,6 +122,7 @@ model VocabPron {
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 
+  @@index([vocabEntryId])
   @@map("vocab_pronunciations")
 }
 
@@ -144,6 +150,7 @@ model GrammarExample {
   note           String?
   createdAt      DateTime     @default(now())
 
+  @@index([grammarPointId])
   @@map("grammar_examples")
 }
 

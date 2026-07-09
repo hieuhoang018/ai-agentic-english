@@ -242,10 +242,12 @@ async def review_center(
     Semantic search over conversation_archive when query is provided.
     TODO Phase 8+: implement pgvector IVFFlat similarity search once index exists.
     """
-    errors = await ltm.get_errors(clerk_user_id, limit=50)
-    vocab = await ltm.get_vocabulary(clerk_user_id, limit=100)
-    sessions = await ltm.get_sessions(clerk_user_id, limit=20)
-    conversations = await ltm.get_conversations(clerk_user_id, limit=limit)
+    errors, vocab, sessions, conversations = await asyncio.gather(
+        ltm.get_errors(clerk_user_id, limit=50),
+        ltm.get_vocabulary(clerk_user_id, limit=100),
+        ltm.get_sessions(clerk_user_id, limit=20),
+        ltm.get_conversations(clerk_user_id, limit=limit),
+    )
     return {
         "errors": errors,
         "vocabulary": vocab,

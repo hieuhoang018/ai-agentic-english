@@ -12,11 +12,11 @@ DUAL-WRITE PROTOCOL (critical):
 
 import asyncio
 import os
-import httpx
 import logging
 from agents.shared.config import settings
 from agents.agt04_feedback import grammar, fluency, writing_quality, pedagogical
 from agents.shared.events.producer import emit
+from agents.shared.http.client import get_http_client
 
 logger = logging.getLogger(__name__)
 
@@ -29,13 +29,14 @@ async def _stm_append_error(session_id: str, clerk_user_id: str, error: dict) ->
     Write 1 of dual-write: append error to Redis STM via AGT-06.
     This write is CRITICAL — raises on failure.
     """
-    async with httpx.AsyncClient(timeout=5.0) as client:
-        payload = {**error, "clerk_user_id": clerk_user_id}
-        resp = await client.post(
-            f"{AGT06_BASE}/sessions/{session_id}/errors",
-            json=payload,
-        )
-        resp.raise_for_status()
+    client = await get_http_client()
+    payload = {**error, "clerk_user_id": clerk_user_id}
+    resp = await client.post(
+        f"{AGT06_BASE}/sessions/{session_id}/errors",
+        json=payload,
+        timeout=5.0,
+    )
+    resp.raise_for_status()
 
 
 async def _kafka_emit_error(session_id: str, clerk_user_id: str, error: dict) -> None:
@@ -77,18 +78,19 @@ async def _get_bilingual_explanation(
     Degrades gracefully — AGT-11 unavailability never causes a 500.
     """
     try:
-        async with httpx.AsyncClient(timeout=5.0) as client:
-            resp = await client.post(
-                f"{AGT11_BASE}/explain",
-                json={
-                    "error_type": error_type,
-                    "example": example,
-                    "clerk_user_id": clerk_user_id,
-                    "session_type": "exercise",
-                },
-            )
-            resp.raise_for_status()
-            return resp.json().get("translated")
+        client = await get_http_client()
+        resp = await client.post(
+            f"{AGT11_BASE}/explain",
+            json={
+                "error_type": error_type,
+                "example": example,
+                "clerk_user_id": clerk_user_id,
+                "session_type": "exercise",
+            },
+            timeout=5.0,
+        )
+        resp.raise_for_status()
+        return resp.json().get("translated")
     except Exception as exc:
         logger.warning(
             "AGT-11 explanation unavailable error_type=%s user=%s: %s",
@@ -99,10 +101,10 @@ async def _get_bilingual_explanation(
 
 async def _stm_get_errors(session_id: str) -> list[dict]:
     """Read the full STM error log for a session from AGT-06."""
-    async with httpx.AsyncClient(timeout=8.0) as client:
-        resp = await client.get(f"{AGT06_BASE}/sessions/{session_id}/errors")
-        resp.raise_for_status()
-        return resp.json()
+    client = await get_http_client()
+    resp = await client.get(f"{AGT06_BASE}/sessions/{session_id}/errors", timeout=8.0)
+    resp.raise_for_status()
+    return resp.json()
 
 
 async def summarize_session(session_id: str, clerk_user_id: str) -> dict:
@@ -210,8 +212,10 @@ async def analyze_writing(
     desirable. Throttling applies only to real-time speaking feedback where
     cognitive overload is a concern.
     """
-    grammar_errors = await grammar.analyze_grammar(draft, skill_domain="WRITING")
-    quality_scores = await writing_quality.score_writing(draft, context=prompt)
+    grammar_errors, quality_scores = await asyncio.gather(
+        grammar.analyze_grammar(draft, skill_domain="WRITING"),
+        writing_quality.score_writing(draft, context=prompt),
+    )
 
     error_events = [
         {
@@ -246,15 +250,16 @@ async def _fetch_exercise_answer(exercise_id: str) -> dict | None:
     callers must treat that as "cannot score", never as "all wrong".
     """
     try:
-        async with httpx.AsyncClient(timeout=8.0) as client:
-            resp = await client.get(
-                f"{settings.LMS_BASE_URL}/internal/exercises/{exercise_id}",
-                headers={"x-internal-secret": settings.INTERNAL_SECRET},
-            )
-            if resp.status_code == 404:
-                return None
-            resp.raise_for_status()
-            return resp.json()
+        client = await get_http_client()
+        resp = await client.get(
+            f"{settings.LMS_BASE_URL}/internal/exercises/{exercise_id}",
+            headers={"x-internal-secret": settings.INTERNAL_SECRET},
+            timeout=8.0,
+        )
+        if resp.status_code == 404:
+            return None
+        resp.raise_for_status()
+        return resp.json()
     except Exception as exc:
         logger.warning("comprehension scoring: LMS exercise fetch failed for %s: %s", exercise_id, exc)
         return None

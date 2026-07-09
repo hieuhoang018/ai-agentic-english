@@ -219,6 +219,13 @@ services:
   postgres-agents:
     image: pgvector/pgvector:pg16
     restart: unless-stopped
+    # AGT-01..AGT-10 each open their own asyncpg pool against this one DB
+    # (agents/shared/db/postgres.py: min_size=2, max_size=10) - 10 agents at
+    # max_size is 100 connections, right at Postgres's default
+    # max_connections=100 (~97 usable after reserved superuser slots). Raised
+    # so a multi-agent load/stress test saturates the app before it saturates
+    # Postgres's connection ceiling.
+    command: ['postgres', '-c', 'max_connections=300']
     ports:
       - '5438:5432'
     environment:

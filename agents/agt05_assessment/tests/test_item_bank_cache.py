@@ -139,10 +139,8 @@ async def test_fetch_lms_items_sends_lowercase_skill(monkeypatch):
 
     from unittest.mock import MagicMock, AsyncMock
     mock_client = MagicMock()
-    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-    mock_client.__aexit__ = AsyncMock(return_value=False)
     mock_client.get = fake_get
-    monkeypatch.setattr(svc.httpx, "AsyncClient", lambda **kw: mock_client)
+    monkeypatch.setattr(svc, "get_http_client", AsyncMock(return_value=mock_client))
 
     await svc._fetch_lms_items("LISTENING")
     assert len(captured_params) == 1
@@ -164,10 +162,8 @@ async def test_fetch_lms_items_sends_lowercase_for_reading(monkeypatch):
 
     from unittest.mock import MagicMock, AsyncMock
     mock_client = MagicMock()
-    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-    mock_client.__aexit__ = AsyncMock(return_value=False)
     mock_client.get = fake_get
-    monkeypatch.setattr(svc.httpx, "AsyncClient", lambda **kw: mock_client)
+    monkeypatch.setattr(svc, "get_http_client", AsyncMock(return_value=mock_client))
 
     await svc._fetch_lms_items("READING")
     assert captured_params[0]["skill"] == "reading"
@@ -185,10 +181,8 @@ async def test_fetch_lms_items_sends_lowercase_for_writing(monkeypatch):
 
     from unittest.mock import MagicMock, AsyncMock
     mock_client = MagicMock()
-    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-    mock_client.__aexit__ = AsyncMock(return_value=False)
     mock_client.get = fake_get
-    monkeypatch.setattr(svc.httpx, "AsyncClient", lambda **kw: mock_client)
+    monkeypatch.setattr(svc, "get_http_client", AsyncMock(return_value=mock_client))
 
     await svc._fetch_lms_items("WRITING")
     assert captured_params[0]["skill"] == "writing"

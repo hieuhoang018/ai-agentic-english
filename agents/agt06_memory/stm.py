@@ -9,6 +9,7 @@ AGT-03 calls set_state(), append_context_turn(), etc.
 AGT-01 calls get_errors() for the intra-session merge-on-read.
 """
 
+import asyncio
 import json
 from agents.shared.db.redis_client import get_redis
 
@@ -155,13 +156,24 @@ async def get_all_session_keys(session_id: str) -> dict:
     """
     Read all STM data for a session in one pass.
     Used by consolidation.py at session end.
+    The 7 reads are fully independent Redis round-trips — fired concurrently
+    via asyncio.gather instead of sequentially awaited.
     """
+    state, errors, context, vocab, difficulty, lang, writing = await asyncio.gather(
+        get_state(session_id),
+        get_errors(session_id),
+        get_context(session_id),
+        get_vocab(session_id),
+        get_difficulty(session_id),
+        get_lang(session_id),
+        get_writing(session_id),
+    )
     return {
-        "state": await get_state(session_id),
-        "errors": await get_errors(session_id),
-        "context": await get_context(session_id),
-        "vocab": await get_vocab(session_id),
-        "difficulty": await get_difficulty(session_id),
-        "lang": await get_lang(session_id),
-        "writing": await get_writing(session_id),
+        "state": state,
+        "errors": errors,
+        "context": context,
+        "vocab": vocab,
+        "difficulty": difficulty,
+        "lang": lang,
+        "writing": writing,
     }

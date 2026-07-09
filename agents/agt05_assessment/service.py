@@ -9,7 +9,6 @@ and guessing parameters) remains deferred to Phase 8+ pending calibration data.
 
 import json
 import uuid
-import httpx
 import logging
 from agents.agt05_assessment.cat_engine import (
     estimate_theta_eap, select_next_item_eap, should_terminate_eap
@@ -17,6 +16,7 @@ from agents.agt05_assessment.cat_engine import (
 from agents.shared.config import settings
 from agents.shared.db.postgres import execute
 from agents.shared.db.redis_client import get_redis
+from agents.shared.http.client import get_http_client
 from agents.shared.cefr import theta_to_cefr
 
 logger = logging.getLogger(__name__)
@@ -31,13 +31,14 @@ _ITEM_BANK_KEY = "agt05:item_bank:{}"
 async def _fetch_lms_items(skill_domain: str) -> list[dict]:
     """Raw HTTP fetch from Learning Materials Service — no caching."""
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            r = await client.get(
-                f"{LMS_BASE}/assessment/item-bank",
-                params={"skill": skill_domain.lower()},
-            )
-            r.raise_for_status()
-            return r.json()
+        client = await get_http_client()
+        r = await client.get(
+            f"{LMS_BASE}/assessment/item-bank",
+            params={"skill": skill_domain.lower()},
+            timeout=10.0,
+        )
+        r.raise_for_status()
+        return r.json()
     except Exception as exc:
         logger.warning("Could not fetch item bank for %s: %s", skill_domain, exc)
         return []

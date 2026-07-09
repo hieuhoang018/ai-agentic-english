@@ -79,6 +79,7 @@ export async function signTestToken({
     .setSubject(sub)
     .setIssuer(issuer)
     .setIssuedAt()
+    .setNotBefore(Math.floor(Date.now() / 1000))
     .setExpirationTime(Math.floor(Date.now() / 1000) + expiresInSeconds)
     .sign(privateKey);
 }

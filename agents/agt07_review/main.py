@@ -2,7 +2,7 @@ import logging
 from contextlib import asynccontextmanager
 from fastapi import Depends, FastAPI, Header, HTTPException
 from pydantic import BaseModel, Field
-from agents.agt07_review.service import get_due_items, rate_item, build_daily_test, pick_vocab_of_the_day
+from agents.agt07_review.service import get_due_items, rate_item, build_daily_test, pick_vocab_of_the_day, fetch_vocabulary
 from agents.agt07_review.offline import get_offline_package, apply_offline_sync
 from agents.shared.auth import require_matching_user
 from agents.shared.config import settings
@@ -111,8 +111,12 @@ async def reminder_context(
     if x_internal_secret != settings.INTERNAL_SECRET:
         raise HTTPException(status_code=403, detail="Forbidden")
 
-    due = await get_due_items(clerk_user_id)
-    vocab_of_the_day = await pick_vocab_of_the_day(clerk_user_id)
+    # Both due-items and vocab-of-the-day derive from the same AGT-06
+    # vocabulary data — fetch it once instead of each helper hitting
+    # GET /ltm/{id}/vocabulary independently.
+    vocab = await fetch_vocabulary(clerk_user_id)
+    due = await get_due_items(clerk_user_id, vocab=vocab)
+    vocab_of_the_day = await pick_vocab_of_the_day(clerk_user_id, vocab=vocab)
 
     return {
         "userId": clerk_user_id,

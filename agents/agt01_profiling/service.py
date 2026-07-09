@@ -14,10 +14,10 @@ Merge-on-read protocol:
 import json
 import logging
 import os
-import httpx
 from copy import deepcopy
 from agents.shared.db.postgres import fetchrow, execute, get_pool
 from agents.shared.db.redis_client import get_redis
+from agents.shared.http.client import get_http_client
 from agents.shared.models.learner import LearnerProfile, IrtTheta
 from agents.agt01_profiling import irt, vocabulary, behavioral
 
@@ -70,10 +70,10 @@ async def get_profile(clerk_user_id: str, session_id: str | None = None) -> dict
 async def _get_stm_errors(session_id: str) -> list[dict]:
     """Call AGT-06 to get session error events. Best-effort — returns [] on failure."""
     try:
-        async with httpx.AsyncClient(timeout=2.0) as client:
-            resp = await client.get(f"{AGT06_BASE_URL}/sessions/{session_id}/errors")
-            resp.raise_for_status()
-            return resp.json()
+        client = await get_http_client()
+        resp = await client.get(f"{AGT06_BASE_URL}/sessions/{session_id}/errors", timeout=2.0)
+        resp.raise_for_status()
+        return resp.json()
     except Exception as exc:
         logger.warning("_get_stm_errors: AGT-06 call failed session=%s err=%s", session_id, exc)
         return []
@@ -126,77 +126,89 @@ async def update_profile(clerk_user_id: str, updates: dict) -> dict:
     Wraps SELECT + UPDATE in a transaction with FOR UPDATE to prevent
     lost-update races when two concurrent callers read the same base row.
     Invalidates the Redis cache after writing.
+
+    Single SELECT ... FOR UPDATE per call in the common case (the profile
+    row already exists) — the existence check and the merge+update happen
+    inside the same transaction/lock instead of two round-trips. Only falls
+    back to create_profile() + a second SELECT ... FOR UPDATE in a fresh
+    transaction when the row genuinely doesn't exist yet (first update for a
+    brand-new user).
     """
     pool = await get_pool()
     async with pool.acquire() as conn:
-        async with conn.transaction():
-            row = await conn.fetchrow(
-                "SELECT * FROM learner_profiles WHERE clerk_user_id = $1 FOR UPDATE",
-                clerk_user_id,
-            )
-            if not row:
-                # Create profile outside the current transaction to avoid deadlock,
-                # then re-enter a fresh transaction with FOR UPDATE.
-                pass
-
-        if not row:
+        updated = await _select_for_update_and_merge(conn, clerk_user_id, updates)
+        if not updated:
+            # Row didn't exist — create it outside the failed transaction,
+            # then retry once in a fresh transaction now that it's there.
             await create_profile(clerk_user_id)
-
-        async with conn.transaction():
-            row = await conn.fetchrow(
-                "SELECT * FROM learner_profiles WHERE clerk_user_id = $1 FOR UPDATE",
-                clerk_user_id,
-            )
-            if not row:
+            updated = await _select_for_update_and_merge(conn, clerk_user_id, updates)
+            if not updated:
                 return None
-
-            current = _row_to_dict(row)
-
-            # Merge updates
-            for field, value in updates.items():
-                if field in ("irt_theta", "grammar_error_map", "behavioral_profile",
-                             "vocabulary_beta", "goal_profile"):
-                    if isinstance(value, dict) and isinstance(current.get(field), dict):
-                        # Deep merge: for each top-level key, if both sides are dicts, merge them.
-                        # This preserves sibling error types within the same skill domain.
-                        base_dict = current[field]
-                        for k, v in value.items():
-                            if isinstance(v, dict) and isinstance(base_dict.get(k), dict):
-                                merged_sub = dict(base_dict[k])
-                                merged_sub.update(v)
-                                base_dict[k] = merged_sub
-                            else:
-                                base_dict[k] = v
-                    else:
-                        current[field] = value
-                else:
-                    current[field] = value
-
-            await conn.execute(
-                """
-                UPDATE learner_profiles SET
-                    irt_theta = $2::jsonb,
-                    vocabulary_beta = $3::jsonb,
-                    grammar_error_map = $4::jsonb,
-                    behavioral_profile = $5::jsonb,
-                    goal_profile = $6::jsonb,
-                    cold_start_flag = $7,
-                    updated_at = NOW()
-                WHERE clerk_user_id = $1
-                """,
-                clerk_user_id,
-                json.dumps(current.get("irt_theta", {})),
-                json.dumps(current.get("vocabulary_beta", {})),
-                json.dumps(current.get("grammar_error_map", {})),
-                json.dumps(current.get("behavioral_profile", {})),
-                json.dumps(current.get("goal_profile", {})),
-                current.get("cold_start_flag", True),
-            )
 
     # Invalidate cache — next read will re-populate from DB
     r = await get_redis()
     await r.delete(f"profile:{clerk_user_id}")
     return await _get_base_profile(clerk_user_id)
+
+
+async def _select_for_update_and_merge(conn, clerk_user_id: str, updates: dict) -> bool:
+    """
+    SELECT ... FOR UPDATE the profile row inside its own transaction and, if
+    found, deep-merge `updates` into it and persist. Returns True if a row
+    was found and updated, False if no row exists yet (caller should create
+    one and retry).
+    """
+    async with conn.transaction():
+        row = await conn.fetchrow(
+            "SELECT * FROM learner_profiles WHERE clerk_user_id = $1 FOR UPDATE",
+            clerk_user_id,
+        )
+        if not row:
+            return False
+
+        current = _row_to_dict(row)
+
+        # Merge updates
+        for field, value in updates.items():
+            if field in ("irt_theta", "grammar_error_map", "behavioral_profile",
+                         "vocabulary_beta", "goal_profile"):
+                if isinstance(value, dict) and isinstance(current.get(field), dict):
+                    # Deep merge: for each top-level key, if both sides are dicts, merge them.
+                    # This preserves sibling error types within the same skill domain.
+                    base_dict = current[field]
+                    for k, v in value.items():
+                        if isinstance(v, dict) and isinstance(base_dict.get(k), dict):
+                            merged_sub = dict(base_dict[k])
+                            merged_sub.update(v)
+                            base_dict[k] = merged_sub
+                        else:
+                            base_dict[k] = v
+                else:
+                    current[field] = value
+            else:
+                current[field] = value
+
+        await conn.execute(
+            """
+            UPDATE learner_profiles SET
+                irt_theta = $2::jsonb,
+                vocabulary_beta = $3::jsonb,
+                grammar_error_map = $4::jsonb,
+                behavioral_profile = $5::jsonb,
+                goal_profile = $6::jsonb,
+                cold_start_flag = $7,
+                updated_at = NOW()
+            WHERE clerk_user_id = $1
+            """,
+            clerk_user_id,
+            json.dumps(current.get("irt_theta", {})),
+            json.dumps(current.get("vocabulary_beta", {})),
+            json.dumps(current.get("grammar_error_map", {})),
+            json.dumps(current.get("behavioral_profile", {})),
+            json.dumps(current.get("goal_profile", {})),
+            current.get("cold_start_flag", True),
+        )
+    return True
 
 
 def _cold_start_profile(clerk_user_id: str) -> dict:

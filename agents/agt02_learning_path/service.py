@@ -2,17 +2,19 @@
 AGT-02 Learning Path Agent — plan generation, persistence, and retrieval.
 
 generate_plan() flow:
-  1. Fetch the base learner profile from AGT-01 over HTTP (no session_id —
-     this is an async/offline operation, not tied to a live tutor session).
-     Falls back to a cold-start profile if AGT-01 is unreachable.
+  1. Fetch the base learner profile from AGT-01 (no session_id — this is an
+     async/offline operation, not tied to a live tutor session) and the
+     catalog summary from the Learning Materials service concurrently via
+     asyncio.gather — neither depends on the other's result. Profile falls
+     back to a cold-start profile if AGT-01 is unreachable; catalog falls
+     back to {} (triggers optimizer.FALLBACK_ACTIVITIES) if unreachable.
+     The catalog is Redis-cached and always the full, unfiltered set —
+     level filtering happens after both fetches resolve (see step 4b) so
+     the shared cache entry stays valid across learners at different CEFR
+     levels.
   2. If the caller supplied skill_estimates, overlay them onto irt_theta.
   3. Compute skill_allocation via optimizer.allocate_skills().
-  4. Fetch (and Redis-cache) a catalog summary from the Learning Materials
-     service, grouped by skill code. Falls back to {} (triggers
-     optimizer.FALLBACK_ACTIVITIES) if unreachable. The cached catalog is
-     always the full, unfiltered set — level filtering happens after the
-     cache read (see step 4b) so the shared cache entry stays valid across
-     learners at different CEFR levels.
+  4. (see step 1 — catalog already fetched concurrently with the profile.)
   4b. Reorder each skill's module pool by proximity to profile.goal_profile
       .currentLevel via _filter_catalog_by_level(): modules at-or-above the
       learner's level sort first (closest first), so select_daily_activities'
@@ -31,6 +33,7 @@ generate_plan() flow:
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
@@ -41,6 +44,7 @@ import httpx
 from agents.shared.db.postgres import get_pool, fetchrow
 from agents.shared.db.redis_client import get_redis
 from agents.shared.events.producer import emit
+from agents.shared.http.client import get_http_client
 from agents.shared.llm.router import call_llm, AgentID
 from agents.shared.security import assert_internal_secret_is_safe
 from agents.agt02_learning_path import optimizer
@@ -73,10 +77,10 @@ _COLD_START_PROFILE = {
 async def _fetch_profile(clerk_user_id: str) -> dict:
     """Fetch the base learner profile from AGT-01. Falls back to cold-start on failure."""
     try:
-        async with httpx.AsyncClient(timeout=5.0) as client:
-            resp = await client.get(f"{AGT01_BASE_URL}/profile/{clerk_user_id}")
-            resp.raise_for_status()
-            return resp.json()
+        client = await get_http_client()
+        resp = await client.get(f"{AGT01_BASE_URL}/profile/{clerk_user_id}", timeout=5.0)
+        resp.raise_for_status()
+        return resp.json()
     except Exception as exc:
         logger.warning("generate_plan: AGT-01 profile fetch failed for %s: %s", clerk_user_id, exc)
         return dict(_COLD_START_PROFILE)
@@ -205,13 +209,14 @@ async def _fetch_catalog_summary() -> dict:
 
     catalog: dict[str, list[dict]] = {}
     try:
-        async with httpx.AsyncClient(timeout=5.0) as client:
-            resp = await client.get(
-                f"{LM_SERVICE_BASE_URL}/internal/catalog/summary",
-                headers={"x-internal-secret": LM_INTERNAL_SECRET},
-            )
-            resp.raise_for_status()
-            catalog = _modules_to_skill_catalog(resp.json().get("modules", []))
+        client = await get_http_client()
+        resp = await client.get(
+            f"{LM_SERVICE_BASE_URL}/internal/catalog/summary",
+            headers={"x-internal-secret": LM_INTERNAL_SECRET},
+            timeout=5.0,
+        )
+        resp.raise_for_status()
+        catalog = _modules_to_skill_catalog(resp.json().get("modules", []))
     except Exception as exc:
         logger.warning("generate_plan: catalog summary fetch failed: %s", exc)
 
@@ -224,15 +229,16 @@ async def _sync_learning_path(clerk_user_id: str, path_definition: dict) -> str:
     fallback_path_id = str(uuid.uuid4())
 
     try:
-        async with httpx.AsyncClient(timeout=5.0) as client:
-            response = await client.post(
-                f"{LM_SERVICE_BASE_URL}/internal/learning-paths",
-                headers={"x-internal-secret": LM_INTERNAL_SECRET},
-                json={
-                    "userId": clerk_user_id,
-                    "pathDefinition": path_definition,
-                },
-            )
+        client = await get_http_client()
+        response = await client.post(
+            f"{LM_SERVICE_BASE_URL}/internal/learning-paths",
+            headers={"x-internal-secret": LM_INTERNAL_SECRET},
+            json={
+                "userId": clerk_user_id,
+                "pathDefinition": path_definition,
+            },
+            timeout=5.0,
+        )
     except httpx.HTTPError as exc:
         logger.warning("generate_plan: Learning Materials sync failed for %s: %s", clerk_user_id, exc)
         return fallback_path_id
@@ -286,7 +292,10 @@ async def generate_plan(clerk_user_id: str, request: dict) -> dict:
     goals = request.get("goals") or []
     skill_estimates = request.get("skill_estimates")
 
-    profile = await _fetch_profile(clerk_user_id)
+    profile, catalog = await asyncio.gather(
+        _fetch_profile(clerk_user_id),
+        _fetch_catalog_summary(),
+    )
 
     if skill_estimates:
         theta = dict(profile.get("irt_theta") or {})
@@ -294,7 +303,6 @@ async def generate_plan(clerk_user_id: str, request: dict) -> dict:
         profile["irt_theta"] = theta
 
     allocation = optimizer.allocate_skills(profile)
-    catalog = await _fetch_catalog_summary()
     current_level = (profile.get("goal_profile") or {}).get("currentLevel")
     catalog = _filter_catalog_by_level(catalog, current_level)
 

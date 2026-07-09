@@ -29,14 +29,13 @@ export function createModulesRouter(prisma: AppPrismaClient): Router {
     '/:id/lessons',
     requireAuth,
     asyncHandler(async (req, res) => {
-      const module = await prisma.module.findUnique({ where: { id: req.params.id } });
+      const module = await prisma.module.findUnique({
+        where: { id: req.params.id },
+        include: { lessons: { orderBy: { order: 'asc' } } },
+      });
       if (!module) throw new NotFoundError('Module not found');
 
-      const lessons = await prisma.lesson.findMany({
-        where: { moduleId: req.params.id },
-        orderBy: { order: 'asc' },
-      });
-      res.json(lessons.map(toLessonDto));
+      res.json(module.lessons.map(toLessonDto));
     }),
   );
 

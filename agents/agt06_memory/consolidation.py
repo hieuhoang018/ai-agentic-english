@@ -50,16 +50,18 @@ async def consolidate_session(
         err["clerk_user_id"] = clerk_user_id
     await ltm.insert_error_events(session_id, errors)
 
-    # Step 4: Upsert vocabulary encounters
-    for enc in vocab_items:
+    # Step 4: Upsert vocabulary encounters — one batched round-trip instead of
+    # one upsert per encounter. Batch failure is swallowed (best-effort, same
+    # as the old per-item loop) but is no longer isolated per-item: a single
+    # bad encounter now fails the whole batch instead of just itself.
+    if vocab_items:
         try:
-            await ltm.upsert_vocab(
+            await ltm.upsert_vocab_batch(
                 clerk_user_id,
-                enc.get("word", ""),
-                enc.get("context_sentence", ""),
+                [(enc.get("word", ""), enc.get("context_sentence", "")) for enc in vocab_items],
             )
         except Exception as exc:
-            logger.warning("vocab upsert failed word=%s err=%s", enc.get("word"), exc)
+            logger.warning("vocab upsert batch failed count=%d err=%s", len(vocab_items), exc)
 
     # Step 5: Write conversation archive (no embedding yet)
     conv_id = await ltm.insert_conversation(session_id, clerk_user_id, context)

@@ -5,6 +5,7 @@ CUSUM (cusum.py), PELT plateau detection (changepoint.py, per skill domain)
 and the multi-signal risk score (risk_model.py) are all real implementations.
 """
 
+import asyncio
 import httpx
 import json
 import logging
@@ -67,13 +68,20 @@ async def run_analysis(clerk_user_id: str) -> dict:
     """
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
-            errors_r = await client.get(
-                f"{AGT06_BASE}/ltm/{clerk_user_id}/errors", params={"limit": 200}
+            (
+                errors_r,
+                sessions_r,
+                profile_r,
+                *theta_history_results,
+            ) = await asyncio.gather(
+                client.get(f"{AGT06_BASE}/ltm/{clerk_user_id}/errors", params={"limit": 200}),
+                client.get(f"{AGT06_BASE}/ltm/{clerk_user_id}/sessions", params={"limit": 50}),
+                client.get(f"{AGT01_BASE}/profile/{clerk_user_id}"),
+                *(
+                    _fetch_theta_history(client, clerk_user_id, skill)
+                    for skill in ASSESSMENT_SKILL_DOMAINS
+                ),
             )
-            sessions_r = await client.get(
-                f"{AGT06_BASE}/ltm/{clerk_user_id}/sessions", params={"limit": 50}
-            )
-            profile_r = await client.get(f"{AGT01_BASE}/profile/{clerk_user_id}")
             errors_r.raise_for_status()
             sessions_r.raise_for_status()
             profile_r.raise_for_status()
@@ -81,10 +89,7 @@ async def run_analysis(clerk_user_id: str) -> dict:
             sessions = sessions_r.json()
             profile = profile_r.json()
 
-            theta_histories = {
-                skill: await _fetch_theta_history(client, clerk_user_id, skill)
-                for skill in ASSESSMENT_SKILL_DOMAINS
-            }
+            theta_histories = dict(zip(ASSESSMENT_SKILL_DOMAINS, theta_history_results))
     except Exception as exc:
         logger.warning("Analysis data fetch failed for %s: %s", clerk_user_id, exc)
         return {"clerk_user_id": clerk_user_id, "error": str(exc), "patterns": []}
@@ -93,7 +98,13 @@ async def run_analysis(clerk_user_id: str) -> dict:
     persistent = detect_persistent_errors(errors, min_sessions=5)
 
     # Plateau detection: one real PELT result per assessed skill domain.
-    plateau_by_skill = {skill: detect_plateau(history) for skill, history in theta_histories.items()}
+    # ruptures.Pelt(...).fit(...).predict(...) is CPU-bound; run it off the
+    # event loop via asyncio.to_thread so it doesn't block other concurrent
+    # requests to this agent while it runs.
+    plateau_results = await asyncio.gather(
+        *(asyncio.to_thread(detect_plateau, history) for history in theta_histories.values())
+    )
+    plateau_by_skill = dict(zip(theta_histories.keys(), plateau_results))
 
     # Behavioural risk
     behavioral = profile.get("behavioral_profile", {})

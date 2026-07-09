@@ -114,7 +114,12 @@ async def test_consolidate_session_idempotent_second_call_does_not_double_write(
 
 
 async def test_consolidate_session_per_item_vocab_failure_does_not_abort(monkeypatch):
-    """Per-item vocab upsert failure is swallowed; downstream steps still run."""
+    """
+    Vocab upsert batch failure is swallowed; downstream steps still run.
+    (Was per-item isolation before the executemany batching fix — a single
+    batch failure now takes the whole vocab batch with it, but consolidation
+    as a whole must still proceed and succeed.)
+    """
     emitted = []
 
     async def fake_emit(topic, payload, agent_id, key=None):
@@ -122,13 +127,13 @@ async def test_consolidate_session_per_item_vocab_failure_does_not_abort(monkeyp
 
     monkeypatch.setattr(consolidation, "emit", fake_emit)
 
-    call_count = {"upsert_vocab": 0}
+    call_count = {"upsert_vocab_batch": 0}
 
-    async def failing_upsert_vocab(clerk_user_id, word, context_sentence):
-        call_count["upsert_vocab"] += 1
+    async def failing_upsert_vocab_batch(clerk_user_id, encounters):
+        call_count["upsert_vocab_batch"] += 1
         raise RuntimeError("Simulated vocab DB failure")
 
-    monkeypatch.setattr(ltm, "upsert_vocab", failing_upsert_vocab)
+    monkeypatch.setattr(ltm, "upsert_vocab_batch", failing_upsert_vocab_batch)
 
     insert_conversation_calls = []
     original_insert_conversation = ltm.insert_conversation
@@ -149,7 +154,7 @@ async def test_consolidate_session_per_item_vocab_failure_does_not_abort(monkeyp
     result = await consolidation.consolidate_session(session_id, clerk_id, "READING")
 
     assert result is True
-    assert call_count["upsert_vocab"] == 1  # was called and failed
+    assert call_count["upsert_vocab_batch"] == 1  # was called and failed
     assert session_id in insert_conversation_calls  # downstream step still ran
     assert "agent.consolidation.complete" in emitted  # emit still fired
     await asyncio.sleep(0.1)

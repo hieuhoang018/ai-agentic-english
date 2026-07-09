@@ -3,13 +3,16 @@ from fastapi import FastAPI
 from agents.agt05_assessment.service import start_assessment, record_response
 from agents.agt05_assessment.models import StartAssessmentRequest, RespondRequest
 from agents.shared.db.postgres import get_pool, close_pool
+from agents.shared.http.client import get_http_client, close_http_client
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await get_pool()   # pre-warm connection pool so first request doesn't pay the cost
+    await get_http_client()
     yield
     await close_pool()
+    await close_http_client()
 
 
 app = FastAPI(

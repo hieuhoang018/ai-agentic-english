@@ -4,6 +4,7 @@ Pre-computes recommendations and caches in Redis per user.
 Cold-start: popularity-based fallback when cold_start_flag=True.
 """
 
+import asyncio
 import json
 import time
 import httpx
@@ -55,8 +56,10 @@ async def _compute_recommendations(clerk_user_id: str) -> list[dict]:
     r = await get_redis()
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
-            profile_r = await client.get(f"{AGT01_BASE}/profile/{clerk_user_id}")
-            catalog_r = await client.get(f"{LMS_BASE}/modules")
+            profile_r, catalog_r = await asyncio.gather(
+                client.get(f"{AGT01_BASE}/profile/{clerk_user_id}"),
+                client.get(f"{LMS_BASE}/modules"),
+            )
             profile_r.raise_for_status()
             catalog_r.raise_for_status()
             profile = profile_r.json()

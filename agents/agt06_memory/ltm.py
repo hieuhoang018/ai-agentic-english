@@ -6,7 +6,7 @@ clerk_user_id is the universal cross-service user key throughout.
 
 import json
 from datetime import datetime, timezone
-from agents.shared.db.postgres import fetchrow, fetch, execute
+from agents.shared.db.postgres import fetchrow, fetch, execute, executemany
 
 
 _ALLOWED_PROFILE_FIELDS: frozenset[str] = frozenset({
@@ -141,15 +141,12 @@ async def get_sessions(clerk_user_id: str, limit: int = 20) -> list[dict]:
 # ── error_events ─────────────────────────────────────────────────────────────
 
 async def insert_error_events(session_id: str, errors: list[dict]) -> None:
-    """Bulk insert error events from STM at session consolidation."""
-    for err in errors:
-        await execute(
-            """
-            INSERT INTO error_events
-                (session_id, clerk_user_id, error_type, skill_domain, severity, context_excerpt)
-            VALUES ($1, $2, $3, $4, $5, $6)
-            ON CONFLICT DO NOTHING
-            """,
+    """Bulk insert error events from STM at session consolidation — a single
+    batched round-trip via executemany instead of one INSERT per error."""
+    if not errors:
+        return
+    args_list = [
+        (
             session_id,
             err.get("clerk_user_id", ""),
             err.get("error_type", "unknown"),
@@ -157,6 +154,17 @@ async def insert_error_events(session_id: str, errors: list[dict]) -> None:
             err.get("severity", 1),
             err.get("context_excerpt"),
         )
+        for err in errors
+    ]
+    await executemany(
+        """
+        INSERT INTO error_events
+            (session_id, clerk_user_id, error_type, skill_domain, severity, context_excerpt)
+        VALUES ($1, $2, $3, $4, $5, $6)
+        ON CONFLICT DO NOTHING
+        """,
+        args_list,
+    )
 
 
 async def get_errors(clerk_user_id: str, skill_domain: str | None = None, limit: int = 100) -> list[dict]:
@@ -199,6 +207,39 @@ async def upsert_vocab(clerk_user_id: str, word: str, context_sentence: str) -> 
             sm_retrievability = LEAST(1.0, vocabulary_mastery.sm_retrievability + 0.05)
         """,
         clerk_user_id, word, context_sentence,
+    )
+
+
+async def upsert_vocab_batch(clerk_user_id: str, encounters: list[tuple[str, str]]) -> None:
+    """
+    Batched version of upsert_vocab — one round-trip (executemany) for every
+    vocab encounter in a session instead of one per encounter.
+    encounters: list of (word, context_sentence) tuples, in encounter order.
+    Repeated words within the same batch still accumulate correctly (each
+    statement in an executemany batch runs sequentially within one implicit
+    transaction, so a later statement for the same word sees the earlier
+    statement's updated encounter_count/context_sentences).
+    Note: unlike the old per-item loop in consolidation.py, this is
+    all-or-nothing for the batch — callers should catch around the whole
+    call rather than expecting per-item failure isolation.
+    """
+    if not encounters:
+        return
+    args_list = [(clerk_user_id, word, context_sentence) for word, context_sentence in encounters]
+    await executemany(
+        """
+        INSERT INTO vocabulary_mastery (clerk_user_id, word, context_sentences, last_encounter, encounter_count)
+        VALUES ($1, $2, ARRAY[$3], NOW(), 1)
+        ON CONFLICT (clerk_user_id, word)
+        DO UPDATE SET
+            context_sentences = array_append(
+                vocabulary_mastery.context_sentences[1:4], $3
+            ),
+            last_encounter = NOW(),
+            encounter_count = vocabulary_mastery.encounter_count + 1,
+            sm_retrievability = LEAST(1.0, vocabulary_mastery.sm_retrievability + 0.05)
+        """,
+        args_list,
     )
 
 

@@ -7,6 +7,7 @@ from agents.shared.auth import extract_user_id
 from agents.shared.db.postgres import get_pool, close_pool
 from agents.shared.db.redis_client import get_redis, close_redis
 from agents.shared.events.producer import get_producer, close_producer
+from agents.shared.http.client import get_http_client, close_http_client
 from agents.agt03_tutor import service
 from agents.agt03_tutor import pipeline
 from agents.agt03_tutor.models import (
@@ -24,6 +25,7 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     await get_pool()
     await get_redis()
+    await get_http_client()
     # Kafka being unreachable at boot must not take the whole agent down —
     # matches agents/agt_orchestrator/main.py's existing pattern. emit()
     # retries the producer lazily on the next call once Kafka is back.
@@ -35,6 +37,7 @@ async def lifespan(app: FastAPI):
     await close_pool()
     await close_redis()
     await close_producer()
+    await close_http_client()
 
 
 app = FastAPI(title="AGT-03: AI Tutor / Conversation Agent", version="0.1.0", lifespan=lifespan)
