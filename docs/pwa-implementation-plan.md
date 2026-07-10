@@ -2,10 +2,29 @@
 
 ## Status
 
-Draft, 2026-07-10. Not started. Both open questions from the initial draft are now resolved:
-icons ship as a placeholder monogram (Stage 2), and `apps/web` will deploy to Vercel (Stage 5).
-Only remaining open question is Serwist/Next.js 16.2.9 compatibility, to verify at
-implementation time (Stage 3).
+**Stages 1–5 done and live-verified, 2026-07-10.** Deployed to Vercel (preview URL off the
+`ui/pwa` branch, Root Directory `apps/web`); manifest, service worker, offline fallback, and the
+install prompt all confirmed working against the real HTTPS deployment (not just localhost) —
+including a real install via the browser's native prompt. Stage 6 (Lighthouse formal pass) is
+the only thing not yet run. Stage 2's icons are still the placeholder monogram, real logo pending
+per that stage's original scope.
+
+Three real bugs surfaced and fixed getting here, all confirmed via reproduce-then-fix rather than
+guessing:
+- Serwist + Next 16's default Turbopack builder don't work together via `@serwist/next`'s
+  webpack-plugin integration (hard build failure) — switched to `@serwist/turbopack`'s
+  route-handler-based integration (`app/serwist/[path]/route.ts`) instead of `app/manifest.ts`'s
+  originally-planned static `public/sw.js` output.
+- Two pre-existing, PWA-work-unrelated monorepo build gaps only surfaced on a genuinely fresh
+  Vercel checkout (local builds masked them via stale artifacts/hoisting): `packages/shared`'s
+  `dist/` isn't committed and nothing built it before `apps/web`'s build ran (fixed via a
+  `prebuild` script), and `tsup` was only declared as a root-level devDependency instead of
+  `packages/shared`'s own (fixed by declaring it there directly).
+- `app/globals.css`'s pre-existing custom `--spacing-md`/`-lg` theme tokens collide with
+  Tailwind v4's `max-w-md`/`-lg` utilities (same namespace fallback) — broke both the install
+  banner's and the offline page's layout. Fixed locally by switching to arbitrary-value classes
+  (`max-w-[28rem]`) in the two files this plan touches; `main/review-center/due/page.tsx` has the
+  same latent bug and was left alone as out-of-scope pre-existing debt.
 
 Audience: frontend dev (`apps/web` is a separate, mostly-independent track per
 `CLAUDE.local.md` — this plan is scoped entirely to that app; no backend/TS-service or
@@ -40,16 +59,18 @@ requirements are met, and none of the supporting infrastructure exists:
 environment), app-shell precaching, a basic offline fallback page, an install-prompt UX, and a
 passing Lighthouse installability check.
 
-**Explicitly out of scope** (real features, deserve their own plan doc when picked up — don't
-fold them into this one):
+**Explicitly out of scope** (real features — logged together in
+`docs/pwa-offline-sync-and-push-plan.md` for a future session, don't fold them into this one):
 
 - **Deep offline data sync** — IndexedDB-backed flashcard/highlight review while offline, wired
   to AGT-07's existing `/offline/{clerk_user_id}/package` + `/sync` endpoints. The backend is
   ready; this is a frontend-only follow-up once basic installability lands.
+- **Background sync** for offline-submitted answers/reviews — pairs directly with the item
+  above (Background Sync is what reliably flushes the IndexedDB queue once connectivity
+  returns); Safari has no support for this API at all, see the linked doc.
 - **Web push notifications** — VAPID keys, a service worker `push` event handler, backend
   subscription storage, and a Novu web-push provider configuration. Today's Novu wiring
-  (`NotificationInbox.tsx`) is in-app inbox only; push is a distinct channel and a distinct plan.
-- **Background sync** for offline-submitted answers/reviews.
+  (`NotificationInbox.tsx`) is in-app inbox only; push is a distinct channel.
 - **Native app-store packaging** (Trusted Web Activity, Capacitor, etc.) — not requested, no
   evidence of need beyond "installable from the browser."
 
@@ -175,7 +196,7 @@ layout or homepage.
 **Acceptance:** manual check in Chrome desktop/Android (native + custom prompt both work);
 manual check in iOS Safari (instructions shown, no broken reliance on `beforeinstallprompt`).
 
-## Stage 5 — HTTPS / deployment (Vercel — decided 2026-07-10)
+## Stage 5 — HTTPS / deployment (Vercel — decided 2026-07-10) — ✅ done
 
 `apps/web` has never been deployed publicly (confirmed — see detail section below); the decision
 is to deploy it to **Vercel**, matching the boilerplate "Deploy on Vercel" section already in
@@ -214,6 +235,15 @@ require the API to respond, only actual page functionality does.
 a registered service worker and a secure connection (padlock); Lighthouse's installability
 checks pass against that URL. Full end-to-end functionality (pages that need real API data)
 is explicitly gated on the separate backend-deployment gap above, not this plan.
+
+**Done, 2026-07-10** — live-verified by the user against the real deployed URL (behind Vercel
+Deployment Protection, so verified manually rather than by this session's automation): secure
+padlock present, service worker registers, manifest correct, offline fallback shows the real
+`/offline` page on a genuinely uncached navigation, and — the one thing headless Chrome couldn't
+prove locally — the native `beforeinstallprompt` banner fired for real and a real install
+completed successfully. API/WS base URLs were deliberately left pointed at `localhost` per the
+Stage 5 decision above; pages needing real backend data are expected to be non-functional on this
+deployment and that's not a bug.
 
 ## Stage 6 — Lighthouse / final acceptance
 
