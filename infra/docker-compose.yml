@@ -211,6 +211,9 @@ services:
       REVIEW_AGENT_URL: http://agt07-review:8107
       INTERNAL_SECRET: dev-internal-secret
       NOVU_API_KEY: ${NOVU_API_KEY}
+      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY}
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY}
+      VAPID_SUBJECT: ${VAPID_SUBJECT}
     depends_on:
       postgres-notification:
         condition: service_healthy

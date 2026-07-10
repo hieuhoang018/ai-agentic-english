@@ -1,14 +1,11 @@
 import request from 'supertest';
 import { describe, expect, it } from 'vitest';
-import { createApp, HealthCheckClient } from '../app';
-
-const fakePrisma: HealthCheckClient = {
-  $queryRaw: (async () => [{ '?column?': 1 }]) as HealthCheckClient['$queryRaw'],
-};
+import { createApp } from '../app';
+import { createMockPrisma } from './testPrisma';
 
 describe('GET /health', () => {
   it('returns ok when the database is reachable', async () => {
-    const app = createApp(fakePrisma);
+    const app = createApp(createMockPrisma());
 
     const res = await request(app).get('/health');
 

@@ -22,3 +22,16 @@ model ScheduledReminderRun {
 
   @@unique([userId, reminderType, runDate])
 }
+
+// `endpoint` is the natural key — a browser has at most one active
+// subscription per service worker registration, so re-subscribing (e.g.
+// after a key rotation) naturally replaces the row via upsert.
+model PushSubscription {
+  endpoint    String   @id
+  clerkUserId String
+  p256dh      String
+  auth        String
+  createdAt   DateTime @default(now())
+
+  @@index([clerkUserId])
+}

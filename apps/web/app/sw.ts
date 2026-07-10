@@ -63,3 +63,40 @@ self.addEventListener("sync", (event) => {
     event.waitUntil(flushPendingReviews());
   }
 });
+
+type PushPayload = { title: string; body: string; url?: string };
+
+// Delivers a notification to the OS tray even when the app/tab is closed —
+// distinct from the in-app Novu <Inbox> (NotificationInbox.tsx), which only
+// renders while the tab is open. Payload shape matches
+// services/notification-service/src/lib/webPush.ts's PushPayload.
+self.addEventListener("push", (event) => {
+  const payload: Partial<PushPayload> = event.data?.json() ?? {};
+  const title = payload.title ?? "English Academy";
+
+  event.waitUntil(
+    self.registration.showNotification(title, {
+      body: payload.body,
+      icon: "/icons/icon-192.png",
+      badge: "/icons/icon-192.png",
+      data: { url: payload.url ?? "/" },
+    }),
+  );
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const url = (event.notification.data as { url?: string } | undefined)?.url ?? "/";
+
+  event.waitUntil(
+    (async () => {
+      const windowClients = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+      const existing = windowClients.find((client) => new URL(client.url).pathname === url);
+      if (existing) {
+        await existing.focus();
+        return;
+      }
+      await self.clients.openWindow(url);
+    })(),
+  );
+});

@@ -12,6 +12,12 @@ export type MockPrismaClient = AppPrismaClient & {
     create: ReturnType<typeof vi.fn>;
     deleteMany: ReturnType<typeof vi.fn>;
   };
+  pushSubscription: {
+    findMany: ReturnType<typeof vi.fn>;
+    upsert: ReturnType<typeof vi.fn>;
+    delete: ReturnType<typeof vi.fn>;
+    deleteMany: ReturnType<typeof vi.fn>;
+  };
 };
 
 export function createMockPrisma(): MockPrismaClient {
@@ -24,6 +30,12 @@ export function createMockPrisma(): MockPrismaClient {
     scheduledReminderRun: {
       findUnique: vi.fn(),
       create: vi.fn(),
+      deleteMany: vi.fn(),
+    },
+    pushSubscription: {
+      findMany: vi.fn(async () => []),
+      upsert: vi.fn(),
+      delete: vi.fn(),
       deleteMany: vi.fn(),
     },
   } as unknown as MockPrismaClient;
