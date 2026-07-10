@@ -19,3 +19,8 @@
   - Make the listening audio in the testing part in the onboarding flow unable to fast-forward or rewind, the audio should be displayed already if available without pressing any button, and should be auto-played when the user take the question. Any error should be handled gracefully on the frontend. Make the changes frontend-only.
 
 7. Stream AI response text in speaking practice
+
+8. Full PWA implementation
+  - Make the app actually installable (manifest, icons, service worker, HTTPS check, install
+    prompt) — audited 2026-07-10 as entirely missing despite this doc's and `apps/web/README.md`'s
+    framing of the app as already a PWA. Plan: `docs/pwa-implementation-plan.md`.

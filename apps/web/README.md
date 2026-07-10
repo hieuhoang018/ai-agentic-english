@@ -1,6 +1,9 @@
-# Web (PWA)
+# Web (PWA — planned, not yet implemented)
 
-Next.js + React + TypeScript frontend, packaged as a Progressive Web App (Service Worker, IndexedDB for offline flashcards/highlights).
+Next.js + React + TypeScript frontend. The product goal is a Progressive Web App (installable,
+Service Worker, IndexedDB for offline flashcards/highlights), but as of 2026-07-10 none of that
+infrastructure exists yet — no manifest, no service worker, no icons beyond a plain favicon.
+See `docs/pwa-implementation-plan.md` for the staged plan to close that gap.
 
 All requests to backend services go through the API Gateway (Kong), except the real-time speaking WebSocket, which connects directly to the AI Tutor service after a Gateway-issued session ticket.
 
