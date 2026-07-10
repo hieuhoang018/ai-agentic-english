@@ -4,6 +4,7 @@
   "version": "0.0.1",
   "scripts": {
     "dev": "next dev",
+    "prebuild": "npm run build --workspace=@ai-agentic-english/shared",
     "build": "next build",
     "start": "next start",
     "lint": "eslint"
