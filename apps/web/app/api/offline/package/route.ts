@@ -2,7 +2,7 @@ import { auth } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
 
 import { apiFetch, isApiError } from '@/lib/api/client';
-import type { DueReviewItem } from '@/lib/api/types';
+import type { OfflinePackage } from '@/lib/api/types';
 
 export async function GET() {
   const { getToken, userId } = await auth();
@@ -17,13 +17,13 @@ export async function GET() {
   }
 
   try {
-    const due = await apiFetch<DueReviewItem[]>(`/schedule/${userId}/due`, { token });
-    return NextResponse.json(due);
+    const pkg = await apiFetch<OfflinePackage>(`/offline/${userId}/package`, { token });
+    return NextResponse.json(pkg);
   } catch (error) {
     if (isApiError(error)) {
       return NextResponse.json({ message: error.message, body: error.body }, { status: error.status });
     }
 
-    return NextResponse.json({ message: 'Unable to load due review items right now.' }, { status: 502 });
+    return NextResponse.json({ message: 'Unable to load offline package right now.' }, { status: 502 });
   }
 }

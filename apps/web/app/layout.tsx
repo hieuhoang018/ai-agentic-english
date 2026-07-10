@@ -4,6 +4,7 @@ import "./globals.css";
 import { ClerkProvider } from "@clerk/nextjs";
 import { SerwistProvider } from "@serwist/next/react";
 import InstallPwaPrompt from "./components/InstallPwaPrompt";
+import OfflineSyncListener from "./components/OfflineSyncListener";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -62,6 +63,7 @@ export default function RootLayout({
           <ClerkProvider>
             <main className="flex-1">{children}</main>
             <InstallPwaPrompt />
+            <OfflineSyncListener />
           </ClerkProvider>
         </SerwistProvider>
       </body>

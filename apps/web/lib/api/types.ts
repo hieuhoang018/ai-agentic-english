@@ -92,11 +92,35 @@ export type DueReviewItem = {
   days_since: number;
 };
 
-export type RateReviewResponse = {
+export type Sm2StateEntry = {
+  vocab_id: string;
+  word: string;
+  sm_stability: number;
+  sm_retrievability: number;
+  next_review_at: string | null;
+  last_encounter: string | null;
+  encounter_count: number;
+};
+
+export type OfflinePackage = {
+  clerk_user_id: string;
+  generated_at: string;
+  flashcards_due: DueReviewItem[];
+  sm2_state: Sm2StateEntry[];
+  highlight_snapshot: { recent_errors: ReviewCenterErrorEvent[] };
+};
+
+export type OfflineReview = {
+  review_id: string;
   item_id: string;
   quality: number;
-  new_stability: number;
-  next_review: string;
+  reviewed_at?: string;
+};
+
+export type OfflineSyncResult = {
+  applied: number;
+  skipped: number;
+  errors: { review_id?: string; reason: string }[];
 };
 
 export type ReviewCenterErrorEvent = {
