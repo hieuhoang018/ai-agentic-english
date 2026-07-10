@@ -74,7 +74,7 @@ export default function InstallPwaPrompt() {
       role="dialog"
       aria-label="Cài đặt ứng dụng"
     >
-      <div className="flex w-full max-w-md items-center gap-3 rounded-xl border border-outline-variant bg-white p-4 shadow-[0_18px_60px_-36px_rgba(15,23,42,0.8)]">
+      <div className="flex w-full max-w-[28rem] items-center gap-3 rounded-xl border border-outline-variant bg-white p-4 shadow-[0_18px_60px_-36px_rgba(15,23,42,0.8)]">
         <span className="material-symbols-outlined shrink-0 text-primary">
           {showIosInstructions ? 'add_to_home_screen' : 'download'}
         </span>

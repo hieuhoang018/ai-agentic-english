@@ -1,7 +1,7 @@
 export default function OfflinePage() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-6 text-center">
-      <div className="max-w-md">
+      <div className="max-w-[28rem]">
         <span className="material-symbols-outlined text-6xl text-outline">wifi_off</span>
         <h1 className="mt-4 text-2xl font-bold text-on-surface">Bạn đang ngoại tuyến</h1>
         <p className="mt-2 text-on-surface-variant">
