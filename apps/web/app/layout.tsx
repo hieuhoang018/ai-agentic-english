@@ -1,7 +1,9 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { ClerkProvider } from "@clerk/nextjs";
+import { SerwistProvider } from "@serwist/next/react";
+import InstallPwaPrompt from "./components/InstallPwaPrompt";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -16,6 +18,25 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "English Academy - Wise Mentor AI",
   description: "English application for learning English with AI-powered mentor.",
+  icons: {
+    icon: [
+      { url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icons/icon-512.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: [{ url: "/icons/apple-icon-180.png", sizes: "180x180", type: "image/png" }],
+  },
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "English Academy",
+  },
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  themeColor: "#0f62fe",
+  colorScheme: "light",
 };
 
 export default function RootLayout({
@@ -30,7 +51,6 @@ export default function RootLayout({
     >
       <head>
         <meta charSet="utf-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
@@ -38,9 +58,12 @@ export default function RootLayout({
         <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet" />
       </head>
       <body className="bg-background dark:bg-inverse-surface text-on-background dark:text-inverse-on-surface font-sans min-h-screen flex">
-        <ClerkProvider>
-          <main className="flex-1">{children}</main>
-        </ClerkProvider>
+        <SerwistProvider swUrl="/serwist/sw.js" disable={process.env.NODE_ENV === "development"}>
+          <ClerkProvider>
+            <main className="flex-1">{children}</main>
+            <InstallPwaPrompt />
+          </ClerkProvider>
+        </SerwistProvider>
       </body>
     </html>
   );
