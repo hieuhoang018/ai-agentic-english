@@ -10,8 +10,8 @@ export default async function SpeakingPage() {
   return (
     <div>
       <div className="mb-1 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <h1 className="text-3xl font-bold text-on-surface sm:text-4xl">Hội thoại với AI</h1>
-        <Link href={speakingHistoryPath()} className="flex h-10 w-full items-center justify-center gap-2 rounded-lg border border-outline-variant bg-white px-4 text-sm font-semibold text-on-surface hover:bg-surface-container sm:w-auto">
+        <h1 className="text-3xl font-bold text-on-surface dark:text-on-primary sm:text-4xl">Hội thoại với AI</h1>
+        <Link href={speakingHistoryPath()} className="flex h-10 w-full items-center justify-center gap-2 rounded-lg border border-outline-variant bg-white px-4 text-sm font-semibold text-on-surface hover:bg-surface-container dark:border-outline dark:bg-surface-dark dark:text-on-primary dark:hover:bg-surface-dark-high sm:w-auto">
           <span className="material-symbols-outlined text-base">history</span>
           Lịch sử hội thoại
         </Link>

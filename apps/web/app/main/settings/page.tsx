@@ -3,6 +3,14 @@
 import { useEffect, useState } from 'react';
 
 import type { UpdateUserSettingsDto, UserDto } from '@/lib/api/types';
+import { useTheme } from '@/lib/useTheme';
+import type { ThemePreference } from '@/lib/theme';
+
+const THEME_OPTIONS: { value: ThemePreference; label: string; icon: string }[] = [
+  { value: 'light', label: 'Sáng', icon: 'light_mode' },
+  { value: 'dark', label: 'Tối', icon: 'dark_mode' },
+  { value: 'system', label: 'Hệ thống', icon: 'brightness_auto' },
+];
 
 type LoadState =
   | { status: 'loading' }
@@ -34,6 +42,7 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
 }
 
 export default function SettingsPage() {
+  const { preference: themePreference, setPreference: setThemePreference } = useTheme();
   const [state, setState] = useState<LoadState>({ status: 'loading' });
   const [saveState, setSaveState] = useState<SaveState>({ status: 'idle' });
 
@@ -118,16 +127,16 @@ export default function SettingsPage() {
         <p className="text-sm text-on-surface-variant dark:text-surface-dim">Đang tải cài đặt...</p>
       )}
 
-      {state.status === 'error' && <p className="text-sm text-error">{state.message}</p>}
+      {state.status === 'error' && <p className="text-sm text-error dark:text-red-400">{state.message}</p>}
 
       {state.status === 'success' && (
         <div className="flex flex-col gap-gutter">
-          <section className="bg-surface-container-lowest dark:bg-surface-container-high rounded-lg p-card-padding shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] border border-outline-variant/20 dark:border-outline/20">
+          <section className="bg-surface-container-lowest dark:bg-surface-dark rounded-lg p-card-padding shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] border border-outline-variant/20 dark:border-outline/20">
             <h2 className="mb-6 flex items-center gap-2 text-lg font-semibold text-on-surface dark:text-on-primary">
-              <span className="material-symbols-outlined text-primary">schedule</span>
+              <span className="material-symbols-outlined text-primary dark:text-primary-fixed-dim">schedule</span>
               Thời gian học mỗi ngày
             </h2>
-            <div className="mb-4 text-center font-bold text-primary">
+            <div className="mb-4 text-center font-bold text-primary dark:text-primary-fixed-dim">
               {dailyTimeBudgetMinutes} phút
             </div>
             <input
@@ -145,9 +154,34 @@ export default function SettingsPage() {
             </div>
           </section>
 
-          <section className="bg-surface-container-lowest dark:bg-surface-container-high rounded-lg p-card-padding shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] border border-outline-variant/20 dark:border-outline/20">
+          <section className="bg-surface-container-lowest dark:bg-surface-dark rounded-lg p-card-padding shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] border border-outline-variant/20 dark:border-outline/20">
             <h2 className="mb-6 flex items-center gap-2 text-lg font-semibold text-on-surface dark:text-on-primary">
-              <span className="material-symbols-outlined text-primary">notifications</span>
+              <span className="material-symbols-outlined text-primary dark:text-primary-fixed-dim">palette</span>
+              Giao diện
+            </h2>
+            <div className="flex gap-2">
+              {THEME_OPTIONS.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => setThemePreference(option.value)}
+                  aria-pressed={themePreference === option.value}
+                  className={`flex flex-1 flex-col items-center gap-1 rounded-lg border px-3 py-3 text-sm transition-colors ${
+                    themePreference === option.value
+                      ? 'border-primary dark:border-primary-fixed-dim bg-primary-container/10 text-primary dark:text-primary-fixed-dim'
+                      : 'border-outline-variant text-on-surface-variant hover:bg-surface-container dark:border-outline dark:text-surface-dim dark:hover:bg-surface-dark-high'
+                  }`}
+                >
+                  <span className="material-symbols-outlined">{option.icon}</span>
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          </section>
+
+          <section className="bg-surface-container-lowest dark:bg-surface-dark rounded-lg p-card-padding shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] border border-outline-variant/20 dark:border-outline/20">
+            <h2 className="mb-6 flex items-center gap-2 text-lg font-semibold text-on-surface dark:text-on-primary">
+              <span className="material-symbols-outlined text-primary dark:text-primary-fixed-dim">notifications</span>
               Nhắc nhở hằng ngày
             </h2>
             <label className="flex items-center gap-3 text-sm text-on-surface dark:text-on-primary">
@@ -163,7 +197,7 @@ export default function SettingsPage() {
               <div className="mt-4 flex items-center gap-3">
                 <input
                   type="time"
-                  className="rounded-lg border border-outline-variant bg-surface-container px-3 py-2 text-sm text-on-surface dark:bg-surface-variant dark:text-on-primary dark:border-outline"
+                  className="rounded-lg border border-outline-variant bg-surface-container px-3 py-2 text-sm text-on-surface dark:bg-surface-dark-high dark:text-on-primary dark:border-outline"
                   value={reminderTime}
                   onChange={(event) => setReminderTime(event.target.value)}
                 />
@@ -171,9 +205,9 @@ export default function SettingsPage() {
             )}
           </section>
 
-          <section className="bg-surface-container-lowest dark:bg-surface-container-high rounded-lg p-card-padding shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] border border-outline-variant/20 dark:border-outline/20">
+          <section className="bg-surface-container-lowest dark:bg-surface-dark rounded-lg p-card-padding shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] border border-outline-variant/20 dark:border-outline/20">
             <h2 className="mb-6 flex items-center gap-2 text-lg font-semibold text-on-surface dark:text-on-primary">
-              <span className="material-symbols-outlined text-primary">translate</span>
+              <span className="material-symbols-outlined text-primary dark:text-primary-fixed-dim">translate</span>
               Ngôn ngữ &amp; múi giờ
             </h2>
             <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
@@ -182,7 +216,7 @@ export default function SettingsPage() {
                   Ngôn ngữ ưu tiên
                 </label>
                 <select
-                  className="w-full rounded-lg border border-outline-variant bg-surface-container px-3 py-2 text-sm text-on-surface dark:bg-surface-variant dark:text-on-primary dark:border-outline"
+                  className="w-full rounded-lg border border-outline-variant bg-surface-container px-3 py-2 text-sm text-on-surface dark:bg-surface-dark-high dark:text-on-primary dark:border-outline"
                   value={preferredLanguage}
                   onChange={(event) => setPreferredLanguage(event.target.value)}
                 >
@@ -200,14 +234,14 @@ export default function SettingsPage() {
                 <div className="flex gap-2">
                   <input
                     type="text"
-                    className="w-full rounded-lg border border-outline-variant bg-surface-container px-3 py-2 text-sm text-on-surface dark:bg-surface-variant dark:text-on-primary dark:border-outline"
+                    className="w-full rounded-lg border border-outline-variant bg-surface-container px-3 py-2 text-sm text-on-surface dark:bg-surface-dark-high dark:text-on-primary dark:border-outline"
                     value={timezone}
                     onChange={(event) => setTimezone(event.target.value)}
                   />
                   <button
                     type="button"
                     onClick={useBrowserTimezone}
-                    className="shrink-0 rounded-lg border border-outline-variant px-3 py-2 text-sm text-on-surface-variant hover:bg-surface-container dark:border-outline dark:text-surface-dim dark:hover:bg-surface-variant"
+                    className="shrink-0 rounded-lg border border-outline-variant px-3 py-2 text-sm text-on-surface-variant hover:bg-surface-container dark:border-outline dark:text-surface-dim dark:hover:bg-surface-dark-high"
                   >
                     Dùng múi giờ hiện tại
                   </button>
@@ -229,7 +263,7 @@ export default function SettingsPage() {
               <span className="text-sm text-secondary">Đã lưu thành công.</span>
             )}
             {saveState.status === 'error' && (
-              <span className="text-sm text-error">{saveState.message}</span>
+              <span className="text-sm text-error dark:text-red-400">{saveState.message}</span>
             )}
           </div>
         </div>

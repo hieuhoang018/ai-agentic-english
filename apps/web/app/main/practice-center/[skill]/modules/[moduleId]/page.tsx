@@ -50,7 +50,7 @@ export default async function ModuleExercisePage({
 
   if (!lessonId) {
     return (
-      <section className="rounded-lg border border-dashed border-outline-variant bg-surface-container-lowest p-8 text-center text-on-surface-variant">
+      <section className="rounded-lg border border-dashed border-outline-variant bg-surface-container-lowest p-8 text-center text-on-surface-variant dark:border-outline dark:bg-surface-dark dark:text-surface-dim">
         This module does not have any lessons yet.
       </section>
     );
@@ -66,7 +66,7 @@ export default async function ModuleExercisePage({
 
   if (!exerciseId) {
     return (
-      <section className="rounded-lg border border-dashed border-outline-variant bg-surface-container-lowest p-8 text-center text-on-surface-variant">
+      <section className="rounded-lg border border-dashed border-outline-variant bg-surface-container-lowest p-8 text-center text-on-surface-variant dark:border-outline dark:bg-surface-dark dark:text-surface-dim">
         This lesson does not have any exercises yet.
       </section>
     );

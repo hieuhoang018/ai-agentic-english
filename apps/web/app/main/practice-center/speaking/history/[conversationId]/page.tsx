@@ -36,15 +36,15 @@ export default function TranscriptPage() {
   }, [conversationId])
 
   if (state.status === 'loading') {
-    return <p className="text-center text-on-surface-variant">Đang tải dữ liệu...</p>
+    return <p className="text-center text-on-surface-variant dark:text-surface-dim">Đang tải dữ liệu...</p>
   }
 
   if (state.status === 'error') {
     return (
-      <div className="rounded-lg border border-dashed border-outline-variant bg-surface-container-lowest p-10 text-center">
-        <span className="material-symbols-outlined text-5xl text-error">error</span>
-        <h2 className="mt-4 text-xl font-bold text-on-surface">Không thể tải dữ liệu</h2>
-        <p className="mt-2 text-on-surface-variant">Vui lòng thử lại sau.</p>
+      <div className="rounded-lg border border-dashed border-outline-variant bg-surface-container-lowest p-10 text-center dark:border-outline dark:bg-surface-dark">
+        <span className="material-symbols-outlined text-5xl text-error dark:text-red-400">error</span>
+        <h2 className="mt-4 text-xl font-bold text-on-surface dark:text-on-primary">Không thể tải dữ liệu</h2>
+        <p className="mt-2 text-on-surface-variant dark:text-surface-dim">Vui lòng thử lại sau.</p>
       </div>
     )
   }
@@ -52,7 +52,7 @@ export default function TranscriptPage() {
   const { conversation } = state
   if (!conversation) {
     return (
-      <div className="rounded-lg border border-dashed border-outline-variant bg-surface-container-lowest p-10 text-center text-on-surface-variant">
+      <div className="rounded-lg border border-dashed border-outline-variant bg-surface-container-lowest p-10 text-center text-on-surface-variant dark:border-outline dark:bg-surface-dark dark:text-surface-dim">
         Không tìm thấy cuộc hội thoại này.
       </div>
     )
@@ -71,13 +71,13 @@ export default function TranscriptPage() {
       <TranscriptThread conversation={conversation} onTitleSaved={handleTitleSaved} />
 
       <aside className="space-y-4">
-        <section className="rounded-lg border border-outline-variant/70 bg-surface-container-lowest p-6">
-          <h2 className="mb-6 flex items-center gap-2 text-2xl font-bold text-on-surface">
-            <span className="material-symbols-outlined text-primary">rule</span>
+        <section className="rounded-lg border border-outline-variant/70 bg-surface-container-lowest p-6 dark:border-outline/70 dark:bg-surface-dark">
+          <h2 className="mb-6 flex items-center gap-2 text-2xl font-bold text-on-surface dark:text-on-primary">
+            <span className="material-symbols-outlined text-primary dark:text-primary-fixed-dim">rule</span>
             Lỗi ghi nhận
           </h2>
           {conversation.errors.length === 0 ? (
-            <p className="text-on-surface-variant">Không phát hiện lỗi nào trong buổi học này.</p>
+            <p className="text-on-surface-variant dark:text-surface-dim">Không phát hiện lỗi nào trong buổi học này.</p>
           ) : (
             <div className="space-y-4">
               {conversation.errors.map((error) => (
@@ -95,7 +95,7 @@ export default function TranscriptPage() {
           <span className="material-symbols-outlined text-4xl">school</span>
           <h2 className="mt-3 text-2xl font-bold">Biến lỗi sai thành vốn từ vựng đỉnh cao</h2>
           <p className="mt-3 leading-7">Truy cập Trung tâm ôn luyện để xem lại các lỗi sai và từ vựng mới.</p>
-          <Link href="/main/review-center" className="mt-5 flex h-10 items-center justify-center rounded-lg bg-white px-4 text-sm font-bold text-primary">
+          <Link href="/main/review-center" className="mt-5 flex h-10 items-center justify-center rounded-lg bg-white px-4 text-sm font-bold text-primary dark:text-primary-fixed-dim">
             Ôn tập ngay
           </Link>
         </section>

@@ -71,19 +71,19 @@ export default function SelfAssessmentPage() {
           const selectedLevel = assessmentLevels[skill]
 
           return (
-            <article key={skill} className="rounded-lg border border-outline-variant bg-white p-5">
+            <article key={skill} className="rounded-lg border border-outline-variant bg-white p-5 dark:border-outline dark:bg-surface-dark">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="flex items-start gap-3">
                   <span className="material-symbols-outlined rounded-lg bg-primary-container p-2 text-white">{detail.icon}</span>
                   <div>
-                    <h2 className="text-xl font-bold text-on-surface">{detail.label}</h2>
-                    <p className="mt-1 text-sm leading-6 text-on-surface-variant">{detail.caption}</p>
+                    <h2 className="text-xl font-bold text-on-surface dark:text-on-primary">{detail.label}</h2>
+                    <p className="mt-1 text-sm leading-6 text-on-surface-variant dark:text-surface-dim">{detail.caption}</p>
                   </div>
                 </div>
                 {selectedLevel ? (
-                  <span className="rounded-full bg-emerald-50 px-3 py-1 text-sm font-bold text-emerald-800">CEFR {selectedLevel}</span>
+                  <span className="rounded-full bg-emerald-50 px-3 py-1 text-sm font-bold text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-200">CEFR {selectedLevel}</span>
                 ) : (
-                  <span className="rounded-full bg-surface px-3 py-1 text-sm font-bold text-on-surface-variant">Chưa chọn</span>
+                  <span className="rounded-full bg-surface px-3 py-1 text-sm font-bold text-on-surface-variant dark:bg-surface-dark-high dark:text-surface-dim">Chưa chọn</span>
                 )}
               </div>
               <div className="mt-5 grid grid-cols-3 gap-2 sm:grid-cols-6">
@@ -99,7 +99,7 @@ export default function SelfAssessmentPage() {
                       className={`h-11 rounded-lg border text-sm font-bold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ${
                         isSelected
                           ? 'border-primary bg-primary text-white shadow-sm'
-                          : 'border-outline-variant bg-surface text-on-surface hover:border-primary hover:bg-blue-50'
+                          : 'border-outline-variant bg-surface text-on-surface hover:border-primary hover:bg-blue-50 dark:border-outline dark:bg-surface-dark-high dark:text-on-primary dark:hover:bg-primary-container/10'
                       }`}
                     >
                       {level}
@@ -112,13 +112,13 @@ export default function SelfAssessmentPage() {
         })}
       </section>
 
-      <section className="mt-6 rounded-lg border border-on-surface/20 bg-surface-container-highest p-5">
+      <section className="mt-6 rounded-lg border border-on-surface/20 bg-surface-container-highest p-5 dark:border-outline/20 dark:bg-surface-dark-high">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 className="font-bold text-primary">CEFR self-assessment</h2>
-            <p className="mt-1 text-sm text-on-surface">{completedSkillCount} / {placementSkillIds.length} kỹ năng đã chọn</p>
+            <h2 className="font-bold text-primary dark:text-primary-fixed-dim">CEFR self-assessment</h2>
+            <p className="mt-1 text-sm text-on-surface dark:text-on-primary">{completedSkillCount} / {placementSkillIds.length} kỹ năng đã chọn</p>
           </div>
-          <span className="material-symbols-outlined text-primary">{isComplete ? 'check_circle' : 'circle'}</span>
+          <span className="material-symbols-outlined text-primary dark:text-primary-fixed-dim">{isComplete ? 'check_circle' : 'circle'}</span>
         </div>
       </section>
     </OnboardingShell>

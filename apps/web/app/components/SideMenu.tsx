@@ -73,8 +73,8 @@ export default function SideMenu({ variant = 'desktop', isOpen = false, onClose 
   const isReview = pathname?.startsWith('/main/review-center')
   const isProfile = pathname?.startsWith('/main/profile')
   const base = 'flex items-center px-4 py-3 rounded-lg transition-colors duration-200'
-  const active = 'text-primary font-bold border-l-4 border-primary bg-primary-container/10'
-  const inactive = 'text-on-surface-variant dark:text-surface-dim hover:text-primary hover:bg-surface-container-high dark:hover:bg-surface-variant'
+  const active = 'text-primary dark:text-primary-fixed-dim font-bold border-l-4 border-primary dark:border-primary-fixed-dim bg-primary-container/10'
+  const inactive = 'text-on-surface-variant dark:text-surface-dim hover:text-primary dark:hover:text-primary-fixed-dim hover:bg-surface-container-high dark:hover:bg-surface-dark-high'
   const metadataPlan =
     (isRecord(user?.publicMetadata) && getPlanFromMetadata(user.publicMetadata)) ||
     (isRecord(user?.unsafeMetadata) && getPlanFromMetadata(user.unsafeMetadata))
@@ -88,10 +88,10 @@ export default function SideMenu({ variant = 'desktop', isOpen = false, onClose 
       .map((part) => part[0]?.toUpperCase())
       .join('') || 'U'
   const navClassName = isMobile
-    ? `fixed left-0 top-0 z-[70] flex h-screen h-dvh w-[min(20rem,calc(100vw-3rem))] flex-col justify-between border-r border-outline-variant bg-surface-container-low shadow-[18px_0_40px_-28px_rgba(15,23,42,0.7)] transition-transform duration-300 ease-out dark:border-outline dark:bg-surface-container-highest md:hidden ${
+    ? `fixed left-0 top-0 z-[70] flex h-screen h-dvh w-[min(20rem,calc(100vw-3rem))] flex-col justify-between border-r border-outline-variant bg-surface-container-low shadow-[18px_0_40px_-28px_rgba(15,23,42,0.7)] transition-transform duration-300 ease-out dark:border-outline dark:bg-surface-dark-high md:hidden ${
         isOpen ? 'translate-x-0' : '-translate-x-full'
       }`
-    : 'bg-surface-container-low dark:bg-surface-container-highest h-screen w-64 fixed left-0 top-0 hidden md:flex flex-col border-r border-outline-variant dark:border-outline z-50 justify-between'
+    : 'bg-surface-container-low dark:bg-surface-dark-high h-screen w-64 fixed left-0 top-0 hidden md:flex flex-col border-r border-outline-variant dark:border-outline z-50 justify-between'
   const handleNavigate = () => onClose?.()
 
   return (
@@ -106,7 +106,7 @@ export default function SideMenu({ variant = 'desktop', isOpen = false, onClose 
         <div className="px-4 py-6">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <h1 className="text-2xl font-bold text-primary">English Academy</h1>
+              <h1 className="text-2xl font-bold text-primary dark:text-primary-fixed-dim">English Academy</h1>
               <p className="text-sm text-on-surface-variant dark:text-surface-dim mt-1">Wise Mentor AI</p>
             </div>
             {isMobile ? (
@@ -126,8 +126,8 @@ export default function SideMenu({ variant = 'desktop', isOpen = false, onClose 
           onClick={handleNavigate}
           className={`mx-3 flex items-center gap-3 rounded-lg px-3 py-3 transition-colors duration-200 ${
             isProfile
-              ? 'bg-primary-container/10 text-primary'
-              : 'text-on-surface hover:bg-surface-container-high dark:hover:bg-surface-variant'
+              ? 'bg-primary-container/10 text-primary dark:text-primary-fixed-dim'
+              : 'text-on-surface dark:text-on-primary hover:bg-surface-container-high dark:hover:bg-surface-dark-high'
           }`}
           aria-current={isProfile ? 'page' : undefined}
         >
@@ -162,11 +162,11 @@ export default function SideMenu({ variant = 'desktop', isOpen = false, onClose 
         </div>
       </div>
       <div className="py-4 px-3 space-y-2 border-t border-outline-variant/30 mt-auto">
-        <Link onClick={handleNavigate} className="flex items-center px-4 py-2 rounded-lg text-on-surface-variant dark:text-surface-dim hover:text-primary hover:bg-surface-container-high dark:hover:bg-surface-variant transition-colors duration-200" href="/main/help">
+        <Link onClick={handleNavigate} className="flex items-center px-4 py-2 rounded-lg text-on-surface-variant dark:text-surface-dim hover:text-primary dark:hover:text-primary-fixed-dim hover:bg-surface-container-high dark:hover:bg-surface-dark-high transition-colors duration-200" href="/main/help">
           <span className="material-symbols-outlined mr-3 text-sm">help</span>
           <span className="text-sm">Trợ giúp</span>
         </Link>
-        <Link onClick={handleNavigate} className="flex items-center px-4 py-2 rounded-lg text-on-surface-variant dark:text-surface-dim hover:text-primary hover:bg-surface-container-high dark:hover:bg-surface-variant transition-colors duration-200" href="/main/about">
+        <Link onClick={handleNavigate} className="flex items-center px-4 py-2 rounded-lg text-on-surface-variant dark:text-surface-dim hover:text-primary dark:hover:text-primary-fixed-dim hover:bg-surface-container-high dark:hover:bg-surface-dark-high transition-colors duration-200" href="/main/about">
           <span className="material-symbols-outlined mr-3 text-sm">info</span>
           <span className="text-sm">Về chúng tôi</span>
         </Link>

@@ -146,16 +146,16 @@ export default function QuestionPanel({ question }: QuestionPanelProps) {
   };
 
   return (
-    <section className="rounded-lg border border-outline-variant/50 border-t-4 border-t-primary bg-surface-container-lowest p-4 shadow-[0_8px_28px_-20px_rgba(15,23,42,0.5)] sm:p-6">
-      <h2 className="mb-5 flex items-center gap-2 text-xl font-bold text-primary sm:text-2xl">
+    <section className="rounded-lg border border-outline-variant/50 border-t-4 border-t-primary bg-surface-container-lowest p-4 shadow-[0_8px_28px_-20px_rgba(15,23,42,0.5)] dark:border-outline/50 dark:bg-surface-dark sm:p-6">
+      <h2 className="mb-5 flex items-center gap-2 text-xl font-bold text-primary dark:text-primary-fixed-dim sm:text-2xl">
         <span className="material-symbols-outlined">quiz</span>
         Câu hỏi thực hành
       </h2>
 
       {question.audioBucket ? (
-        <section className="mb-6 rounded-lg border border-outline-variant/50 bg-surface p-4">
-          <div className="flex items-center gap-2 font-bold text-on-surface">
-            <span className="material-symbols-outlined text-primary">headphones</span>
+        <section className="mb-6 rounded-lg border border-outline-variant/50 bg-surface p-4 dark:border-outline/50 dark:bg-surface-dark-high">
+          <div className="flex items-center gap-2 font-bold text-on-surface dark:text-on-primary">
+            <span className="material-symbols-outlined text-primary dark:text-primary-fixed-dim">headphones</span>
             Listening audio
           </div>
           {audio.status === 'ready' ? (
@@ -180,7 +180,7 @@ export default function QuestionPanel({ question }: QuestionPanelProps) {
                 {audio.status === 'loading' ? 'Loading audio...' : 'Load audio'}
               </button>
               {audio.status === 'error' ? (
-                <p className="text-sm text-error" role="alert">
+                <p className="text-sm text-error dark:text-red-400" role="alert">
                   {audio.message}
                 </p>
               ) : null}
@@ -190,14 +190,14 @@ export default function QuestionPanel({ question }: QuestionPanelProps) {
       ) : null}
 
       {question.sourceText && !shouldHideSourceText ? (
-        <div className="mb-6 rounded-lg border border-outline-variant/50 bg-surface p-4 leading-7 text-on-surface">
+        <div className="mb-6 rounded-lg border border-outline-variant/50 bg-surface p-4 leading-7 text-on-surface dark:border-outline/50 dark:bg-surface-dark-high dark:text-on-primary">
           <div className="mb-2 flex items-center justify-between gap-3">
             <p className="font-semibold">{question.sourceLabel}</p>
             <button
               type="button"
               onClick={() => void toggleTranslation()}
               disabled={translation.status === 'loading'}
-              className="inline-flex shrink-0 items-center gap-1 rounded-full border border-outline-variant px-3 py-1 text-xs font-semibold text-on-surface-variant transition-colors hover:border-primary hover:text-primary disabled:cursor-wait disabled:opacity-70"
+              className="inline-flex shrink-0 items-center gap-1 rounded-full border border-outline-variant px-3 py-1 text-xs font-semibold text-on-surface-variant transition-colors hover:border-primary hover:text-primary dark:hover:text-primary-fixed-dim dark:border-outline dark:text-surface-dim disabled:cursor-wait disabled:opacity-70"
             >
               <span className="material-symbols-outlined text-sm">translate</span>
               {translation.status === 'loading' ? 'Đang dịch...' : translationVisible ? 'Ẩn bản dịch' : 'Xem bản dịch'}
@@ -207,11 +207,11 @@ export default function QuestionPanel({ question }: QuestionPanelProps) {
           {translationVisible && translation.status === 'ready' ? (
             <div className="mt-3 rounded-lg border-l-4 border-primary bg-primary-container/10 p-3">
               <p>{translation.result.translated}</p>
-              <p className="mt-2 text-xs text-on-surface-variant">Vùng ngôn ngữ: {translation.result.zone_label}</p>
+              <p className="mt-2 text-xs text-on-surface-variant dark:text-surface-dim">Vùng ngôn ngữ: {translation.result.zone_label}</p>
             </div>
           ) : null}
           {translationVisible && translation.status === 'error' ? (
-            <p className="mt-3 text-sm text-error" role="alert">
+            <p className="mt-3 text-sm text-error dark:text-red-400" role="alert">
               {translation.message}
             </p>
           ) : null}
@@ -219,15 +219,15 @@ export default function QuestionPanel({ question }: QuestionPanelProps) {
       ) : null}
 
       {question.context ? (
-        <div className="mb-6 rounded-lg border-l-4 border-primary bg-surface p-4 text-on-surface-variant">
+        <div className="mb-6 rounded-lg border-l-4 border-primary bg-surface p-4 text-on-surface-variant dark:bg-surface-dark-high dark:text-surface-dim">
           {question.contextLabel ? (
-            <p className="mb-2 text-sm font-semibold text-on-surface">{question.contextLabel}</p>
+            <p className="mb-2 text-sm font-semibold text-on-surface dark:text-on-primary">{question.contextLabel}</p>
           ) : null}
           <p>{question.context}</p>
         </div>
       ) : null}
 
-      <p className="mb-4 font-semibold leading-6 text-on-surface">Question: {question.prompt}</p>
+      <p className="mb-4 font-semibold leading-6 text-on-surface dark:text-on-primary">Question: {question.prompt}</p>
 
       {question.type === 'mcq' && question.options ? (
         <div className="space-y-3">
@@ -252,7 +252,7 @@ export default function QuestionPanel({ question }: QuestionPanelProps) {
             setTextAnswer(event.target.value);
             clearGrade();
           }}
-          className="h-12 w-full rounded-lg border border-outline-variant bg-white px-4 outline-none transition-colors focus:border-primary"
+          className="h-12 w-full rounded-lg border border-outline-variant bg-white px-4 outline-none transition-colors focus:border-primary dark:border-outline dark:bg-surface-dark-high dark:text-on-primary"
           placeholder={question.placeholder ?? 'Enter your answer...'}
         />
       ) : null}
@@ -264,7 +264,7 @@ export default function QuestionPanel({ question }: QuestionPanelProps) {
             setTextAnswer(event.target.value);
             clearGrade();
           }}
-          className="min-h-48 w-full resize-none rounded-lg border border-outline-variant bg-white p-4 leading-7 outline-none transition-colors focus:border-primary"
+          className="min-h-48 w-full resize-none rounded-lg border border-outline-variant bg-white p-4 leading-7 outline-none transition-colors focus:border-primary dark:border-outline dark:bg-surface-dark-high dark:text-on-primary"
           placeholder={question.placeholder ?? 'Enter your answer...'}
         />
       ) : null}
@@ -283,7 +283,7 @@ export default function QuestionPanel({ question }: QuestionPanelProps) {
 
       {grading.status === 'success' ? (
         <div
-          className={`mt-5 rounded-lg border p-4 text-sm leading-6 ${grading.result.correct ? 'border-emerald-200 bg-emerald-50 text-emerald-950' : 'border-red-200 bg-red-50 text-red-950'}`}
+          className={`mt-5 rounded-lg border p-4 text-sm leading-6 ${grading.result.correct ? 'border-emerald-200 bg-emerald-50 text-emerald-950 dark:border-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-200' : 'border-red-200 bg-red-50 text-red-950 dark:border-red-800 dark:bg-red-900/30 dark:text-red-200'}`}
           role="status"
         >
           <p className="mb-1 font-bold">{grading.result.correct ? 'Correct!' : 'Not quite.'}</p>
@@ -294,7 +294,7 @@ export default function QuestionPanel({ question }: QuestionPanelProps) {
 
       {grading.status === 'error' ? (
         <p
-          className="mt-5 rounded-lg border border-error/30 bg-error-container/30 p-4 text-sm text-error"
+          className="mt-5 rounded-lg border border-error/30 bg-error-container/30 p-4 text-sm text-error dark:text-red-400"
           role="alert"
         >
           {grading.message}

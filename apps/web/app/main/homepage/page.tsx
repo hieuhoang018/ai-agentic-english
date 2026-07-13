@@ -99,7 +99,7 @@ export default function HomePage() {
         <section className="w-full">
           <Link
             href="/main/progress"
-            className="bg-surface-container-lowest dark:bg-surface-container-high rounded-lg p-card-padding shadow-[0_4px_20px_-4px_rgba(15,98,254,0.08)] border border-outline-variant/20 dark:border-outline/20 flex flex-col justify-between hover:shadow-[0_8px_30px_-4px_rgba(15,98,254,0.12)] transition-shadow duration-300 w-full"
+            className="bg-surface-container-lowest dark:bg-surface-dark rounded-lg p-card-padding shadow-[0_4px_20px_-4px_rgba(15,98,254,0.08)] border border-outline-variant/20 dark:border-outline/20 flex flex-col justify-between hover:shadow-[0_8px_30px_-4px_rgba(15,98,254,0.12)] transition-shadow duration-300 w-full"
           >
             <div className="flex justify-between items-start mb-6 gap-4">
               <div>
@@ -110,8 +110,8 @@ export default function HomePage() {
                   Mục tiêu: Đạt IELTS 7.0
                 </p>
               </div>
-              <div className="bg-primary-container/10 px-3 py-1.5 rounded-full flex items-center gap-1.5 text-primary shrink-0">
-                <span className="material-symbols-outlined text-sm filled text-error">
+              <div className="bg-primary-container/10 px-3 py-1.5 rounded-full flex items-center gap-1.5 text-primary dark:text-primary-fixed-dim shrink-0">
+                <span className="material-symbols-outlined text-sm filled text-error dark:text-red-400">
                   local_fire_department
                 </span>
                 <span className="text-sm font-bold">{streakCount ?? '…'} ngày streak</span>
@@ -122,9 +122,9 @@ export default function HomePage() {
                 <span className="text-on-surface-variant dark:text-surface-dim">
                   Nhiệm vụ hôm nay
                 </span>
-                <span className="text-primary font-bold">{progressPercent}%</span>
+                <span className="text-primary dark:text-primary-fixed-dim font-bold">{progressPercent}%</span>
               </div>
-              <div className="w-full h-3 bg-surface-container dark:bg-surface-variant rounded-full overflow-hidden">
+              <div className="w-full h-3 bg-surface-container dark:bg-surface-dark-high rounded-full overflow-hidden">
                 <div
                   className="h-full bg-linear-to-r from-primary to-secondary-container rounded-full"
                   style={{ width: `${progressPercent}%` }}
@@ -138,7 +138,7 @@ export default function HomePage() {
           <div className="flex flex-col gap-gutter h-full">
             <Link
               href="/main/review-center/due"
-              className="bg-surface-container-lowest dark:bg-surface-container-high rounded-lg p-card-padding shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] border border-outline-variant/20 dark:border-outline/20 hover:-translate-y-1 transition-transform cursor-pointer"
+              className="bg-surface-container-lowest dark:bg-surface-dark rounded-lg p-card-padding shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] border border-outline-variant/20 dark:border-outline/20 hover:-translate-y-1 transition-transform cursor-pointer"
             >
               <div className="flex items-center gap-3 mb-3">
                 <div className="w-8 h-8 rounded-full bg-secondary-container/30 flex items-center justify-center text-on-secondary-container dark:text-secondary-fixed">
@@ -151,7 +151,7 @@ export default function HomePage() {
               <p className="text-sm text-on-surface-variant dark:text-surface-dim mb-4">
                 Bạn có {dueCount ?? '…'} từ cần ôn lại hôm nay theo phương pháp lặp lại ngắt quãng.
               </p>
-              <div className="w-full py-2 bg-surface-container-high dark:bg-surface-variant hover:bg-surface-variant dark:hover:bg-surface-container text-on-surface dark:text-on-primary rounded-lg text-sm font-medium transition-colors border border-outline-variant/50 dark:border-outline/50 text-center">
+              <div className="w-full py-2 bg-surface-container-high dark:bg-surface-dark-high hover:bg-surface-variant dark:hover:bg-surface-dark-high text-on-surface dark:text-on-primary rounded-lg text-sm font-medium transition-colors border border-outline-variant/50 dark:border-outline/50 text-center">
                 Ôn tập ngay
               </div>
             </Link>
@@ -179,12 +179,12 @@ export default function HomePage() {
               </div>
             </Link>
           </div>
-          <div className="bg-surface-container-lowest dark:bg-surface-container-high rounded-lg p-card-padding shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] border border-outline-variant/20 dark:border-outline/20 h-full">
+          <div className="bg-surface-container-lowest dark:bg-surface-dark rounded-lg p-card-padding shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] border border-outline-variant/20 dark:border-outline/20 h-full">
             <div className="flex justify-between items-center mb-6 gap-4">
               <h3 className="text-2xl font-semibold text-on-surface dark:text-on-primary">
                 Nhiệm vụ hằng ngày
               </h3>
-              <span className="text-sm bg-surface-container dark:bg-surface-variant px-2 py-1 rounded-md text-on-surface-variant dark:text-surface-dim shrink-0">
+              <span className="text-sm bg-surface-container dark:bg-surface-dark-high px-2 py-1 rounded-md text-on-surface-variant dark:text-surface-dim shrink-0">
                 {totalCount > 0 ? `${completedCount}/${totalCount} hoàn thành` : '—'}
               </span>
             </div>
@@ -195,14 +195,14 @@ export default function HomePage() {
                 </p>
               )}
               {library.status === 'error' && (
-                <p className="text-sm text-error">
+                <p className="text-sm text-error dark:text-red-400">
                   Không thể tải nhiệm vụ hôm nay. Vui lòng thử lại sau.
                 </p>
               )}
               {library.status === 'success' && totalCount === 0 && (
                 <p className="text-sm text-on-surface-variant dark:text-surface-dim">
                   Chưa có nhiệm vụ nào cho hôm nay. Hãy bắt đầu{' '}
-                  <Link href="/main/practice-center" className="text-primary font-medium">
+                  <Link href="/main/practice-center" className="text-primary dark:text-primary-fixed-dim font-medium">
                     luyện tập
                   </Link>{' '}
                   để nhận lộ trình cá nhân hóa.
@@ -213,7 +213,7 @@ export default function HomePage() {
                 .map((activity) => (
                   <div
                     key={activity.activity_id}
-                    className="flex items-start gap-3 p-3 rounded-lg bg-surface-container-low/50 dark:bg-surface-variant/50 opacity-70"
+                    className="flex items-start gap-3 p-3 rounded-lg bg-surface-container-low/50 dark:bg-surface-dark-high/50 opacity-70"
                   >
                     <span className="material-symbols-outlined text-secondary mt-0.5">
                       check_circle
@@ -234,20 +234,20 @@ export default function HomePage() {
                   <Link
                     key={activity.activity_id}
                     href={activityHref(activity)}
-                    className="flex items-start gap-3 p-3 rounded-lg bg-surface-container dark:bg-surface-variant border-l-2 border-primary cursor-pointer hover:bg-surface-container-high dark:hover:bg-surface-container transition-colors group"
+                    className="flex items-start gap-3 p-3 rounded-lg bg-surface-container dark:bg-surface-dark-high border-l-2 border-primary cursor-pointer hover:bg-surface-container-high dark:hover:bg-surface-dark-high transition-colors group"
                   >
                     <span className="material-symbols-outlined text-outline mt-0.5">
                       radio_button_unchecked
                     </span>
                     <div className="flex-1">
-                      <h4 className="text-base text-on-surface dark:text-on-primary group-hover:text-primary transition-colors">
+                      <h4 className="text-base text-on-surface dark:text-on-primary group-hover:text-primary dark:group-hover:text-primary-fixed-dim transition-colors">
                         {activity.title}
                       </h4>
                       <p className="text-sm text-on-surface-variant dark:text-surface-dim mt-1">
                         {activityDetail(activity)}
                       </p>
                     </div>
-                    <span className="text-primary hover:bg-primary-container/20 p-1.5 rounded-full transition-colors">
+                    <span className="text-primary dark:text-primary-fixed-dim hover:bg-primary-container/20 p-1.5 rounded-full transition-colors">
                       <span className="material-symbols-outlined text-sm">play_arrow</span>
                     </span>
                   </Link>
@@ -266,10 +266,10 @@ export default function HomePage() {
                 <Link
                   key={item.id}
                   href={recommendationHref(item)}
-                  className="bg-surface-container-lowest dark:bg-surface-container-high rounded-lg p-card-padding shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] border border-outline-variant/20 dark:border-outline/20 hover:-translate-y-1 transition-transform cursor-pointer flex flex-col"
+                  className="bg-surface-container-lowest dark:bg-surface-dark rounded-lg p-card-padding shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] border border-outline-variant/20 dark:border-outline/20 hover:-translate-y-1 transition-transform cursor-pointer flex flex-col"
                 >
                   <div className="flex items-center justify-between mb-2 gap-2">
-                    <span className="text-sm bg-primary-container/10 text-primary px-2 py-0.5 rounded-md font-medium">
+                    <span className="text-sm bg-primary-container/10 text-primary dark:text-primary-fixed-dim px-2 py-0.5 rounded-md font-medium">
                       {item.cefrLevel ?? 'Gợi ý'}
                     </span>
                     {item.cold_start && (

@@ -67,13 +67,13 @@ export default function EditableConversationTitle({
               if (event.key === 'Escape') setIsEditing(false)
             }}
             placeholder={fallback}
-            className="min-w-0 flex-1 rounded border border-outline-variant bg-white px-2 py-1 text-sm outline-none focus:border-primary"
+            className="min-w-0 flex-1 rounded border border-outline-variant bg-white px-2 py-1 text-sm outline-none focus:border-primary dark:border-outline dark:bg-surface-dark-high dark:text-on-primary"
           />
           <button
             type="button"
             onClick={() => void save()}
             disabled={isSaving}
-            className="flex h-8 w-8 items-center justify-center rounded-full text-primary hover:bg-surface-container"
+            className="flex h-8 w-8 items-center justify-center rounded-full text-primary dark:text-primary-fixed-dim hover:bg-surface-container dark:hover:bg-surface-dark-high"
             aria-label="Lưu tên"
           >
             <span className="material-symbols-outlined text-base">check</span>
@@ -82,13 +82,13 @@ export default function EditableConversationTitle({
             type="button"
             onClick={() => setIsEditing(false)}
             disabled={isSaving}
-            className="flex h-8 w-8 items-center justify-center rounded-full text-on-surface-variant hover:bg-surface-container"
+            className="flex h-8 w-8 items-center justify-center rounded-full text-on-surface-variant hover:bg-surface-container dark:text-surface-dim dark:hover:bg-surface-dark-high"
             aria-label="Hủy"
           >
             <span className="material-symbols-outlined text-base">close</span>
           </button>
         </div>
-        {error ? <p className="text-xs text-error">{error}</p> : null}
+        {error ? <p className="text-xs text-error dark:text-red-400">{error}</p> : null}
       </div>
     )
   }
@@ -99,7 +99,7 @@ export default function EditableConversationTitle({
       <button
         type="button"
         onClick={startEditing}
-        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-on-surface-variant hover:bg-surface-container"
+        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-on-surface-variant hover:bg-surface-container dark:text-surface-dim dark:hover:bg-surface-dark-high"
         aria-label="Đổi tên hội thoại"
       >
         <span className="material-symbols-outlined text-base">edit</span>

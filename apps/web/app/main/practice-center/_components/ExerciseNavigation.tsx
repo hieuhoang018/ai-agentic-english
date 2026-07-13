@@ -18,7 +18,7 @@ export default function ExerciseNavigation({
       {previousHref ? (
         <Link
           href={previousHref}
-          className="flex h-11 items-center justify-center gap-2 rounded-lg border border-outline px-6 text-sm font-semibold text-on-surface transition-colors hover:bg-surface-container"
+          className="flex h-11 items-center justify-center gap-2 rounded-lg border border-outline px-6 text-sm font-semibold text-on-surface transition-colors hover:bg-surface-container dark:text-on-primary dark:hover:bg-surface-dark-high"
         >
           <span className="material-symbols-outlined text-base">arrow_back</span>
           Quay lại
@@ -27,7 +27,7 @@ export default function ExerciseNavigation({
         <span className="h-11" />
       )}
 
-      <span className="text-sm font-semibold text-on-surface-variant">
+      <span className="text-sm font-semibold text-on-surface-variant dark:text-surface-dim">
         Câu {currentQuestion} / {totalQuestions}
       </span>
 

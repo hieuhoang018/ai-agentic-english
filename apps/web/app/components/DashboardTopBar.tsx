@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 
 import NotificationInbox from './NotificationInbox'
+import ThemeToggle from './ThemeToggle'
 
 type Crumb = {
   label: string
@@ -235,17 +236,17 @@ export default function DashboardTopBar({ isMenuOpen = false, onOpenMenu }: Dash
         ) : null}
 
         {!hide ? (
-          <nav className="hidden min-w-0 items-center gap-2 text-sm text-on-surface-variant sm:flex" aria-label="Breadcrumb">
+          <nav className="hidden min-w-0 items-center gap-2 text-sm text-on-surface-variant dark:text-on-primary sm:flex" aria-label="Breadcrumb">
             {crumbs.map((crumb, index) => {
               const isLast = index === crumbs.length - 1
               return (
                 <span key={`${crumb.label}-${crumb.href ?? index}`} className="flex min-w-0 items-center gap-2">
                   {crumb.href && !isLast ? (
-                    <Link className="truncate hover:text-primary" href={crumb.href}>
+                    <Link className="truncate hover:text-primary dark:hover:text-primary-fixed-dim" href={crumb.href}>
                       {crumb.label}
                     </Link>
                   ) : (
-                    <span className={isLast ? 'truncate font-semibold text-primary' : 'truncate'}>{crumb.label}</span>
+                    <span className={isLast ? 'truncate font-semibold text-primary dark:text-primary-fixed-dim' : 'truncate'}>{crumb.label}</span>
                   )}
                   {!isLast ? <span className="text-outline">›</span> : null}
                 </span>
@@ -256,8 +257,9 @@ export default function DashboardTopBar({ isMenuOpen = false, onOpenMenu }: Dash
       </div>
 
       <div className="flex shrink-0 items-center gap-1 sm:gap-2 md:gap-3">
+        <ThemeToggle />
         <NotificationInbox />
-        <Link href="/main/settings" className="flex h-10 w-10 items-center justify-center rounded-full text-on-surface-variant transition-colors hover:bg-surface-container" aria-label="Cài đặt">
+        <Link href="/main/settings" className="flex h-10 w-10 items-center justify-center rounded-full text-on-surface-variant transition-colors hover:bg-surface-container dark:text-on-primary" aria-label="Cài đặt">
           <span className="material-symbols-outlined">settings</span>
         </Link>
       </div>

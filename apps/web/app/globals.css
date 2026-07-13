@@ -61,6 +61,13 @@ body { margin: 0; }
   --color-error-container: #ffdad6;
   --color-on-primary-fixed: #00174c;
 
+  /* Dark-mode-only elevated surfaces. The M3 tokens above are a light-theme palette; only
+     inverse-surface/inverse-on-surface/inverse-primary are genuinely dark. Cards and raised
+     elements in dark mode need real dark backgrounds, which these two tiers provide (used via
+     `dark:bg-surface-dark` / `dark:bg-surface-dark-high`, never in light mode). */
+  --color-surface-dark: #3a3d42;
+  --color-surface-dark-high: #494d54;
+
   /* Spacing migrated from the previous runtime Tailwind config */
   --spacing-base: 8px;
   --spacing-stack-sm: 8px;
@@ -100,24 +107,6 @@ body { margin: 0; }
   --fs-body-md: 16px;
   --fs-headline-lg: 32px;
 }
-
-/* Color helper utilities (map tokens to readable utility class names used in the app) */
-.bg-background { background-color: var(--color-background); }
-.bg-surface { background-color: var(--color-surface); }
-.bg-surface-container-lowest { background-color: var(--color-surface-container-lowest); }
-.bg-inverse-surface { background-color: var(--color-inverse-surface); }
-.bg-primary-container { background-color: var(--color-primary-container); }
-.bg-secondary-container { background-color: var(--color-secondary-container); }
-.bg-tertiary-container { background-color: var(--color-tertiary-container); }
-.bg-error-container { background-color: var(--color-error-container); }
-
-.text-on-background { color: var(--color-on-background); }
-.text-on-surface { color: var(--color-on-surface); }
-.text-on-surface-variant { color: var(--color-on-surface-variant); }
-.text-primary { color: var(--color-primary); }
-.text-secondary { color: var(--color-secondary); }
-.text-tertiary { color: var(--color-tertiary); }
-.text-error { color: var(--color-error); }
 
 /* Spacing helpers used across the app */
 .p-lg { padding: var(--spacing-lg); }
@@ -162,12 +151,4 @@ body { margin: 0; }
 .rounded-xl { border-radius: var(--radius-xl); }
 .rounded-lg { border-radius: var(--radius-lg); }
 .rounded-full { border-radius: var(--radius-full); }
-
-/* Dark-mode helpers: Tailwind uses the `dark` class on root; keep CSS variables available */
-:root.dark {
-  /* When `dark` is present on the root, components can use `dark:` utilities from Tailwind.
-     We keep tokens available so custom CSS continues to work. */
-  --color-background: var(--color-inverse-surface);
-  --color-on-background: var(--color-inverse-on-surface);
-}
 

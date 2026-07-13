@@ -84,9 +84,9 @@ export default function GeneratedPlanPage() {
   if (!isLoaded || !isReady || state.status === 'loading') {
     return (
       <div className="mx-auto flex min-h-screen max-w-6xl flex-col items-center justify-center px-4 py-10 text-center">
-        <span className="material-symbols-outlined animate-spin text-5xl text-primary">progress_activity</span>
-        <h1 className="mt-6 text-3xl font-bold text-on-surface">Đang thiết kế lộ trình của bạn</h1>
-        <p className="mt-3 text-on-surface-variant">Wise Mentor đang tạo kế hoạch học tập từ mục tiêu, trình độ và thời gian bạn đã chọn.</p>
+        <span className="material-symbols-outlined animate-spin text-5xl text-primary dark:text-primary-fixed-dim">progress_activity</span>
+        <h1 className="mt-6 text-3xl font-bold text-on-surface dark:text-on-primary">Đang thiết kế lộ trình của bạn</h1>
+        <p className="mt-3 text-on-surface-variant dark:text-surface-dim">Wise Mentor đang tạo kế hoạch học tập từ mục tiêu, trình độ và thời gian bạn đã chọn.</p>
       </div>
     )
   }
@@ -94,10 +94,10 @@ export default function GeneratedPlanPage() {
   if (state.status === 'error') {
     return (
       <div className="mx-auto flex min-h-screen max-w-2xl items-center px-4 py-10">
-        <section className="w-full rounded-xl border border-error/30 bg-white p-8 text-center shadow-[0_18px_52px_-34px_rgba(15,23,42,0.8)]" role="alert">
-          <span className="material-symbols-outlined text-5xl text-error">error</span>
-          <h1 className="mt-5 text-2xl font-bold text-on-surface">Chưa thể tạo lộ trình</h1>
-          <p className="mt-3 text-on-surface-variant">{state.message}</p>
+        <section className="w-full rounded-xl border border-error/30 bg-white p-8 text-center shadow-[0_18px_52px_-34px_rgba(15,23,42,0.8)] dark:bg-surface-dark" role="alert">
+          <span className="material-symbols-outlined text-5xl text-error dark:text-red-400">error</span>
+          <h1 className="mt-5 text-2xl font-bold text-on-surface dark:text-on-primary">Chưa thể tạo lộ trình</h1>
+          <p className="mt-3 text-on-surface-variant dark:text-surface-dim">{state.message}</p>
           <button type="button" onClick={retry} className="mt-7 inline-flex h-12 items-center gap-2 rounded-full bg-primary px-7 font-bold text-white">
             <span className="material-symbols-outlined">refresh</span>
             Thử lại
@@ -110,8 +110,8 @@ export default function GeneratedPlanPage() {
   return (
     <div className="mx-auto flex min-h-screen max-w-6xl flex-col items-center justify-center px-4 py-10">
       <div className="mb-8 text-center">
-        <h1 className="text-4xl font-bold text-primary">Hành Trình Của Bạn Bắt Đầu</h1>
-        <p className="mt-3 max-w-2xl text-on-surface-variant">Wise Mentor đã thiết kế lộ trình học tập cá nhân hóa dựa trên các lựa chọn của bạn.</p>
+        <h1 className="text-4xl font-bold text-primary dark:text-primary-fixed-dim">Hành Trình Của Bạn Bắt Đầu</h1>
+        <p className="mt-3 max-w-2xl text-on-surface-variant dark:text-surface-dim">Wise Mentor đã thiết kế lộ trình học tập cá nhân hóa dựa trên các lựa chọn của bạn.</p>
       </div>
       <GeneratedPlanPreview pathDefinition={state.plan.pathDefinition} />
       <CompleteOnboardingLink href={onboardingRoutes.done} className="mt-8 flex h-14 items-center justify-center rounded-full bg-primary px-10 text-xl font-bold text-white shadow-lg">

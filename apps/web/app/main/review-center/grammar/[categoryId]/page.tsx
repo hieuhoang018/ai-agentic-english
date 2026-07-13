@@ -17,12 +17,12 @@ export default async function GrammarCategoryPage({ params }: GrammarCategoryPag
     <div>
       <div className="mb-8 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-on-surface sm:text-4xl">{category.title}</h1>
-          <p className="mt-3 text-base text-on-surface-variant sm:text-lg">
+          <h1 className="text-3xl font-bold text-on-surface dark:text-on-primary sm:text-4xl">{category.title}</h1>
+          <p className="mt-3 text-base text-on-surface-variant dark:text-surface-dim sm:text-lg">
             {category.lessons.length} database lessons across {category.cefrLevels.join(', ')}
           </p>
         </div>
-        <span className="inline-flex h-10 items-center rounded-lg border border-outline-variant bg-surface-container-lowest px-4 text-sm font-semibold text-on-surface-variant">
+        <span className="inline-flex h-10 items-center rounded-lg border border-outline-variant bg-surface-container-lowest px-4 text-sm font-semibold text-on-surface-variant dark:border-outline dark:bg-surface-dark dark:text-surface-dim">
           Read-only catalog
         </span>
       </div>

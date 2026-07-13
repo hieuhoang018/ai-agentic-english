@@ -127,24 +127,24 @@ export default function ProgressPage() {
 
   return (
     <div>
-      <h1 className="mb-8 text-3xl font-bold text-on-surface sm:text-4xl">Tiến độ học tập chi tiết</h1>
+      <h1 className="mb-8 text-3xl font-bold text-on-surface dark:text-on-primary sm:text-4xl">Tiến độ học tập chi tiết</h1>
 
-      <section className="mb-8 rounded-lg border border-outline-variant bg-surface-container-lowest p-4 shadow-[0_10px_32px_-24px_rgba(15,23,42,0.55)] sm:p-6">
+      <section className="mb-8 rounded-lg border border-outline-variant bg-surface-container-lowest p-4 shadow-[0_10px_32px_-24px_rgba(15,23,42,0.55)] dark:border-outline dark:bg-surface-dark sm:p-6">
         <div className="flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
           <div>
-            <p className="text-lg text-on-surface">{goalText}</p>
+            <p className="text-lg text-on-surface dark:text-on-primary">{goalText}</p>
             {profile.status === 'success' && profile.data.cold_start_flag && (
-              <p className="mt-2 text-on-surface-variant">
+              <p className="mt-2 text-on-surface-variant dark:text-surface-dim">
                 Chưa đủ dữ liệu để đánh giá chính xác — hãy hoàn thành thêm bài luyện tập.
               </p>
             )}
           </div>
           <div className="text-left md:text-right">
-            <p className="text-5xl font-bold text-primary sm:text-6xl">{library.status === 'success' ? `${todayPercent}%` : '—'}</p>
-            <p className="text-sm text-on-surface-variant">Tiến độ nhiệm vụ hôm nay</p>
+            <p className="text-5xl font-bold text-primary dark:text-primary-fixed-dim sm:text-6xl">{library.status === 'success' ? `${todayPercent}%` : '—'}</p>
+            <p className="text-sm text-on-surface-variant dark:text-surface-dim">Tiến độ nhiệm vụ hôm nay</p>
           </div>
         </div>
-        <div className="mt-4 h-2 overflow-hidden rounded-full bg-surface-variant">
+        <div className="mt-4 h-2 overflow-hidden rounded-full bg-surface-container dark:bg-surface-dark-high">
           <div
             className="h-full rounded-full bg-linear-to-r from-primary to-secondary"
             style={{ width: `${todayPercent}%` }}
@@ -153,16 +153,16 @@ export default function ProgressPage() {
       </section>
 
       <div className="grid gap-6 lg:grid-cols-2">
-        <section className="rounded-lg border border-outline-variant bg-surface-container-lowest p-6 shadow-[0_10px_32px_-24px_rgba(15,23,42,0.55)]">
-          <h2 className="mb-6 flex items-center gap-3 border-b border-outline-variant pb-4 text-2xl font-bold">
-            <span className="rounded-lg bg-violet-100 p-2 text-tertiary material-symbols-outlined">flag</span>
+        <section className="rounded-lg border border-outline-variant bg-surface-container-lowest p-6 shadow-[0_10px_32px_-24px_rgba(15,23,42,0.55)] dark:border-outline dark:bg-surface-dark">
+          <h2 className="mb-6 flex items-center gap-3 border-b border-outline-variant pb-4 text-2xl font-bold text-on-surface dark:border-outline dark:text-on-primary">
+            <span className="rounded-lg bg-violet-100 p-2 text-tertiary material-symbols-outlined dark:bg-violet-900/30">flag</span>
             Trình độ theo kỹ năng
           </h2>
           {profile.status === 'loading' && (
-            <p className="text-sm text-on-surface-variant">Đang tải...</p>
+            <p className="text-sm text-on-surface-variant dark:text-surface-dim">Đang tải...</p>
           )}
           {profile.status === 'error' && (
-            <p className="text-sm text-error">Không thể tải dữ liệu trình độ. Vui lòng thử lại sau.</p>
+            <p className="text-sm text-error dark:text-red-400">Không thể tải dữ liệu trình độ. Vui lòng thử lại sau.</p>
           )}
           {profile.status === 'success' && (
             <div className="space-y-4">
@@ -192,31 +192,31 @@ export default function ProgressPage() {
           )}
         </section>
 
-        <section className="rounded-lg border border-outline-variant bg-surface-container-lowest p-6 shadow-[0_10px_32px_-24px_rgba(15,23,42,0.55)]">
-          <h2 className="mb-6 flex items-center gap-3 border-b border-outline-variant pb-4 text-2xl font-bold">
-            <span className="rounded-lg bg-emerald-100 p-2 text-secondary material-symbols-outlined">bar_chart</span>
+        <section className="rounded-lg border border-outline-variant bg-surface-container-lowest p-6 shadow-[0_10px_32px_-24px_rgba(15,23,42,0.55)] dark:border-outline dark:bg-surface-dark">
+          <h2 className="mb-6 flex items-center gap-3 border-b border-outline-variant pb-4 text-2xl font-bold text-on-surface dark:border-outline dark:text-on-primary">
+            <span className="rounded-lg bg-emerald-100 p-2 text-secondary material-symbols-outlined dark:bg-emerald-900/30">bar_chart</span>
             Biểu đồ hoạt động
           </h2>
           {sessions.status === 'loading' && (
-            <p className="text-sm text-on-surface-variant">Đang tải...</p>
+            <p className="text-sm text-on-surface-variant dark:text-surface-dim">Đang tải...</p>
           )}
           {sessions.status === 'error' && (
-            <p className="text-sm text-error">Không thể tải dữ liệu hoạt động. Vui lòng thử lại sau.</p>
+            <p className="text-sm text-error dark:text-red-400">Không thể tải dữ liệu hoạt động. Vui lòng thử lại sau.</p>
           )}
           {sessions.status === 'success' && (
             <>
-              <div className="flex h-64 items-end justify-between gap-4 border-b border-outline-variant px-4">
+              <div className="flex h-64 items-end justify-between gap-4 border-b border-outline-variant px-4 dark:border-outline">
                 {weekly.map((minutes, index) => (
                   <div key={WEEKDAY_LABELS[index]} className="flex flex-1 flex-col items-center justify-end gap-3">
                     <div
                       className="w-full max-w-8 rounded-t bg-primary"
                       style={{ height: `${Math.max((minutes / maxWeekly) * 100, minutes > 0 ? 4 : 0)}%` }}
                     />
-                    <span className="text-sm text-on-surface-variant">{WEEKDAY_LABELS[index]}</span>
+                    <span className="text-sm text-on-surface-variant dark:text-surface-dim">{WEEKDAY_LABELS[index]}</span>
                   </div>
                 ))}
               </div>
-              <div className="mt-5 flex justify-between text-sm">
+              <div className="mt-5 flex justify-between text-sm text-on-surface dark:text-on-primary">
                 <span>Tổng thời gian tuần này: {totalWeeklyHours} giờ</span>
               </div>
             </>
@@ -225,29 +225,29 @@ export default function ProgressPage() {
       </div>
 
       {analysis.status === 'success' && hasInsights && (
-        <section className="mt-6 rounded-lg border border-outline-variant bg-surface-container-lowest p-6 shadow-[0_10px_32px_-24px_rgba(15,23,42,0.55)]">
-          <h2 className="mb-6 flex items-center gap-3 border-b border-outline-variant pb-4 text-2xl font-bold">
-            <span className="rounded-lg bg-amber-100 p-2 text-secondary material-symbols-outlined">insights</span>
+        <section className="mt-6 rounded-lg border border-outline-variant bg-surface-container-lowest p-6 shadow-[0_10px_32px_-24px_rgba(15,23,42,0.55)] dark:border-outline dark:bg-surface-dark">
+          <h2 className="mb-6 flex items-center gap-3 border-b border-outline-variant pb-4 text-2xl font-bold text-on-surface dark:border-outline dark:text-on-primary">
+            <span className="rounded-lg bg-amber-100 p-2 text-secondary material-symbols-outlined dark:bg-amber-900/30">insights</span>
             Nhận định
           </h2>
           <div className="space-y-3">
             {plateauSkills.map(([skill]) => (
-              <p key={skill} className="text-sm text-on-surface-variant">
+              <p key={skill} className="text-sm text-on-surface-variant dark:text-surface-dim">
                 Bạn có dấu hiệu chững lại ở kỹ năng{' '}
-                <span className="font-semibold text-on-surface">{SKILL_DOMAIN_LABELS[skill] ?? skill}</span> — hãy thử
+                <span className="font-semibold text-on-surface dark:text-on-primary">{SKILL_DOMAIN_LABELS[skill] ?? skill}</span> — hãy thử
                 một dạng bài tập mới để cải thiện.
               </p>
             ))}
             {patterns.slice(0, 3).map((pattern, index) => (
-              <p key={index} className="text-sm text-on-surface-variant">
+              <p key={index} className="text-sm text-on-surface-variant dark:text-surface-dim">
                 Lỗi lặp lại:{' '}
-                <span className="font-semibold text-on-surface">{pattern.error_type}</span> (
+                <span className="font-semibold text-on-surface dark:text-on-primary">{pattern.error_type}</span> (
                 {SKILL_DOMAIN_LABELS[pattern.skill_domain] ?? pattern.skill_domain}) — xuất hiện trong{' '}
                 {pattern.count} buổi học
               </p>
             ))}
             {behavioralRisk && (
-              <p className="text-sm text-error">
+              <p className="text-sm text-error dark:text-red-400">
                 Có dấu hiệu giảm động lực học tập gần đây — hãy dành chút thời gian ôn tập hôm nay.
               </p>
             )}
