@@ -17,7 +17,7 @@ export default function ModuleList({ skill, modules }: ModuleListProps) {
         {modules.length > 0 ? (
           modules.map((module) => <ModuleCard key={module.id} module={module} skill={skill.id} />)
         ) : (
-          <div className="rounded-lg border border-dashed border-outline-variant bg-surface-container-lowest p-8 text-center text-on-surface-variant">
+          <div className="rounded-lg border border-dashed border-outline-variant bg-surface-container-lowest p-8 text-center text-on-surface-variant dark:border-outline dark:bg-surface-dark dark:text-surface-dim">
             No modules in your current learning path are available for this skill yet.
           </div>
         )}

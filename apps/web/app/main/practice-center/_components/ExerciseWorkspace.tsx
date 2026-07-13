@@ -35,13 +35,13 @@ export default function ExerciseWorkspace({
     <div>
       <div className="mb-7 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-on-surface sm:text-4xl">{module.title}</h1>
-          <p className="mt-2 text-base text-on-surface-variant sm:text-lg">{lesson.title}</p>
+          <h1 className="text-3xl font-bold text-on-surface dark:text-on-primary sm:text-4xl">{module.title}</h1>
+          <p className="mt-2 text-base text-on-surface-variant dark:text-surface-dim sm:text-lg">{lesson.title}</p>
         </div>
       </div>
 
-      <section className="mb-6 rounded-lg border border-outline-variant/50 bg-surface-container-lowest p-4">
-        <h2 className="text-sm font-bold uppercase tracking-wide text-on-surface-variant">
+      <section className="mb-6 rounded-lg border border-outline-variant/50 bg-surface-container-lowest p-4 dark:border-outline/50 dark:bg-surface-dark">
+        <h2 className="text-sm font-bold uppercase tracking-wide text-on-surface-variant dark:text-surface-dim">
           Lessons
         </h2>
         <div className="mt-3 flex flex-wrap gap-2">
@@ -49,7 +49,7 @@ export default function ExerciseWorkspace({
             <Link
               key={item.id}
               href={modulePath(skill, module.id, { lessonId: item.id })}
-              className={`rounded-full px-3 py-2 text-sm font-semibold transition-colors ${item.id === lesson.id ? 'bg-primary text-white' : 'bg-surface-container text-on-surface hover:bg-surface-container-high'}`}
+              className={`rounded-full px-3 py-2 text-sm font-semibold transition-colors ${item.id === lesson.id ? 'bg-primary text-white' : 'bg-surface-container text-on-surface hover:bg-surface-container-high dark:bg-surface-dark-high dark:text-on-primary dark:hover:bg-surface-dark-high'}`}
             >
               {item.order}. {item.title}
             </Link>
@@ -69,7 +69,7 @@ export default function ExerciseWorkspace({
                 <Link
                   key={item.id}
                   href={modulePath(skill, module.id, { lessonId: lesson.id, exerciseId: item.id })}
-                  className={`flex h-9 min-w-9 items-center justify-center rounded-full px-3 text-sm font-semibold transition-colors ${item.id === exercise.id ? 'bg-primary text-white' : 'bg-surface-container text-on-surface hover:bg-surface-container-high'}`}
+                  className={`flex h-9 min-w-9 items-center justify-center rounded-full px-3 text-sm font-semibold transition-colors ${item.id === exercise.id ? 'bg-primary text-white' : 'bg-surface-container text-on-surface hover:bg-surface-container-high dark:bg-surface-dark-high dark:text-on-primary dark:hover:bg-surface-dark-high'}`}
                 >
                   {index + 1}
                 </Link>

@@ -21,8 +21,8 @@ export default function ProfilePage() {
         >
           <div className="space-y-5 p-6">
             <div>
-              <h2 className="text-xl font-bold text-on-surface">Sign out</h2>
-              <p className="mt-2 text-sm text-on-surface-variant">
+              <h2 className="text-xl font-bold text-on-surface dark:text-on-primary">Sign out</h2>
+              <p className="mt-2 text-sm text-on-surface-variant dark:text-surface-dim">
                 End your current session and return to the landing page.
               </p>
             </div>

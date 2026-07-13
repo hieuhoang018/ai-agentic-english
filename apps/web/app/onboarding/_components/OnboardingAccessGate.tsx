@@ -65,7 +65,7 @@ export default function OnboardingAccessGate({ children }: { children: React.Rea
 
   if (!allowed) {
     return (
-      <div className="flex min-h-screen items-center justify-center text-sm font-semibold text-on-surface-variant">
+      <div className="flex min-h-screen items-center justify-center text-sm font-semibold text-on-surface-variant dark:text-surface-dim">
         Đang kiểm tra trạng thái onboarding...
       </div>
     )

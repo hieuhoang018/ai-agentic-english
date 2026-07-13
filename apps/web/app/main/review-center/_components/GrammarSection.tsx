@@ -15,16 +15,16 @@ export default function GrammarSection({ section, compact = true }: GrammarSecti
     <section className="mb-10">
       <div className="mb-6 flex items-center justify-between gap-4">
         <div>
-          <h2 className="flex items-center gap-3 text-2xl font-bold text-on-surface">
+          <h2 className="flex items-center gap-3 text-2xl font-bold text-on-surface dark:text-on-primary">
             <span className={`h-2 w-2 rounded-full ${section.markerClass}`} />
             {section.title}
           </h2>
-          <p className="mt-2 text-sm text-on-surface-variant">
+          <p className="mt-2 text-sm text-on-surface-variant dark:text-surface-dim">
             {section.lessons.length} lessons across {section.cefrLevels.join(', ')}
           </p>
         </div>
         {compact ? (
-          <Link href={grammarCategoryPath(section.id)} className="text-sm font-bold text-primary">
+          <Link href={grammarCategoryPath(section.id)} className="text-sm font-bold text-primary dark:text-primary-fixed-dim">
             View all
           </Link>
         ) : null}

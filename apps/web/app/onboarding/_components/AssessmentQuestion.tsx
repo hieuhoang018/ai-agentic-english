@@ -213,7 +213,7 @@ function LockedAssessmentAudioPlayer({ questionId, audio }: LockedAssessmentAudi
   if (audio.status === 'error') {
     return (
       <div className="mt-3 rounded-lg border border-error/30 bg-error-container/30 p-4" role="alert">
-        <p className="text-sm font-semibold text-error">{audio.message}</p>
+        <p className="text-sm font-semibold text-error dark:text-red-400">{audio.message}</p>
         <button
           type="button"
           onClick={() => void audio.load()}
@@ -228,15 +228,15 @@ function LockedAssessmentAudioPlayer({ questionId, audio }: LockedAssessmentAudi
 
   if (audio.status !== 'ready') {
     return (
-      <div className="mt-3 flex items-center gap-3 rounded-lg bg-surface p-4 text-sm font-semibold text-on-surface-variant" role="status">
-        <span className="material-symbols-outlined animate-spin text-primary">progress_activity</span>
+      <div className="mt-3 flex items-center gap-3 rounded-lg bg-surface p-4 text-sm font-semibold text-on-surface-variant dark:bg-surface-dark-high dark:text-surface-dim" role="status">
+        <span className="material-symbols-outlined animate-spin text-primary dark:text-primary-fixed-dim">progress_activity</span>
         Preparing audio...
       </div>
     )
   }
 
   return (
-    <div className="mt-3 rounded-lg bg-surface p-4">
+    <div className="mt-3 rounded-lg bg-surface p-4 dark:bg-surface-dark-high">
       <audio
         ref={audioRef}
         preload="auto"
@@ -263,17 +263,17 @@ function LockedAssessmentAudioPlayer({ questionId, audio }: LockedAssessmentAudi
           <span className="material-symbols-outlined">{isPlaying ? 'pause' : 'play_arrow'}</span>
         </button>
         <div className="min-w-0 flex-1">
-          <div className="h-2 overflow-hidden rounded-full bg-outline-variant" aria-hidden="true">
+          <div className="h-2 overflow-hidden rounded-full bg-outline-variant dark:bg-surface-dark-high" aria-hidden="true">
             <div className="h-full rounded-full bg-primary transition-[width]" style={{ width: `${progressPercent}%` }} />
           </div>
-          <div className="mt-2 flex justify-between text-xs font-semibold text-on-surface-variant">
+          <div className="mt-2 flex justify-between text-xs font-semibold text-on-surface-variant dark:text-surface-dim">
             <span>{formatAudioTime(currentTime)}</span>
             <span>{formatAudioTime(duration)}</span>
           </div>
         </div>
       </div>
       {playbackNotice ? (
-        <p className="mt-3 text-sm text-error" role="alert">
+        <p className="mt-3 text-sm text-error dark:text-red-400" role="alert">
           {playbackNotice}
         </p>
       ) : null}
@@ -350,17 +350,17 @@ export default function AssessmentQuestion() {
   if (state.status === 'loading') {
     return (
       <div className="flex min-h-72 flex-col items-center justify-center text-center">
-        <span className="material-symbols-outlined animate-spin text-4xl text-primary">progress_activity</span>
-        <p className="mt-4 font-semibold text-on-surface">Đang tải câu hỏi đánh giá...</p>
+        <span className="material-symbols-outlined animate-spin text-4xl text-primary dark:text-primary-fixed-dim">progress_activity</span>
+        <p className="mt-4 font-semibold text-on-surface dark:text-on-primary">Đang tải câu hỏi đánh giá...</p>
       </div>
     )
   }
 
   if (state.status === 'error') {
     return (
-      <section className="rounded-lg border border-error/30 bg-white p-6 text-center" role="alert">
-        <span className="material-symbols-outlined text-4xl text-error">error</span>
-        <p className="mt-3 text-on-surface-variant">{state.message}</p>
+      <section className="rounded-lg border border-error/30 bg-white p-6 text-center dark:bg-surface-dark" role="alert">
+        <span className="material-symbols-outlined text-4xl text-error dark:text-red-400">error</span>
+        <p className="mt-3 text-on-surface-variant dark:text-surface-dim">{state.message}</p>
         <button type="button" onClick={retryLoadingQuestions} className="mt-5 inline-flex h-11 items-center gap-2 rounded-full bg-primary px-6 font-bold text-white">
           <span className="material-symbols-outlined">refresh</span>
           Thử lại
@@ -432,22 +432,22 @@ export default function AssessmentQuestion() {
   return (
     <div>
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-        <span className="rounded-lg border border-primary/20 bg-blue-50 px-4 py-2 text-2xl font-bold text-primary">{skillLabel}</span>
-        <span className="rounded-full bg-blue-50 px-4 py-2 font-bold text-primary">Câu {currentIndex + 1} / {questions.length} · {question.cefrLevelTarget}</span>
+        <span className="rounded-lg border border-primary/20 bg-blue-50 px-4 py-2 text-2xl font-bold text-primary dark:text-primary-fixed-dim dark:bg-primary-container/10">{skillLabel}</span>
+        <span className="rounded-full bg-blue-50 px-4 py-2 font-bold text-primary dark:text-primary-fixed-dim dark:bg-primary-container/10">Câu {currentIndex + 1} / {questions.length} · {question.cefrLevelTarget}</span>
       </div>
       {question.skill === 'listening' && activeAudio.hasAudio ? (
-        <section className="mb-5 rounded-lg border border-outline-variant bg-white p-4">
-          <div className="flex items-center gap-2 font-bold text-on-surface">
-            <span className="material-symbols-outlined text-primary">headphones</span>
+        <section className="mb-5 rounded-lg border border-outline-variant bg-white p-4 dark:border-outline dark:bg-surface-dark">
+          <div className="flex items-center gap-2 font-bold text-on-surface dark:text-on-primary">
+            <span className="material-symbols-outlined text-primary dark:text-primary-fixed-dim">headphones</span>
             Listening audio
           </div>
           <LockedAssessmentAudioPlayer key={question.id} questionId={question.id} audio={activeAudio} />
         </section>
       ) : null}
-      {prompt.passage ? <div className="mb-5 rounded-lg border-l-4 border-primary bg-surface p-4 leading-7 text-on-surface-variant">{prompt.passage}</div> : null}
-      {prompt.transcript && (question.skill !== 'listening' || !activeAudio.hasAudio || activeAudio.status === 'error') ? <div className="mb-5 rounded-lg border-l-4 border-primary bg-surface p-4 leading-7 text-on-surface-variant">Transcript: {prompt.transcript}</div> : null}
-      {prompt.sentence ? <div className="mb-5 rounded-lg border-l-4 border-primary bg-surface p-4 leading-7 text-on-surface-variant">{prompt.sentence}</div> : null}
-      <h2 className="text-2xl font-bold leading-9 text-on-surface">{questionText}</h2>
+      {prompt.passage ? <div className="mb-5 rounded-lg border-l-4 border-primary bg-surface p-4 leading-7 text-on-surface-variant dark:bg-surface-dark-high dark:text-surface-dim">{prompt.passage}</div> : null}
+      {prompt.transcript && (question.skill !== 'listening' || !activeAudio.hasAudio || activeAudio.status === 'error') ? <div className="mb-5 rounded-lg border-l-4 border-primary bg-surface p-4 leading-7 text-on-surface-variant dark:bg-surface-dark-high dark:text-surface-dim">Transcript: {prompt.transcript}</div> : null}
+      {prompt.sentence ? <div className="mb-5 rounded-lg border-l-4 border-primary bg-surface p-4 leading-7 text-on-surface-variant dark:bg-surface-dark-high dark:text-surface-dim">{prompt.sentence}</div> : null}
+      <h2 className="text-2xl font-bold leading-9 text-on-surface dark:text-on-primary">{questionText}</h2>
       {prompt.options.length > 0 ? (
         <div className="my-6 space-y-4">
           {prompt.options.map((option, index) => (
@@ -456,7 +456,7 @@ export default function AssessmentQuestion() {
               type="button"
               onClick={() => selectAnswer(option)}
               aria-pressed={answer === option}
-              className={`flex min-h-16 w-full items-center gap-4 rounded-lg border px-5 py-3 text-left transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ${answer === option ? 'border-primary bg-primary-container/25' : 'border-outline-variant bg-white hover:border-primary hover:bg-blue-50/30'}`}
+              className={`flex min-h-16 w-full items-center gap-4 rounded-lg border px-5 py-3 text-left transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ${answer === option ? 'border-primary bg-primary-container/25' : 'border-outline-variant bg-white hover:border-primary hover:bg-blue-50/30 dark:border-outline dark:bg-surface-dark dark:hover:bg-primary-container/10'}`}
             >
               <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full border ${answer === option ? 'border-primary bg-primary text-white' : 'border-outline'}`}>{String.fromCharCode(65 + index)}</span>
               {option}
@@ -471,21 +471,21 @@ export default function AssessmentQuestion() {
             value={answer}
             onChange={(event) => selectAnswer(event.target.value)}
             placeholder="Nhập câu trả lời của bạn"
-            className="h-14 w-full rounded-lg border border-outline-variant bg-white px-4 text-on-surface outline-none transition-colors placeholder:text-on-surface-variant focus:border-primary focus:ring-2 focus:ring-primary/20"
+            className="h-14 w-full rounded-lg border border-outline-variant bg-white px-4 text-on-surface outline-none transition-colors placeholder:text-on-surface-variant focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-outline dark:bg-surface-dark dark:text-on-primary dark:placeholder:text-surface-dim"
           />
         </label>
       )}
-      <aside className="mt-6 rounded-lg bg-violet-100 p-5 text-violet-950">
+      <aside className="mt-6 rounded-lg bg-violet-100 p-5 text-violet-950 dark:bg-violet-900/30 dark:text-violet-200">
         <p className="font-bold">Mẹo làm bài</p>
         <p className="mt-1">Đọc kỹ ngữ cảnh và chọn hoặc nhập câu trả lời phù hợp nhất.</p>
       </aside>
-      {submissionError ? <p className="mt-4 text-sm text-error" role="alert">{submissionError}</p> : null}
-      <div className="mt-8 flex flex-wrap items-center justify-between gap-4 border-t border-outline-variant/60 pt-6">
+      {submissionError ? <p className="mt-4 text-sm text-error dark:text-red-400" role="alert">{submissionError}</p> : null}
+      <div className="mt-8 flex flex-wrap items-center justify-between gap-4 border-t border-outline-variant/60 pt-6 dark:border-outline/60">
         <button
           type="button"
           onClick={() => setCurrentIndex((index) => index - 1)}
           disabled={isFirstQuestion || isSubmitting}
-          className="flex h-12 items-center gap-2 rounded-full border border-outline px-6 font-semibold text-on-surface disabled:cursor-not-allowed disabled:opacity-40"
+          className="flex h-12 items-center gap-2 rounded-full border border-outline px-6 font-semibold text-on-surface disabled:cursor-not-allowed disabled:opacity-40 dark:text-on-primary"
         >
           <span className="material-symbols-outlined">arrow_back</span>
           Câu trước

@@ -12,6 +12,7 @@
   "dependencies": {
     "@ai-agentic-english/shared": "*",
     "@clerk/nextjs": "^7.5.3",
+    "@clerk/themes": "^2.4.57",
     "@novu/react": "^3.17.0",
     "@serwist/next": "^9.5.11",
     "@serwist/turbopack": "^9.5.11",

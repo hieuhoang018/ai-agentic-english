@@ -68,20 +68,20 @@ export default function ConversationHistoryList() {
   return (
     <div>
       <div className="mb-8 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <h1 className="text-3xl font-bold text-on-surface sm:text-4xl">Lịch sử hội thoại</h1>
-        <div className="flex h-11 w-full items-center gap-2 rounded-lg border border-outline-variant bg-white px-3 md:w-80">
-          <span className="material-symbols-outlined text-on-surface-variant">search</span>
-          <input value={query} onChange={(event) => setQuery(event.target.value)} className="min-w-0 flex-1 outline-none" placeholder="Tìm kiếm hội thoại..." />
+        <h1 className="text-3xl font-bold text-on-surface dark:text-on-primary sm:text-4xl">Lịch sử hội thoại</h1>
+        <div className="flex h-11 w-full items-center gap-2 rounded-lg border border-outline-variant bg-white px-3 dark:border-outline dark:bg-surface-dark-high md:w-80">
+          <span className="material-symbols-outlined text-on-surface-variant dark:text-surface-dim">search</span>
+          <input value={query} onChange={(event) => setQuery(event.target.value)} className="min-w-0 flex-1 outline-none dark:text-on-primary dark:placeholder:text-surface-dim" placeholder="Tìm kiếm hội thoại..." />
         </div>
       </div>
 
-      {state.status === 'loading' && <p className="text-center text-on-surface-variant">Đang tải dữ liệu...</p>}
+      {state.status === 'loading' && <p className="text-center text-on-surface-variant dark:text-surface-dim">Đang tải dữ liệu...</p>}
 
       {state.status === 'error' && (
-        <div className="rounded-lg border border-dashed border-outline-variant bg-surface-container-lowest p-10 text-center">
-          <span className="material-symbols-outlined text-5xl text-error">error</span>
-          <h2 className="mt-4 text-xl font-bold text-on-surface">Không thể tải dữ liệu</h2>
-          <p className="mt-2 text-on-surface-variant">Vui lòng thử lại sau.</p>
+        <div className="rounded-lg border border-dashed border-outline-variant bg-surface-container-lowest p-10 text-center dark:border-outline dark:bg-surface-dark">
+          <span className="material-symbols-outlined text-5xl text-error dark:text-red-400">error</span>
+          <h2 className="mt-4 text-xl font-bold text-on-surface dark:text-on-primary">Không thể tải dữ liệu</h2>
+          <p className="mt-2 text-on-surface-variant dark:text-surface-dim">Vui lòng thử lại sau.</p>
         </div>
       )}
 
@@ -91,13 +91,13 @@ export default function ConversationHistoryList() {
             {Object.entries(grouped).map(([dateLabel, rows]) => (
               <section key={dateLabel}>
                 <div className="mb-5 flex items-center gap-5">
-                  <h2 className="shrink-0 text-base font-bold text-on-surface">{dateLabel}</h2>
-                  <div className="h-px flex-1 bg-outline-variant" />
+                  <h2 className="shrink-0 text-base font-bold text-on-surface dark:text-on-primary">{dateLabel}</h2>
+                  <div className="h-px flex-1 bg-outline-variant dark:bg-outline" />
                 </div>
-                <div className="space-y-4 border-l border-outline-variant pl-5 sm:pl-8">
+                <div className="space-y-4 border-l border-outline-variant pl-5 dark:border-outline sm:pl-8">
                   {rows.map((conversation) => (
-                    <article key={conversation.id} className="relative rounded-lg border border-outline-variant/60 bg-surface-container-lowest p-4 shadow-[0_8px_24px_-20px_rgba(15,23,42,0.45)]">
-                      <span className="absolute -left-[26px] top-7 h-3 w-3 rounded-full border-4 border-background bg-primary sm:-left-[38px]" />
+                    <article key={conversation.id} className="relative rounded-lg border border-outline-variant/60 bg-surface-container-lowest p-4 shadow-[0_8px_24px_-20px_rgba(15,23,42,0.45)] dark:border-outline/60 dark:bg-surface-dark">
+                      <span className="absolute -left-[26px] top-7 h-3 w-3 rounded-full border-4 border-background bg-primary dark:border-surface-dark sm:-left-[38px]" />
                       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                         <div className="min-w-0 flex-1">
                           <div className="flex flex-wrap items-center gap-2">
@@ -106,17 +106,17 @@ export default function ConversationHistoryList() {
                               title={conversation.title}
                               fallback={conversation.preview}
                               onSaved={(title) => handleTitleSaved(conversation.id, title)}
-                              textClassName="text-lg font-semibold text-on-surface"
+                              textClassName="text-lg font-semibold text-on-surface dark:text-on-primary"
                             />
                             {conversation.errorCount > 0 ? (
-                              <span className="rounded-full bg-red-100 px-3 py-1 text-xs font-semibold text-error">
+                              <span className="rounded-full bg-red-100 px-3 py-1 text-xs font-semibold text-error dark:text-red-400 dark:bg-red-900/30">
                                 {conversation.errorCount} lỗi ghi nhận
                               </span>
                             ) : (
-                              <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-[#007a4d]">Không có lỗi</span>
+                              <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-[#007a4d] dark:bg-emerald-900/30 dark:text-emerald-300">Không có lỗi</span>
                             )}
                           </div>
-                          <div className="mt-2 flex flex-wrap items-center gap-4 text-sm text-on-surface-variant">
+                          <div className="mt-2 flex flex-wrap items-center gap-4 text-sm text-on-surface-variant dark:text-surface-dim">
                             <span className="flex items-center gap-1"><span className="material-symbols-outlined text-base">schedule</span>{conversation.time}</span>
                             <span className="flex items-center gap-1"><span className="material-symbols-outlined text-base">timer</span>{conversation.durationMinutes} phút</span>
                           </div>
@@ -132,14 +132,14 @@ export default function ConversationHistoryList() {
               </section>
             ))}
             {filtered.length === 0 ? (
-              <div className="rounded-lg border border-dashed border-outline-variant bg-surface-container-lowest p-8 text-center text-on-surface-variant">
+              <div className="rounded-lg border border-dashed border-outline-variant bg-surface-container-lowest p-8 text-center text-on-surface-variant dark:border-outline dark:bg-surface-dark dark:text-surface-dim">
                 Không tìm thấy cuộc hội thoại phù hợp.
               </div>
             ) : null}
           </div>
 
-          <footer className="mt-10 border-t border-outline-variant pt-6">
-            <p className="text-on-surface-variant">Hiển thị {filtered.length} trên {state.conversations.length} cuộc hội thoại</p>
+          <footer className="mt-10 border-t border-outline-variant pt-6 dark:border-outline">
+            <p className="text-on-surface-variant dark:text-surface-dim">Hiển thị {filtered.length} trên {state.conversations.length} cuộc hội thoại</p>
           </footer>
         </>
       )}

@@ -10,9 +10,9 @@ export default function ProgressSummaryCard({ label, current, value, tone = 'bg-
     <div>
       <div className="mb-2 flex justify-between text-sm">
         <span>{label}</span>
-        <span className="font-semibold text-primary">{current}</span>
+        <span className="font-semibold text-primary dark:text-primary-fixed-dim">{current}</span>
       </div>
-      <div className="h-2 overflow-hidden rounded-full bg-surface-variant">
+      <div className="h-2 overflow-hidden rounded-full bg-surface-variant dark:bg-surface-dark-high">
         <div className={`h-full rounded-full ${tone}`} style={{ width: `${value}%` }} />
       </div>
     </div>

@@ -47,7 +47,7 @@ export default function CompleteOnboardingLink({ href, children, className }: Co
       <button type="button" className={className} disabled={isCompleting} onClick={() => void completeOnboarding()}>
         {isCompleting ? 'Đang hoàn tất...' : children}
       </button>
-      {error ? <p className="mt-3 text-sm text-error" role="alert">{error}</p> : null}
+      {error ? <p className="mt-3 text-sm text-error dark:text-red-400" role="alert">{error}</p> : null}
     </div>
   )
 }

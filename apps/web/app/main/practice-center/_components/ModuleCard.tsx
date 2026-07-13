@@ -13,17 +13,17 @@ export default function ModuleCard({ module, skill }: ModuleCardProps) {
   const href = modulePath(skill, module.id);
 
   return (
-    <article className="rounded-lg border border-outline-variant/60 border-t-4 border-t-primary bg-surface-container-lowest p-4 shadow-[0_6px_22px_-18px_rgba(15,23,42,0.5)] sm:p-6">
+    <article className="rounded-lg border border-outline-variant/60 border-t-4 border-t-primary bg-surface-container-lowest p-4 shadow-[0_6px_22px_-18px_rgba(15,23,42,0.5)] dark:border-outline/60 dark:bg-surface-dark sm:p-6">
       <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
         <div className="min-w-0">
           <div className="mb-2 flex flex-wrap items-center gap-2">
-            <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-medium uppercase tracking-wide text-primary">
+            <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-medium uppercase tracking-wide text-primary dark:text-primary-fixed-dim dark:bg-blue-900/30">
               Module {module.order}
             </span>
-            <span className="text-xs font-medium text-on-surface-variant">{module.cefrLevel}</span>
+            <span className="text-xs font-medium text-on-surface-variant dark:text-surface-dim">{module.cefrLevel}</span>
           </div>
-          <h2 className="text-xl font-bold text-on-surface sm:text-2xl">{module.title}</h2>
-          <p className="mt-2 max-w-3xl text-base leading-7 text-on-surface-variant">
+          <h2 className="text-xl font-bold text-on-surface dark:text-on-primary sm:text-2xl">{module.title}</h2>
+          <p className="mt-2 max-w-3xl text-base leading-7 text-on-surface-variant dark:text-surface-dim">
             {module.description}
           </p>
         </div>

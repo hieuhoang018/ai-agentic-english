@@ -74,18 +74,18 @@ export default function InstallPwaPrompt() {
       role="dialog"
       aria-label="Cài đặt ứng dụng"
     >
-      <div className="flex w-full max-w-[28rem] items-center gap-3 rounded-xl border border-outline-variant bg-white p-4 shadow-[0_18px_60px_-36px_rgba(15,23,42,0.8)]">
-        <span className="material-symbols-outlined shrink-0 text-primary">
+      <div className="flex w-full max-w-[28rem] items-center gap-3 rounded-xl border border-outline-variant bg-white p-4 shadow-[0_18px_60px_-36px_rgba(15,23,42,0.8)] dark:border-outline dark:bg-surface-dark">
+        <span className="material-symbols-outlined shrink-0 text-primary dark:text-primary-fixed-dim">
           {showIosInstructions ? 'add_to_home_screen' : 'download'}
         </span>
         <div className="flex-1 text-sm">
           {showIosInstructions ? (
-            <p className="text-on-surface">
+            <p className="text-on-surface dark:text-on-primary">
               Cài English Academy lên máy: nhấn <span className="material-symbols-outlined align-text-bottom text-[16px]">ios_share</span> rồi chọn{' '}
               <strong>&quot;Thêm vào MH chính&quot;</strong>.
             </p>
           ) : (
-            <p className="font-semibold text-on-surface">Cài English Academy để dùng nhanh và tiện hơn</p>
+            <p className="font-semibold text-on-surface dark:text-on-primary">Cài English Academy để dùng nhanh và tiện hơn</p>
           )}
         </div>
         {!showIosInstructions && (
@@ -101,7 +101,7 @@ export default function InstallPwaPrompt() {
           type="button"
           onClick={dismiss}
           aria-label="Đóng"
-          className="shrink-0 rounded-full p-1 text-on-surface-variant hover:bg-surface-container"
+          className="shrink-0 rounded-full p-1 text-on-surface-variant dark:text-surface-dim hover:bg-surface-container dark:hover:bg-surface-dark-high"
         >
           <span className="material-symbols-outlined text-[20px]">close</span>
         </button>

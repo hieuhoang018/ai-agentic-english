@@ -114,10 +114,10 @@ export default function PushNotificationPrompt() {
       role="dialog"
       aria-label="Bật thông báo"
     >
-      <div className="flex w-full max-w-[28rem] items-center gap-3 rounded-xl border border-outline-variant bg-white p-4 shadow-[0_18px_60px_-36px_rgba(15,23,42,0.8)]">
-        <span className="material-symbols-outlined shrink-0 text-primary">notifications</span>
+      <div className="flex w-full max-w-[28rem] items-center gap-3 rounded-xl border border-outline-variant bg-white p-4 shadow-[0_18px_60px_-36px_rgba(15,23,42,0.8)] dark:border-outline dark:bg-surface-dark">
+        <span className="material-symbols-outlined shrink-0 text-primary dark:text-primary-fixed-dim">notifications</span>
         <div className="flex-1 text-sm">
-          <p className="font-semibold text-on-surface">Bật thông báo để không bỏ lỡ nhắc nhở học tập</p>
+          <p className="font-semibold text-on-surface dark:text-on-primary">Bật thông báo để không bỏ lỡ nhắc nhở học tập</p>
         </div>
         <button
           type="button"
@@ -131,7 +131,7 @@ export default function PushNotificationPrompt() {
           type="button"
           onClick={dismiss}
           aria-label="Đóng"
-          className="shrink-0 rounded-full p-1 text-on-surface-variant hover:bg-surface-container"
+          className="shrink-0 rounded-full p-1 text-on-surface-variant dark:text-surface-dim hover:bg-surface-container dark:hover:bg-surface-dark-high"
         >
           <span className="material-symbols-outlined text-[20px]">close</span>
         </button>

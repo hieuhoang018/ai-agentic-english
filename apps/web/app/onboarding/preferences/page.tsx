@@ -17,18 +17,18 @@ export default function PreferencesPage() {
     >
       <section>
         <h2 className="mb-8 flex items-center gap-2 text-lg font-semibold">
-          <span className="material-symbols-outlined text-primary">schedule</span>
+          <span className="material-symbols-outlined text-primary dark:text-primary-fixed-dim">schedule</span>
           Bạn có thể dành bao nhiêu thời gian học mỗi ngày?
         </h2>
         <TimeCommitmentSlider />
       </section>
-      <div className="my-10 h-px bg-outline-variant" />
+      <div className="my-10 h-px bg-outline-variant dark:bg-outline" />
       <section>
         <h2 className="mb-5 flex flex-wrap items-center justify-between gap-2 text-lg font-semibold">
           <span>
             <span className="material-symbols-outlined align-[-5px] text-tertiary">psychology</span> Bạn muốn tập trung cải thiện kỹ năng nào nhất?
           </span>
-          <span className="rounded-full bg-surface-container px-3 py-1 text-xs text-on-surface-variant">Có thể chọn nhiều</span>
+          <span className="rounded-full bg-surface-container px-3 py-1 text-xs text-on-surface-variant dark:bg-surface-dark-high dark:text-surface-dim">Có thể chọn nhiều</span>
         </h2>
         <SkillSelector skills={skills} />
       </section>
