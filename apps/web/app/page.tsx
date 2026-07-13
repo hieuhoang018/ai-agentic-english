@@ -20,7 +20,6 @@ export default function LandingPage() {
           <p className="mt-5 max-w-2xl text-lg leading-8 text-on-surface-variant">Wise Mentor phân tích mục tiêu, trình độ và thời gian học mỗi ngày để tạo bài tập, flashcard và lộ trình phù hợp với bạn.</p>
           <div className="mt-8 flex flex-wrap gap-4">
             <Link href="/auth/sign-up" className="flex h-12 items-center gap-2 rounded-lg bg-primary px-6 font-bold text-white">Bắt đầu miễn phí<span className="material-symbols-outlined">arrow_forward</span></Link>
-            <Link href="/main/homepage" className="flex h-12 items-center rounded-lg border border-outline-variant bg-white px-6 font-bold text-primary">Xem demo</Link>
           </div>
         </div>
         <div className="rounded-xl border border-outline-variant bg-white p-6 shadow-[0_18px_60px_-36px_rgba(15,23,42,0.8)]">
