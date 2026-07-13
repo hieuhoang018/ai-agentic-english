@@ -28,6 +28,7 @@ describe('handleUserDeleted', () => {
     await handleUserDeleted(prisma, novuClient, baseEvent());
 
     expect(prisma.scheduledReminderRun.deleteMany).toHaveBeenCalledWith({ where: { userId: 'user_123' } });
+    expect(prisma.pushSubscription.deleteMany).toHaveBeenCalledWith({ where: { clerkUserId: 'user_123' } });
     expect(novuClient.deletedSubscribers).toEqual(['user_123']);
   });
 
@@ -37,6 +38,7 @@ describe('handleUserDeleted', () => {
     await handleUserDeleted(prisma, novuClient, baseEvent());
 
     expect(prisma.scheduledReminderRun.deleteMany).not.toHaveBeenCalled();
+    expect(prisma.pushSubscription.deleteMany).not.toHaveBeenCalled();
     expect(novuClient.deletedSubscribers).toEqual([]);
   });
 });

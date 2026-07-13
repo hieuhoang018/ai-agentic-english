@@ -2,12 +2,14 @@ import { NovuClient, ReminderContextDto, UserSummaryDto } from '@ai-agentic-engl
 import { ReminderContextClient } from '../lib/reminderContextClient';
 import { AppPrismaClient } from '../lib/prisma';
 import { UserServiceClient } from '../lib/userServiceClient';
+import { WebPushSender } from '../lib/webPush';
 import { formatTimeInZone, getLocalDateKey } from './time';
 
 export type ReminderHandler = (
   userId: string,
   context: ReminderContextDto,
   novuClient: NovuClient,
+  webPushSender: WebPushSender,
 ) => Promise<boolean>;
 
 // Bounded concurrency for per-user reminder work (dedup check + AGT-07 HTTP call + handler).
@@ -30,6 +32,7 @@ export async function withScheduledReminder(
   userServiceClient: UserServiceClient,
   reminderContextClient: ReminderContextClient,
   novuClient: NovuClient,
+  webPushSender: WebPushSender,
   handler: ReminderHandler,
 ): Promise<void> {
   const users = await userServiceClient.listUsers();
@@ -48,7 +51,7 @@ export async function withScheduledReminder(
     if (alreadySent) return;
 
     const context = await reminderContextClient.getReminderContext(user.clerkUserId);
-    const notified = await handler(user.clerkUserId, context, novuClient);
+    const notified = await handler(user.clerkUserId, context, novuClient, webPushSender);
 
     if (notified) {
       await prisma.scheduledReminderRun.create({

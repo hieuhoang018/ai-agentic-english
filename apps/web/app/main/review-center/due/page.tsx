@@ -4,6 +4,8 @@ import Link from 'next/link'
 import { useEffect, useState } from 'react'
 
 import type { DueReviewItem } from '@/lib/api/types'
+import { readDueCardsFromIndexedDb, syncPackageToIndexedDb } from '@/lib/offline/package'
+import { flushPendingReviews, queueReview } from '@/lib/offline/reviews'
 import { reviewCenterPath } from '../_utils/review-routes'
 
 type LoadState =
@@ -26,26 +28,55 @@ export default function DueReviewPage() {
   const [ratedCount, setRatedCount] = useState(0)
 
   useEffect(() => {
-    fetch('/api/review/due')
-      .then((res) => {
-        if (!res.ok) throw new Error(`Request failed with ${res.status}`)
-        return res.json() as Promise<DueReviewItem[]>
-      })
-      .then((items) => setState({ status: 'success', items }))
-      .catch(() => setState({ status: 'error' }))
+    let cancelled = false
+
+    async function load() {
+      try {
+        const cached = await readDueCardsFromIndexedDb()
+        if (!cancelled && cached.length > 0) {
+          setState({ status: 'success', items: cached })
+        }
+      } catch {
+        // IndexedDB unavailable (e.g. private browsing) — fall through to the network.
+      }
+
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        if (!cancelled) {
+          setState((current) => (current.status === 'success' ? current : { status: 'error' }))
+        }
+        return
+      }
+
+      try {
+        const fresh = await syncPackageToIndexedDb()
+        if (!cancelled) setState({ status: 'success', items: fresh })
+      } catch {
+        if (!cancelled) {
+          setState((current) => (current.status === 'success' ? current : { status: 'error' }))
+        }
+      }
+    }
+
+    load()
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   async function submitRating(item: DueReviewItem, quality: number) {
     setSubmitting(true)
     try {
-      await fetch('/api/review/rate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ item_id: item.vocab_id, quality }),
-      })
+      // Queue locally first (optimistic) — the UI advances regardless of
+      // network state. The flush below is best-effort; Stage 3 adds the
+      // Background Sync / online-event triggers that catch it otherwise.
+      await queueReview(item.vocab_id, quality)
       setRatedCount((count) => count + 1)
       setIndex((value) => value + 1)
       setRevealed(false)
+
+      if (typeof navigator !== 'undefined' && navigator.onLine) {
+        flushPendingReviews().catch(() => {})
+      }
     } finally {
       setSubmitting(false)
     }
@@ -105,7 +136,7 @@ export default function DueReviewPage() {
             {!revealed ? (
               <p className="mt-20 text-on-surface-variant">Chạm để xem ví dụ</p>
             ) : state.items[index].context_sentences.length > 0 ? (
-              <p className="mt-8 max-w-lg text-lg leading-8 text-on-surface-variant">
+              <p className="mt-8 max-w-[28rem] text-lg leading-8 text-on-surface-variant">
                 &ldquo;{state.items[index].context_sentences[0]}&rdquo;
               </p>
             ) : (

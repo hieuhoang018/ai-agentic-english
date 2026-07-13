@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createMockPrisma, MockPrismaClient } from '../../__tests__/testPrisma';
 import { ReminderContextClient } from '../../lib/reminderContextClient';
 import { UserServiceClient } from '../../lib/userServiceClient';
+import { MockWebPushSender } from '../../lib/webPush';
 import { runVocabOfTheDay } from '../vocabOfTheDay';
 
 const user: UserSummaryDto = {
@@ -30,10 +31,12 @@ describe('runVocabOfTheDay', () => {
   let userServiceClient: UserServiceClient;
   let reminderContextClient: ReminderContextClient;
   let novuClient: MockNovuClient;
+  let webPushSender: MockWebPushSender;
 
   beforeEach(() => {
     prisma = createMockPrisma();
     novuClient = new MockNovuClient();
+    webPushSender = new MockWebPushSender();
     userServiceClient = { listUsers: vi.fn().mockResolvedValue([user]) };
     reminderContextClient = { getReminderContext: vi.fn().mockResolvedValue({ userId: 'user_123', dueReviewCount: 0, vocabOfTheDay }) };
     prisma.scheduledReminderRun.findUnique.mockResolvedValue(null);
@@ -42,7 +45,7 @@ describe('runVocabOfTheDay', () => {
   it('triggers the vocab-of-the-day workflow and records the run', async () => {
     const now = new Date('2024-01-10T08:00:00.000Z');
 
-    await runVocabOfTheDay(now, prisma, userServiceClient, reminderContextClient, novuClient);
+    await runVocabOfTheDay(now, prisma, userServiceClient, reminderContextClient, novuClient, webPushSender);
 
     expect(novuClient.triggeredNotifications).toEqual([
       { workflowId: 'vocab-of-the-day', subscriberId: 'user_123', payload: vocabOfTheDay },
@@ -50,13 +53,23 @@ describe('runVocabOfTheDay', () => {
     expect(prisma.scheduledReminderRun.create).toHaveBeenCalledWith({
       data: { userId: 'user_123', reminderType: 'vocab-of-the-day', runDate: '2024-01-10' },
     });
+    expect(webPushSender.sent).toEqual([
+      {
+        clerkUserId: 'user_123',
+        payload: {
+          title: 'Từ vựng hôm nay',
+          body: 'ubiquitous — present everywhere',
+          url: '/main/review-center',
+        },
+      },
+    ]);
   });
 
   it('does not trigger when there is no vocab due', async () => {
     reminderContextClient.getReminderContext = vi.fn().mockResolvedValue({ userId: 'user_123', dueReviewCount: 0, vocabOfTheDay: null });
     const now = new Date('2024-01-10T08:00:00.000Z');
 
-    await runVocabOfTheDay(now, prisma, userServiceClient, reminderContextClient, novuClient);
+    await runVocabOfTheDay(now, prisma, userServiceClient, reminderContextClient, novuClient, webPushSender);
 
     expect(novuClient.triggeredNotifications).toEqual([]);
     expect(prisma.scheduledReminderRun.create).not.toHaveBeenCalled();
@@ -72,7 +85,7 @@ describe('runVocabOfTheDay', () => {
     });
     const now = new Date('2024-01-10T08:00:00.000Z');
 
-    await runVocabOfTheDay(now, prisma, userServiceClient, reminderContextClient, novuClient);
+    await runVocabOfTheDay(now, prisma, userServiceClient, reminderContextClient, novuClient, webPushSender);
 
     expect(novuClient.triggeredNotifications).toEqual([]);
   });

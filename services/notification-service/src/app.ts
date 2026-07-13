@@ -1,12 +1,11 @@
+import { errorHandler } from '@ai-agentic-english/shared';
 import cors from 'cors';
 import express, { Express } from 'express';
 import { PrismaClient } from '../prisma/generated/client';
+import { AppPrismaClient } from './lib/prisma';
+import { createPushSubscriptionsRouter } from './routes/pushSubscriptions';
 
-export interface HealthCheckClient {
-  $queryRaw: PrismaClient['$queryRaw'];
-}
-
-export function createApp(prisma: HealthCheckClient = new PrismaClient()): Express {
+export function createApp(prisma: AppPrismaClient = new PrismaClient()): Express {
   const app = express();
 
   app.use(cors());
@@ -20,6 +19,10 @@ export function createApp(prisma: HealthCheckClient = new PrismaClient()): Expre
       res.status(503).json({ status: 'error', service: 'notification-service' });
     }
   });
+
+  app.use('/push-subscriptions', createPushSubscriptionsRouter(prisma));
+
+  app.use(errorHandler);
 
   return app;
 }

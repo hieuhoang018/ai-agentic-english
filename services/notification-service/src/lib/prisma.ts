@@ -4,4 +4,5 @@ export interface AppPrismaClient {
   $queryRaw: PrismaClient['$queryRaw'];
   processedEvent: PrismaClient['processedEvent'];
   scheduledReminderRun: PrismaClient['scheduledReminderRun'];
+  pushSubscription: PrismaClient['pushSubscription'];
 }

@@ -2,11 +2,10 @@ import { auth } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
 
 import { apiFetch, isApiError } from '@/lib/api/client';
-import type { RateReviewResponse } from '@/lib/api/types';
+import type { OfflineReview, OfflineSyncResult } from '@/lib/api/types';
 
-type RateReviewRequest = {
-  item_id?: string;
-  quality?: number;
+type SyncRequestBody = {
+  reviews?: OfflineReview[];
 };
 
 export async function POST(request: Request) {
@@ -16,15 +15,15 @@ export async function POST(request: Request) {
     return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
   }
 
-  let body: RateReviewRequest;
+  let body: SyncRequestBody;
   try {
-    body = (await request.json()) as RateReviewRequest;
+    body = (await request.json()) as SyncRequestBody;
   } catch {
     return NextResponse.json({ message: 'Invalid JSON body' }, { status: 400 });
   }
 
-  if (typeof body.item_id !== 'string' || typeof body.quality !== 'number') {
-    return NextResponse.json({ message: 'item_id and quality are required' }, { status: 400 });
+  if (!Array.isArray(body.reviews)) {
+    return NextResponse.json({ message: 'reviews array is required' }, { status: 400 });
   }
 
   const token = await getToken();
@@ -33,10 +32,10 @@ export async function POST(request: Request) {
   }
 
   try {
-    const result = await apiFetch<RateReviewResponse>(`/schedule/${userId}/rate`, {
+    const result = await apiFetch<OfflineSyncResult>(`/offline/${userId}/sync`, {
       method: 'POST',
       token,
-      body: { item_id: body.item_id, quality: body.quality },
+      body: { reviews: body.reviews },
     });
     return NextResponse.json(result);
   } catch (error) {
@@ -44,6 +43,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ message: error.message, body: error.body }, { status: error.status });
     }
 
-    return NextResponse.json({ message: 'Unable to submit review rating.' }, { status: 502 });
+    return NextResponse.json({ message: 'Unable to sync offline reviews right now.' }, { status: 502 });
   }
 }
