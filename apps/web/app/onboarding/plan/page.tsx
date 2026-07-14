@@ -4,7 +4,7 @@ import { useUser } from '@clerk/nextjs'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { isApiError } from '@/lib/api/client'
-import type { OnboardingResponse } from '@/lib/api/types'
+import type { LearningPathDto, OnboardingResponse, PathDefinition } from '@/lib/api/types'
 
 import CompleteOnboardingLink from '../_components/CompleteOnboardingLink'
 import GeneratedPlanPreview from '../_components/GeneratedPlanPreview'
@@ -14,8 +14,13 @@ import { onboardingRoutes } from '../_utils/onboarding-routes'
 
 type PlanState =
   | { status: 'loading' }
-  | { status: 'success'; plan: OnboardingResponse }
+  | { status: 'success'; plan: GeneratedPlan }
   | { status: 'error'; message: string }
+
+type GeneratedPlan = {
+  id: string
+  pathDefinition: PathDefinition
+}
 
 async function parseJsonResponse<TResponse>(response: Response): Promise<TResponse> {
   if (!response.ok) {
@@ -34,6 +39,12 @@ async function parseJsonResponse<TResponse>(response: Response): Promise<TRespon
   }
 
   return response.json() as Promise<TResponse>
+}
+
+async function loadActiveLearningPath() {
+  const response = await fetch('/api/learning-paths/active', { cache: 'no-store' })
+  if (response.status === 404) return null
+  return parseJsonResponse<LearningPathDto>(response)
 }
 
 export default function GeneratedPlanPage() {
@@ -56,6 +67,12 @@ export default function GeneratedPlanPage() {
     setState({ status: 'loading' })
 
     try {
+      const activeLearningPath = await loadActiveLearningPath()
+      if (activeLearningPath) {
+        setState({ status: 'success', plan: activeLearningPath })
+        return
+      }
+
       const response = await fetch('/api/orchestrate/onboarding', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

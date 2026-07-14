@@ -4,8 +4,8 @@ import { useUser } from '@clerk/nextjs'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 
-import { markOnboardingComplete } from './OnboardingAccessGate'
 import { useOnboarding } from './OnboardingProvider'
+import { markOnboardingComplete } from '../_utils/onboarding-storage'
 
 type CompleteOnboardingLinkProps = {
   href: string
