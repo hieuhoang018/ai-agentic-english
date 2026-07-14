@@ -18,9 +18,19 @@ Chosen defaults:
 - Speaking WebSocket domain: `wss://speaking-yourapp.duckdns.org` routed to AGT-03 on the backend VM
 - AI inference: live `Groq`/`OpenRouter` (both have free API tiers), no required public GPU/Ollama
   launch for v1
-- Backend host: one Oracle Cloud **Always Free Ampere A1** VM (Ubuntu 22.04/24.04, 4 OCPU / 24GB
-  RAM / 200GB boot volume — free forever, no credit-card charge as long as you stay within the
-  Always Free shape) running the existing Docker Compose stack
+- Backend host: one Oracle Cloud **Always Free Ampere A1** VM (Ubuntu 22.04/24.04, 200GB boot
+  volume — free forever, no credit-card charge as long as you stay within the Always Free shape)
+  running the existing Docker Compose stack. **OCPU/RAM allocation as of 2026-06-15: 2 OCPU / 12
+  GB RAM**, not the 4 OCPU / 24 GB historically documented everywhere (Oracle quietly halved the
+  Always Free A1 allowance that date, confirmed by multiple independent reports; some existing
+  accounts are still seen running at the old 4/24 with no formal grandfathering policy, so what a
+  given account actually gets is inconsistent — treat 2/12 as the baseline to plan for, 4/24 as a
+  possible bonus). This is below the guidebook's stated minimum sizing (4 vCPU/16GB) but is not a
+  deployability blocker: the stack's real idle memory footprint (~2.6GB) fits easily in 12GB, and
+  2 OCPU just means slower request handling under concurrent load, not failure to run or reach —
+  acceptable for a first deployment where reachability matters more than speed. Revisit sizing
+  later if performance becomes a real problem (upgrade path: pay for a bigger Oracle shape, or
+  move to a cheap paid VM like Hetzner).
 
 ## Stages
 
@@ -72,13 +82,17 @@ Chosen defaults:
 
 - In the Oracle Cloud console, create a Compute instance:
   - Image: Ubuntu 22.04 or 24.04 (Canonical official image)
-  - Shape: `VM.Standard.A1.Flex` (Ampere ARM) — set to the Always Free maximum, **4 OCPU / 24 GB
-    RAM**, since the free allowance is a pooled 4 OCPU/24GB total across all your A1 instances in
-    that account/region (one large instance is simpler than splitting it).
-  - Boot volume: up to 200 GB also falls under the Always Free block storage allowance.
-  - This meets and exceeds the guidebook's minimum sizing (4 vCPU / 16 GB RAM / 100 GB disk) at
-    $0/month, so there is no separate "minimum vs. preferred" tier to choose between here — the
-    free shape's max is the preferred sizing.
+  - Shape: `VM.Standard.A1.Flex` (Ampere ARM) — set to the Always Free maximum your account is
+    offered. As of 2026-06-15 Oracle halved the pooled Always Free A1 allowance to **2 OCPU / 12
+    GB RAM** account/region-wide (down from 4 OCPU/24GB); some accounts still show/get the old
+    4/24 inconsistently, so check what the console actually offers and take the max of whatever
+    that is (one large instance is simpler than splitting it either way).
+  - Boot volume: up to 200 GB also falls under the Always Free block storage allowance
+    (unaffected by the OCPU/RAM cut).
+  - This is below the guidebook's stated minimum sizing (4 vCPU / 16 GB RAM / 100 GB disk) if your
+    account only gets 2/12 — proceed anyway. Memory (~2.6GB idle footprint) is not the constraint;
+    2 OCPU only affects throughput/latency under load, not whether the backend deploys and stays
+    reachable, which is what matters for a first deployment.
   - Note the instance's public IP once it's running; DuckDNS points at this IP (Stage 7).
 - Install required runtime:
   ```bash
