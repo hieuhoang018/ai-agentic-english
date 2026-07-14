@@ -4,17 +4,21 @@ import { useEffect, useState } from 'react'
 import { useUser } from '@clerk/nextjs'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 
-const activeOnboardingKeyPrefix = 'english-academy:onboarding-active'
-const completedOnboardingKeyPrefix = 'english-academy:onboarding-completed'
-const freshSignUpWindowMs = 10 * 60 * 1000
+import {
+  clearStoredOnboardingComplete,
+  markOnboardingActive,
+  markOnboardingComplete,
+} from '../_utils/onboarding-storage'
 
-function getUserScopedKey(prefix: string, userId: string) {
-  return `${prefix}:${userId}`
+type OnboardingStatusResponse = {
+  hasActiveLearningPath: boolean
+  isComplete: boolean
 }
 
-export function markOnboardingComplete(userId: string) {
-  window.sessionStorage.removeItem(getUserScopedKey(activeOnboardingKeyPrefix, userId))
-  window.localStorage.setItem(getUserScopedKey(completedOnboardingKeyPrefix, userId), 'true')
+async function loadOnboardingStatus() {
+  const response = await fetch('/api/onboarding/status', { cache: 'no-store' })
+  if (!response.ok) throw new Error(`Unable to load onboarding status: ${response.status}`)
+  return response.json() as Promise<OnboardingStatusResponse>
 }
 
 export default function OnboardingAccessGate({ children }: { children: React.ReactNode }) {
@@ -26,41 +30,45 @@ export default function OnboardingAccessGate({ children }: { children: React.Rea
 
   useEffect(() => {
     if (!isLoaded || !user?.id) return
+    let isCancelled = false
     let allowUpdateId: number | undefined
 
     const allowOnboarding = () => {
       allowUpdateId = window.setTimeout(() => setAllowed(true), 0)
     }
 
-    const isFreshSignUp = searchParams.get('fresh_signup') === '1'
-    const activeOnboardingKey = getUserScopedKey(activeOnboardingKeyPrefix, user.id)
-    const completedOnboardingKey = getUserScopedKey(completedOnboardingKeyPrefix, user.id)
-    const hasCompletedOnboarding = window.localStorage.getItem(completedOnboardingKey) === 'true' || user.unsafeMetadata?.onboardingComplete === true
-    const createdAtMs = user.createdAt ? new Date(user.createdAt).getTime() : Date.now()
-    const isRecentlyCreatedAccount = Date.now() - createdAtMs <= freshSignUpWindowMs
+    const checkAccess = async () => {
+      const isFreshSignUp = searchParams.get('fresh_signup') === '1'
 
-    if (hasCompletedOnboarding) {
-      router.replace('/main/homepage')
-      return
-    }
+      try {
+        const status = await loadOnboardingStatus()
+        if (isCancelled) return
 
-    if (isFreshSignUp && isRecentlyCreatedAccount) {
-      window.sessionStorage.setItem(activeOnboardingKey, 'true')
+        if (status.isComplete) {
+          markOnboardingComplete(user.id)
+          router.replace('/main/homepage')
+          return
+        }
+
+        if (!status.hasActiveLearningPath) {
+          clearStoredOnboardingComplete(user.id)
+        }
+      } catch {
+        if (isCancelled) return
+      }
+
+      markOnboardingActive(user.id)
       allowOnboarding()
-      router.replace(pathname)
-      return () => {
-        if (allowUpdateId) window.clearTimeout(allowUpdateId)
+      if (isFreshSignUp) {
+        router.replace(pathname)
       }
     }
 
-    if (window.sessionStorage.getItem(activeOnboardingKey) === 'true') {
-      allowOnboarding()
-      return () => {
-        if (allowUpdateId) window.clearTimeout(allowUpdateId)
-      }
+    void checkAccess()
+    return () => {
+      isCancelled = true
+      if (allowUpdateId) window.clearTimeout(allowUpdateId)
     }
-
-    router.replace('/main/homepage')
   }, [isLoaded, pathname, router, searchParams, user?.id])
 
   if (!allowed) {
