@@ -8,10 +8,14 @@ plus the auth setup it depends on.
 
 **1. Point Kong at the test-issuer consumer.** `gateway/kong/kong.yml` (the
 real config) only trusts the real Clerk app. `perf/kong-perf.yml` is a copy
-of it with one addition — a second consumer that also trusts
+of it with two deliberate additions — a second consumer that also trusts
 `packages/shared/src/testing/index.ts`'s self-signed `TEST_ISSUER` keypair
-(the same one every service's test suite already uses via `signTestToken`).
-Apply it:
+(the same one every service's test suite already uses via `signTestToken`),
+and `POST /api/schedule/:id/rate` split into its own route with no
+per-user rate-limiting plugin (the real config caps it at 30/min alongside
+`GET .../due` on the same route) so a stress test can push write load past
+that cap without it masking the backend's real capacity. `GET .../due`
+keeps its real cap in this config. Apply it:
 
 ```bash
 docker compose -f infra/docker-compose.yml -f perf/docker-compose.perf.yml up -d --force-recreate kong
