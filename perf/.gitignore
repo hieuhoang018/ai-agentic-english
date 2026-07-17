@@ -2,3 +2,4 @@ tokens.csv
 *.jtl
 *.log
 report/
+report_*/
